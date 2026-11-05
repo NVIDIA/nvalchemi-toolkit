@@ -1,0 +1,6 @@
+﻿nvalchemi.training.losses.reductions.graph\_balanced\_mean
+==========================================================
+
+.. currentmodule:: nvalchemi.training.losses.reductions
+
+.. autofunction:: graph_balanced_mean

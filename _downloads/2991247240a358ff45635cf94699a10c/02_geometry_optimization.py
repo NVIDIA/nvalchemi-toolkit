@@ -13,17 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-FIRE Geometry Optimization with Lennard-Jones Argon
+FIRE2 Geometry Optimization with Lennard-Jones Argon
 ====================================================
 
 This example demonstrates geometry optimization using the
-:class:`~nvalchemi.dynamics.optimizers.FIRE` algorithm on a batch of argon
+:class:`~nvalchemi.dynamics.optimizers.FIRE2` algorithm on a batch of argon
 clusters described by the Lennard-Jones potential.
 
-**FIRE** (Fast Inertial Relaxation Engine) is a damped molecular-dynamics
+**FIRE2** (Fast Inertial Relaxation Engine) is a damped molecular-dynamics
 optimizer.  Rather than computing gradients of a surrogate function, it
 propagates atoms with Newtonian dynamics but periodically damps the velocities
-toward the net force direction.  FIRE often converges faster than steepest descent near minima while remaining
+toward the net force direction.  FIRE2 often converges faster than steepest descent near minima while remaining
 robust far from equilibrium, making it practical for batched relaxation
 campaigns where many systems must be processed in an ML-potential workflow.
 
@@ -48,7 +48,7 @@ from __future__ import annotations
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import FIRE
+from nvalchemi.dynamics import FIRE2
 from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.hooks import LoggingHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
@@ -65,7 +65,7 @@ from nvalchemi.models.lj import LennardJonesModelWrapper
 #
 # The equilibrium pair distance is r_min = 2^(1/6) σ ≈ 3.82 Å, where the
 # force is zero and the energy is −ε.  Starting atoms near r_min gives a
-# stable configuration that FIRE can relax in just a few hundred steps.
+# stable configuration that FIRE2 can relax in just a few hundred steps.
 #
 # ``max_neighbors=32`` is generous for small clusters; ``skin=0.5`` means the
 # neighbor list is only rebuilt when any atom moves more than 0.25 Å since
@@ -92,7 +92,7 @@ neighbor_hooks = model.make_neighbor_hooks()
 # --------------------------------------
 # Atoms are placed on a simple cubic lattice with spacing ``a`` (Å).
 # A spacing slightly above the LJ equilibrium distance r_min ≈ 2^(1/6)·σ ≈
-# 3.82 Å gives a stable starting configuration that FIRE can quickly relax.
+# 3.82 Å gives a stable starting configuration that FIRE2 can quickly relax.
 # Atomic number 18 = Argon; masses are auto-filled from the periodic table.
 
 _R_MIN = 2 ** (1 / 6) * LJ_SIGMA  # ≈ 3.82 Å
@@ -118,7 +118,7 @@ def _make_system(n_per_side: int, spacing: float = _R_MIN * 1.05) -> AtomicData:
     """
     n_atoms = n_per_side**3
     positions = _cubic_lattice(n_per_side, spacing)
-    # Add small random perturbations so FIRE has something to relax.
+    # Add small random perturbations so FIRE2 has something to relax.
     torch.manual_seed(n_per_side)
     positions = positions + 0.05 * torch.randn_like(positions)
 
@@ -150,14 +150,14 @@ def _make_system(n_per_side: int, spacing: float = _R_MIN * 1.05) -> AtomicData:
 # every system has converged or ``n_steps`` is reached.
 
 # %%
-# FIRE Geometry Optimization
+# FIRE2 Geometry Optimization
 # ---------------------------
-# Build a batch of two 2×2×2 (8-atom) Argon clusters and relax with FIRE.
+# Build a batch of two 2×2×2 (8-atom) Argon clusters and relax with FIRE2.
 #
 # The NeighborListHook fires at BEFORE_COMPUTE and writes ``neighbor_matrix``
 # and ``num_neighbors`` into the batch atoms group before each model evaluation.
 
-print("=== FIRE Geometry Optimization ===")
+print("=== FIRE2 Geometry Optimization ===")
 
 # Two identical lattice sizes; different spacings give different starting energy.
 data_list_opt = [
@@ -167,9 +167,9 @@ data_list_opt = [
 batch_opt = Batch.from_data_list(data_list_opt)
 print(f"Batch: {batch_opt.num_graphs} systems, {batch_opt.num_nodes} atoms total\n")
 
-fire_opt = FIRE(
+fire_opt = FIRE2(
     model=model,
-    dt=0.5,
+    dt=0.05,
     n_steps=300,
     convergence_hook=ConvergenceHook(
         criteria=[
@@ -194,7 +194,7 @@ with LoggingHook(
     batch_opt = fire_opt.run(batch_opt)
 
 print(
-    f"\nCompleted {fire_opt.step_count} FIRE steps. Log: 02_geometry_optimization_fire_log.csv"
+    f"\nCompleted {fire_opt.step_count} FIRE2 steps. Log: 02_geometry_optimization_fire_log.csv"
 )
 
 # %%

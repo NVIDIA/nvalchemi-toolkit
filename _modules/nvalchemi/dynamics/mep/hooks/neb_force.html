@@ -1,0 +1,1097 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.dynamics.mep.hooks.neb_force &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/mep/hooks/neb_force';</script>
+    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.dy...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.dynamics.mep.hooks.neb_force</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;NEB force hook configuration.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep._geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">PreparedMIC</span><span class="p">,</span> <span class="n">prepare_batch_mic</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep.hooks.path_energy_stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">PathEnergyStatsHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep.neb_configs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ConstantSpringConfig</span><span class="p">,</span>
+    <span class="n">NEBMethod</span><span class="p">,</span>
+    <span class="n">SpringConfig</span><span class="p">,</span>
+    <span class="n">SpringContext</span><span class="p">,</span>
+    <span class="n">TorchNEBMethod</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep.neb_ops.modes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ENDPOINT</span><span class="p">,</span> <span class="n">REGULAR_NEB</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep.neb_ops.torch_ops</span><span class="w"> </span><span class="kn">import</span> <span class="n">neb_forces</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep.validate</span><span class="w"> </span><span class="kn">import</span> <span class="n">validate_paths</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_NEBWorkspace</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Persistent buffers resolved for a NEB batch containing multiple</span>
+<span class="sd">    paths.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    image_ptr : Tensor</span>
+<span class="sd">        Int32 atom offsets delimiting packed images, shape ``(num_images + 1,)``.</span>
+<span class="sd">        Copied from the batch so the kernel receives its required index dtype.</span>
+<span class="sd">    path_ptr : Tensor</span>
+<span class="sd">        Int32 image offsets delimiting packed paths, shape ``(num_paths + 1,)``.</span>
+<span class="sd">        Copied from the group layout for the kernel&#39;s required index dtype.</span>
+<span class="sd">    image_path_idx : Tensor</span>
+<span class="sd">        Int32 path index for each packed image, shape ``(num_images,)``.</span>
+<span class="sd">        Copied from the group layout for the kernel&#39;s required index dtype and</span>
+<span class="sd">        stable workspace ownership.</span>
+<span class="sd">    link_source_image_idx : Tensor</span>
+<span class="sd">        Image index owning each forward link, shape</span>
+<span class="sd">        ``(num_images - num_paths,)``. The final image in every path is omitted.</span>
+<span class="sd">    spring_constants : Tensor</span>
+<span class="sd">        Per-link spring constants, shape ``(num_images - num_paths,)``.</span>
+<span class="sd">    fixed_node_mask : Tensor</span>
+<span class="sd">        Boolean mask of atoms that must not be updated, shape</span>
+<span class="sd">        ``(num_atoms,)``.</span>
+<span class="sd">    cell : Tensor</span>
+<span class="sd">        Representative cell per path, shape ``(num_paths, 3, 3)``.</span>
+<span class="sd">    pbc : Tensor</span>
+<span class="sd">        Periodic-boundary flags per path, shape ``(num_paths, 3)``.</span>
+<span class="sd">    mic : PreparedMIC</span>
+<span class="sd">        Reduced-lattice MIC buffers prepared once during admission.</span>
+<span class="sd">    effective_forces : Tensor</span>
+<span class="sd">        Per-atom output force buffer, shape ``(num_atoms, 3)``.</span>
+<span class="sd">    link_lengths : Tensor</span>
+<span class="sd">        Per-link distance buffer, shape ``(num_images - num_paths,)``.</span>
+<span class="sd">    vector_scratch : Tensor or None</span>
+<span class="sd">        Per-atom vector scratch for stored-tangent methods; otherwise ``None``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">image_ptr</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">path_ptr</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">image_path_idx</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">link_source_image_idx</span><span class="p">:</span> <span class="n">Tensor</span>
+
+    <span class="n">spring_constants</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">fixed_node_mask</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">cell</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">pbc</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">mic</span><span class="p">:</span> <span class="n">PreparedMIC</span>
+    <span class="n">effective_forces</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">link_lengths</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">vector_scratch</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="NEBForceHook">
+<a class="viewcode-back" href="../../../../../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.NEBForceHook.html#nvalchemi.dynamics.mep.hooks.NEBForceHook">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NEBForceHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configure optimizer-facing forces for nudged elastic band dynamics.</span>
+
+<span class="sd">    The hook prepares structural state at :attr:`DynamicsStage.ON_ADMISSION` and</span>
+<span class="sd">    publishes the combined endpoint and user-fixed node mask for a</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`. At</span>
+<span class="sd">    :attr:`DynamicsStage.AFTER_COMPUTE`, it refreshes the spring constants and</span>
+<span class="sd">    then replaces physical forces with the selected NEB force formulation.</span>
+<span class="sd">    Energy extrema and image force modes come from hooks registered before this</span>
+<span class="sd">    hook.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    energy_stats_hook : PathEnergyStatsHook</span>
+<span class="sd">        Shared path-energy statistics hook registered before this hook.</span>
+<span class="sd">    spring : float or SpringConfig, optional</span>
+<span class="sd">        Positive constant spring value or a policy that resolves one</span>
+<span class="sd">        spring constant for every adjacent image pair. Default is ``0.1``.</span>
+<span class="sd">    method : str, NEBMethod, or TorchNEBMethod, optional</span>
+<span class="sd">        Built-in method name, custom Warp equations, or a Torch method that</span>
+<span class="sd">        computes NEB effective forces for the batch of paths.</span>
+<span class="sd">        Default is ``&quot;improved_tangent&quot;``.</span>
+<span class="sd">    endpoint_mode : {&quot;fixed&quot;, &quot;relaxed&quot;}, optional</span>
+<span class="sd">        Whether path endpoint images remain fixed or use their physical</span>
+<span class="sd">        forces. Default is ``&quot;fixed&quot;``.</span>
+<span class="sd">    fixed_atom_indices : mapping of int to sequence of int, optional</span>
+<span class="sd">        Image-local atom indices that must remain fixed in every image of each</span>
+<span class="sd">        keyed path. Keys are zero-based path indices; omitted paths have no</span>
+<span class="sd">        additional fixed atoms. All three Cartesian components of every selected</span>
+<span class="sd">        atom are fixed. Atoms in fixed endpoint images are added automatically.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    stage : DynamicsStage</span>
+<span class="sd">        Primary hook stage, :attr:`DynamicsStage.AFTER_COMPUTE`. The hook also</span>
+<span class="sd">        runs at :attr:`DynamicsStage.ON_ADMISSION` for batch preparation.</span>
+<span class="sd">    frequency : int</span>
+<span class="sd">        Always ``1``. NEB forces must be refreshed after every model-force</span>
+<span class="sd">        evaluation.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Component-level constraints, such as fixing only one Cartesian axis, are</span>
+<span class="sd">    not supported.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Use the improved-tangent method with a constant spring::</span>
+
+<span class="sd">        energy_stats = PathEnergyStatsHook()</span>
+<span class="sd">        hook = NEBForceHook(</span>
+<span class="sd">            energy_stats_hook=energy_stats,</span>
+<span class="sd">            spring=0.1,</span>
+<span class="sd">            method=&quot;improved_tangent&quot;,</span>
+<span class="sd">            fixed_atom_indices={0: [0, 2], 1: [1]},</span>
+<span class="sd">        )</span>
+
+<span class="sd">    Pass a custom equation configuration directly::</span>
+
+<span class="sd">        method = NEBMethod(</span>
+<span class="sd">            tangent_weights_fn=my_tangent_weights,</span>
+<span class="sd">            effective_force_fn=my_effective_force,</span>
+<span class="sd">            climbing_force_fn=my_climbing_force,</span>
+<span class="sd">        )</span>
+<span class="sd">        hook = NEBForceHook(energy_stats_hook=energy_stats, method=method)</span>
+
+<span class="sd">    Pass a Torch callable accepting ``(batch, *, ...)`` in the same way::</span>
+
+<span class="sd">        hook = NEBForceHook(energy_stats_hook=energy_stats, method=my_torch_method)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">energy_stats_hook</span><span class="p">:</span> <span class="n">PathEnergyStatsHook</span><span class="p">,</span>
+        <span class="n">spring</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">SpringConfig</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">NEBMethod</span> <span class="o">|</span> <span class="n">TorchNEBMethod</span> <span class="o">=</span> <span class="s2">&quot;improved_tangent&quot;</span><span class="p">,</span>
+        <span class="n">endpoint_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;fixed&quot;</span><span class="p">,</span> <span class="s2">&quot;relaxed&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;fixed&quot;</span><span class="p">,</span>
+        <span class="n">fixed_atom_indices</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the NEB force hook.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If an argument has an unsupported type.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the spring, spring refresh stage, method name, or endpoint mode</span>
+<span class="sd">            is invalid.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">energy_stats_hook</span><span class="p">,</span> <span class="n">PathEnergyStatsHook</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;energy_stats_hook must be a PathEnergyStatsHook&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Normalize numeric springs into the common policy interface and reject</span>
+        <span class="c1"># refresh stages that this multi-stage hook cannot handle.</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spring</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+            <span class="n">spring</span> <span class="o">=</span> <span class="n">ConstantSpringConfig</span><span class="p">(</span><span class="n">spring</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spring</span><span class="p">,</span> <span class="n">SpringConfig</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;spring must be a number or implement SpringConfig.resolve; &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">spring</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spring</span><span class="o">.</span><span class="n">refresh</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;SpringConfig.refresh must be a DynamicsStage&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">spring</span><span class="o">.</span><span class="n">refresh</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span>
+            <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_ADMISSION</span><span class="p">,</span>
+            <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span>
+        <span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;SpringConfig.refresh must be DynamicsStage.ON_ADMISSION or &quot;</span>
+                <span class="s2">&quot;DynamicsStage.AFTER_COMPUTE&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">method</span> <span class="o">!=</span> <span class="s2">&quot;improved_tangent&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown NEB method: </span><span class="si">{</span><span class="n">method</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">method</span> <span class="o">=</span> <span class="n">NEBMethod</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="p">(</span><span class="n">NEBMethod</span><span class="p">,</span> <span class="n">TorchNEBMethod</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;method must be &#39;improved_tangent&#39;, an NEBMethod, or a &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;TorchNEBMethod; got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">method</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">method_key</span> <span class="o">=</span> <span class="n">method</span><span class="o">.</span><span class="n">to_key</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">NEBMethod</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+
+        <span class="c1"># Validate endpoint behavior and image-local atom constraints together.</span>
+        <span class="k">if</span> <span class="n">endpoint_mode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;fixed&quot;</span><span class="p">,</span> <span class="s2">&quot;relaxed&quot;</span><span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;endpoint_mode must be &#39;fixed&#39; or &#39;relaxed&#39;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">fixed_atom_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fixed_atom_indices</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;fixed_atom_indices must map path indices to atom-index sequences&quot;</span>
+                <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">fixed_atom_indices</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="n">path_index</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">atom_indices</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">path_index</span><span class="p">,</span> <span class="n">atom_indices</span> <span class="ow">in</span> <span class="n">fixed_atom_indices</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="p">}</span>
+            <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;fixed_atom_indices values must be sequences of integers&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">path_index</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">path_index</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">path_index</span> <span class="ow">in</span> <span class="n">fixed_atom_indices</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;fixed_atom_indices keys must be integer path indices&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">atom_index</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">atom_index</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">atom_indices</span> <span class="ow">in</span> <span class="n">fixed_atom_indices</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">atom_index</span> <span class="ow">in</span> <span class="n">atom_indices</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;fixed_atom_indices values must contain only integers&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_stats_hook</span> <span class="o">=</span> <span class="n">energy_stats_hook</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">spring</span> <span class="o">=</span> <span class="n">spring</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="n">method</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">method_key</span> <span class="o">=</span> <span class="n">method_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endpoint_mode</span> <span class="o">=</span> <span class="n">endpoint_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fixed_atom_indices</span> <span class="o">=</span> <span class="n">fixed_atom_indices</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_workspace</span><span class="p">:</span> <span class="n">_NEBWorkspace</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="NEBForceHook.on_register">
+<a class="viewcode-back" href="../../../../../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.NEBForceHook.html#nvalchemi.dynamics.mep.hooks.NEBForceHook.on_register">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">workflow</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Require group-aware dynamics for NEB force construction.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        workflow : object</span>
+<span class="sd">            Workflow on which this hook is being registered.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the workflow does not enable group-aware dynamics.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;by_group&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> requires dynamics configured with by_group=True&quot;</span>
+            <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether the hook participates in a dynamics stage.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        stage : Enum</span>
+<span class="sd">            Stage currently being dispatched by the hook registry.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            Whether to run structural preparation or force construction.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="p">{</span>
+            <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_ADMISSION</span><span class="p">,</span>
+            <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_prepare_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate and initialize private state for a new batch structure.</span>
+
+<span class="sd">        This helper is reached only through the ``ON_ADMISSION`` branch of</span>
+<span class="sd">        :meth:`__call__` and is typically called once for a batch.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx : DynamicsContext</span>
+<span class="sd">            Context containing the newly admitted grouped path batch.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the batch has no valid group layout, or if the paths, fixed atom</span>
+<span class="sd">            indices, cells, or PBC flags are incompatible with NEB evaluation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
+        <span class="n">validate_paths</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">layout</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">group_layout</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span>
+
+        <span class="c1"># Each path&#39;s first and last images use endpoint force handling.</span>
+        <span class="n">last_rank</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">num_graphs_per_group</span><span class="p">[</span><span class="n">layout</span><span class="o">.</span><span class="n">group_idx</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">is_terminal</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">graph_rank</span> <span class="o">==</span> <span class="n">last_rank</span>
+        <span class="n">is_endpoint</span> <span class="o">=</span> <span class="p">(</span><span class="n">layout</span><span class="o">.</span><span class="n">graph_rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">|</span> <span class="n">is_terminal</span>
+        <span class="n">force_mode</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span>
+            <span class="n">layout</span><span class="o">.</span><span class="n">group_idx</span><span class="p">,</span>
+            <span class="n">REGULAR_NEB</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">force_mode</span><span class="p">[</span><span class="n">is_endpoint</span><span class="p">]</span> <span class="o">=</span> <span class="n">ENDPOINT</span>
+
+        <span class="c1"># Identify fixed atoms including those in fixed endpoints.</span>
+        <span class="n">fixed_atoms</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_atom_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_nodes_per_image</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span>
+            <span class="k">for</span> <span class="n">path_index</span><span class="p">,</span> <span class="n">atom_indices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_atom_indices</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">path_index</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">path_index</span> <span class="o">&gt;=</span> <span class="n">layout</span><span class="o">.</span><span class="n">num_groups</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;fixed_atom_indices keys must reference existing paths; &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">path_index</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">path_start</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">group_ptr</span><span class="p">[</span><span class="n">path_index</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+                <span class="n">path_end</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">group_ptr</span><span class="p">[</span><span class="n">path_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+                <span class="n">image_starts</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_ptr</span><span class="p">[</span><span class="n">path_start</span><span class="p">:</span><span class="n">path_end</span><span class="p">]</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">atom_index</span> <span class="ow">in</span> <span class="n">atom_indices</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">atom_index</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">torch</span><span class="o">.</span><span class="n">any</span><span class="p">(</span>
+                        <span class="n">num_nodes_per_image</span><span class="p">[</span><span class="n">path_start</span><span class="p">:</span><span class="n">path_end</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">atom_index</span>
+                    <span class="p">):</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;fixed_atom_indices[</span><span class="si">{</span><span class="n">path_index</span><span class="si">}</span><span class="s2">] must contain valid &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;image-local atom indices; got </span><span class="si">{</span><span class="n">atom_index</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                    <span class="n">fixed_atoms</span><span class="p">[</span><span class="n">image_starts</span> <span class="o">+</span> <span class="n">atom_index</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">endpoint_mode</span> <span class="o">==</span> <span class="s2">&quot;fixed&quot;</span><span class="p">:</span>
+            <span class="n">fixed_atoms</span><span class="p">[</span><span class="n">is_endpoint</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">()]]</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># `validate_paths` guarantees cell and PBC consistency within each path,</span>
+        <span class="c1"># so the kernels only need the first image&#39;s geometry. Missing cells use</span>
+        <span class="c1"># dense identity matrices rather than zero-stride expanded views.</span>
+        <span class="n">cells</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">cell</span> <span class="k">if</span> <span class="s2">&quot;cell&quot;</span> <span class="ow">in</span> <span class="n">batch</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">pbcs</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">pbc</span> <span class="k">if</span> <span class="s2">&quot;pbc&quot;</span> <span class="ow">in</span> <span class="n">batch</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="c1"># Graph indices selecting the first image of each path.</span>
+        <span class="n">first_image_idx</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">group_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">cells</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">path_cell</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">layout</span><span class="o">.</span><span class="n">num_groups</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">path_cell</span> <span class="o">=</span> <span class="n">cells</span><span class="p">[</span><span class="n">first_image_idx</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">pbcs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">path_pbc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">layout</span><span class="o">.</span><span class="n">num_groups</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">path_pbc</span> <span class="o">=</span> <span class="n">pbcs</span><span class="p">[</span><span class="n">first_image_idx</span><span class="p">]</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+        <span class="n">n_links</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">-</span> <span class="n">layout</span><span class="o">.</span><span class="n">num_groups</span>
+        <span class="n">spring_constants</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">n_links</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Normalize kernel index buffers to int32.</span>
+        <span class="n">int32_max</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">iinfo</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span><span class="o">.</span><span class="n">max</span>
+        <span class="k">if</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">&gt;</span> <span class="n">int32_max</span> <span class="ow">or</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span> <span class="o">&gt;</span> <span class="n">int32_max</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Path kernel layout exceeds int32 index capacity&quot;</span><span class="p">)</span>
+        <span class="n">image_ptr</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_ptr</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="n">path_ptr</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">group_ptr</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="n">image_path_idx</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">group_idx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="n">link_source_image_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="o">~</span><span class="n">is_terminal</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+        <span class="c1"># Include fields shared with other hooks on `Batch`.</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">set_batch_field</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">:</span>
+                <span class="n">target</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">target</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span>
+                    <span class="ow">and</span> <span class="n">target</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span>
+                    <span class="ow">and</span> <span class="n">target</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">value</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">):</span>
+                    <span class="n">target</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                    <span class="k">return</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">list</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">unbind</span><span class="p">())</span>
+                <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span>
+                <span class="k">else</span> <span class="nb">list</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_list</span><span class="p">))</span>
+            <span class="p">)</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">level</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">key</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">)</span>
+
+        <span class="n">set_batch_field</span><span class="p">(</span><span class="s2">&quot;force_mode&quot;</span><span class="p">,</span> <span class="n">force_mode</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">)</span>
+        <span class="n">set_batch_field</span><span class="p">(</span>
+            <span class="s2">&quot;physical_forces&quot;</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">),</span>
+            <span class="s2">&quot;node&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">set_batch_field</span><span class="p">(</span><span class="s2">&quot;neb_fixed_node_mask&quot;</span><span class="p">,</span> <span class="n">fixed_atoms</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">)</span>
+        <span class="n">set_batch_field</span><span class="p">(</span>
+            <span class="s2">&quot;forward_link_length&quot;</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+            <span class="s2">&quot;system&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Keep kernel-only masks and buffers private on workspace.</span>
+        <span class="n">prepared_mic</span> <span class="o">=</span> <span class="n">prepare_batch_mic</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">path_cell</span><span class="p">,</span> <span class="n">path_pbc</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_workspace</span> <span class="o">=</span> <span class="n">_NEBWorkspace</span><span class="p">(</span>
+            <span class="n">spring_constants</span><span class="o">=</span><span class="n">spring_constants</span><span class="p">,</span>
+            <span class="n">fixed_node_mask</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">neb_fixed_node_mask</span><span class="p">,</span>
+            <span class="n">cell</span><span class="o">=</span><span class="n">path_cell</span><span class="p">,</span>
+            <span class="n">pbc</span><span class="o">=</span><span class="n">path_pbc</span><span class="p">,</span>
+            <span class="n">mic</span><span class="o">=</span><span class="n">prepared_mic</span><span class="p">,</span>
+            <span class="n">effective_forces</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">),</span>
+            <span class="n">link_lengths</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">n_links</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">vector_scratch</span><span class="o">=</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">method_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">method_key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;stored_tangent|&quot;</span><span class="p">)</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="n">image_ptr</span><span class="o">=</span><span class="n">image_ptr</span><span class="p">,</span>
+            <span class="n">path_ptr</span><span class="o">=</span><span class="n">path_ptr</span><span class="p">,</span>
+            <span class="n">image_path_idx</span><span class="o">=</span><span class="n">image_path_idx</span><span class="p">,</span>
+            <span class="n">link_source_image_idx</span><span class="o">=</span><span class="n">link_source_image_idx</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_refresh_spring_constants</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_ADMISSION</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare NEB state or construct NEB forces.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx : DynamicsContext</span>
+<span class="sd">            Context containing the current grouped path batch.</span>
+<span class="sd">        stage : DynamicsStage</span>
+<span class="sd">            Current dynamics stage. Preparation occurs at ``ON_ADMISSION``</span>
+<span class="sd">            and force construction occurs at ``AFTER_COMPUTE``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If the force phase runs before the batch has been prepared.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">stage</span> <span class="o">==</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_ADMISSION</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_batch</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">stage</span> <span class="o">!=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
+        <span class="n">workspace</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workspace</span>
+        <span class="n">active_nodes</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">workspace</span><span class="o">.</span><span class="n">fixed_node_mask</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">active_graph_mask</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">ctx</span><span class="o">.</span><span class="n">active_graph_mask</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">()]</span>
+        <span class="p">)</span>
+        <span class="n">active_fixed_nodes</span> <span class="o">=</span> <span class="n">active_nodes</span> <span class="o">&amp;</span> <span class="n">workspace</span><span class="o">.</span><span class="n">fixed_node_mask</span>
+        <span class="n">stats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_stats_hook</span><span class="o">.</span><span class="n">get_stats</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
+        <span class="c1"># Copy to `batch.physical_forces` before computation</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">active_nodes</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">,</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">physical_forces</span><span class="p">,</span>
+            <span class="n">out</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">physical_forces</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">physical_forces</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">active_fixed_nodes</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_refresh_spring_constants</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">method_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Compute neb forces with pure Torch</span>
+            <span class="n">effective_forces</span><span class="p">,</span> <span class="n">link_lengths</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">method</span><span class="p">(</span>
+                <span class="n">batch</span><span class="p">,</span>
+                <span class="n">spring_constants</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">spring_constants</span><span class="p">,</span>
+                <span class="n">path_energy_ref</span><span class="o">=</span><span class="n">stats</span><span class="o">.</span><span class="n">endpoint_reference_energy</span><span class="p">,</span>
+                <span class="n">path_energy_max</span><span class="o">=</span><span class="n">stats</span><span class="o">.</span><span class="n">highest_interior_energy</span><span class="p">,</span>
+                <span class="n">mic</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">mic</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">effective_forces</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">workspace</span><span class="o">.</span><span class="n">effective_forces</span><span class="o">.</span><span class="n">shape</span>
+                <span class="ow">or</span> <span class="n">link_lengths</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">workspace</span><span class="o">.</span><span class="n">link_lengths</span><span class="o">.</span><span class="n">shape</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;TorchNEBMethod must return forces shaped like positions &quot;</span>
+                    <span class="s2">&quot;and one length per forward link&quot;</span>
+                <span class="p">)</span>
+            <span class="n">workspace</span><span class="o">.</span><span class="n">effective_forces</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">effective_forces</span><span class="p">)</span>
+            <span class="n">workspace</span><span class="o">.</span><span class="n">link_lengths</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">link_lengths</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Compute neb forces with Warp</span>
+            <span class="n">neb_forces</span><span class="p">(</span>
+                <span class="n">positions</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+                <span class="n">physical_forces</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">physical_forces</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+                <span class="n">image_energies</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+                <span class="n">image_ptr</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">image_ptr</span><span class="p">,</span>
+                <span class="n">path_ptr</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">path_ptr</span><span class="p">,</span>
+                <span class="n">image_path_idx</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">image_path_idx</span><span class="p">,</span>
+                <span class="n">spring_constants</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">spring_constants</span><span class="p">,</span>
+                <span class="n">image_force_mode</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">force_mode</span><span class="p">,</span>
+                <span class="n">path_energy_ref</span><span class="o">=</span><span class="n">stats</span><span class="o">.</span><span class="n">endpoint_reference_energy</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+                <span class="n">path_energy_max</span><span class="o">=</span><span class="n">stats</span><span class="o">.</span><span class="n">highest_interior_energy</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+                <span class="n">mic_mode</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">mic</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span>
+                <span class="n">periodic_basis</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">mic</span><span class="o">.</span><span class="n">periodic_basis</span><span class="p">,</span>
+                <span class="n">cartesian_to_fractional</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">mic</span><span class="o">.</span><span class="n">cartesian_to_fractional</span><span class="p">,</span>
+                <span class="n">mic_candidate_count</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">mic</span><span class="o">.</span><span class="n">candidate_count</span><span class="p">,</span>
+                <span class="n">candidate_shifts</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">mic</span><span class="o">.</span><span class="n">candidate_shifts</span><span class="p">,</span>
+                <span class="n">method</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">method_key</span><span class="p">,</span>
+                <span class="n">vector_scratch</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">vector_scratch</span><span class="p">,</span>
+                <span class="n">effective_forces</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">effective_forces</span><span class="p">,</span>
+                <span class="n">link_lengths</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">link_lengths</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">workspace</span><span class="o">.</span><span class="n">effective_forces</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">active_fixed_nodes</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="c1"># Expand packed link lengths into the per-image field. Terminal entries</span>
+        <span class="c1"># are initialized to zero on admission and are not modified here.</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">forward_link_length</span><span class="o">.</span><span class="n">index_copy_</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="n">workspace</span><span class="o">.</span><span class="n">link_source_image_idx</span><span class="p">,</span>
+            <span class="n">workspace</span><span class="o">.</span><span class="n">link_lengths</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Publish only the rows owned by this hook dispatch. Model evaluation</span>
+        <span class="c1"># preserves inactive rows, so other sub-stages and graduated paths retain</span>
+        <span class="c1"># their previously published effective forces.</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">active_nodes</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">workspace</span><span class="o">.</span><span class="n">effective_forces</span><span class="p">,</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">,</span>
+            <span class="n">out</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Newly entered paths skip both optimizer updates while these NEB forces</span>
+        <span class="c1"># are primed. Reset their carried velocity before the first real update.</span>
+        <span class="n">velocities</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">reprime_pending</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;reprime_pending&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">velocities</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">reprime_pending</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">pending_graphs</span> <span class="o">=</span> <span class="n">reprime_pending</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[:</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">]</span>
+            <span class="n">pending_nodes</span> <span class="o">=</span> <span class="n">active_nodes</span> <span class="o">&amp;</span> <span class="n">pending_graphs</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">()]</span>
+            <span class="n">velocities</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">pending_nodes</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_spring_context</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SpringContext</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a read-only spring-policy view of the current NEB state.</span>
+
+<span class="sd">        The view exposes the fields a spring policy reads and omits workspace</span>
+<span class="sd">        buffers it does not need.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">workspace</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workspace</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
+        <span class="n">model_outputs_available</span> <span class="o">=</span> <span class="n">stage</span> <span class="o">==</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span>
+        <span class="k">return</span> <span class="n">SpringContext</span><span class="p">(</span>
+            <span class="n">energies</span><span class="o">=</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">model_outputs_available</span> <span class="k">else</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="n">positions</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span>
+            <span class="n">physical_forces</span><span class="o">=</span><span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">physical_forces</span> <span class="k">if</span> <span class="n">model_outputs_available</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="n">image_ptr</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">image_ptr</span><span class="p">,</span>
+            <span class="n">layout</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">group_layout</span><span class="p">,</span>
+            <span class="n">cell</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">cell</span><span class="p">,</span>
+            <span class="n">pbc</span><span class="o">=</span><span class="n">workspace</span><span class="o">.</span><span class="n">pbc</span><span class="p">,</span>
+            <span class="n">step_count</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_refresh_spring_constants</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve spring constants when requested by the configured policy.&quot;&quot;&quot;</span>
+        <span class="n">workspace</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workspace</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">spring</span><span class="o">.</span><span class="n">refresh</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">stage</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">resolved</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spring</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_spring_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">resolved</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;SpringConfig.resolve must return a Tensor&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">resolved</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">workspace</span><span class="o">.</span><span class="n">spring_constants</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;SpringConfig.resolve must return shape &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">workspace</span><span class="o">.</span><span class="n">spring_constants</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">workspace</span><span class="o">.</span><span class="n">spring_constants</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">resolved</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

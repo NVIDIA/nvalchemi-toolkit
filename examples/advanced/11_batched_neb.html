@@ -1,0 +1,1250 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Batched NEB with AIMNet2-rxn &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/11_batched_neb';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Batched Umbrella Sampling with EnhancedSampling" href="12_umbrella_sampling.html" />
+    <link rel="prev" title="MACE Training with ALCHEMI Training Utilities" href="10_mace_training.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/05_byo_graph_transformer.html">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Advanced Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Batched NEB...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-advanced-11-batched-neb-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="batched-neb-with-aimnet2-rxn">
+<span id="sphx-glr-examples-advanced-11-batched-neb-py"></span><h1>Batched NEB with AIMNet2-rxn<a class="headerlink" href="#batched-neb-with-aimnet2-rxn" title="Link to this heading">#</a></h1>
+<p>Nudged elastic band (NEB) finds the minimum-energy path — and therefore the
+transition-state estimate — between a reactant and a product. It represents
+the path as an ordered band of molecular structures called images. This example
+uses the <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.NEB.html#nvalchemi.dynamics.mep.NEB" title="nvalchemi.dynamics.mep.NEB"><code class="xref py py-class docutils literal notranslate"><span class="pre">NEB</span></code></a> API to optimize eight reaction
+paths together on a GPU. Grouping every image in one
+<a class="reference internal" href="../../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> lets the model evaluate the paths in parallel.</p>
+<p>The endpoint data include eight reactions spanning seven molecular formulas,
+selected from the official Transition1x v4 HDF5 release. The atomic numbers
+and coordinates are unchanged from the source data; positions are in angstrom.
+The data are distributed under the Transition1x MIT license.</p>
+<p>Each path starts with only a reactant and product structure.
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.interpolate_paths.html#nvalchemi.dynamics.mep.interpolate_paths" title="nvalchemi.dynamics.mep.interpolate_paths"><code class="xref py py-func docutils literal notranslate"><span class="pre">interpolate_paths()</span></code></a> creates a ten-image linear
+band between them, then <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.IDPPModel.html#nvalchemi.dynamics.mep.IDPPModel" title="nvalchemi.dynamics.mep.IDPPModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">IDPPModel</span></code></a> relaxes
+the interior images to provide a better initial path for NEB.</p>
+<p>After IDPP initialization, <code class="docutils literal notranslate"><span class="pre">aimnet2-rxn</span></code> supplies the physical energies and
+forces for a two-stage, climbing-image NEB calculation using the
+improved-tangent method. Per-path diagnostics are written to <code class="docutils literal notranslate"><span class="pre">neb.csv</span></code> during
+optimization. The optimized AIMNet2-rxn bands are then compared with reference NEB bands
+optimized using DFT.</p>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">LBFGS</span></code> can also be used for both IDPP and
+physical-model NEB by passing <code class="docutils literal notranslate"><span class="pre">optimizer=LBFGS</span></code> to each <code class="docutils literal notranslate"><span class="pre">NEB</span></code> instance.</p>
+<p>Dataset DOI: <a class="reference external" href="https://doi.org/10.6084/m9.figshare.19614657.v4">https://doi.org/10.6084/m9.figshare.19614657.v4</a></p>
+<p>Reference: Schreiner, M. et al., “Transition1x - a dataset for building
+generalizable reactive machine learning potentials,” <em>Scientific Data</em> <strong>9</strong>,
+779 (2022), <a class="reference external" href="https://doi.org/10.1038/s41597-022-01870-w">https://doi.org/10.1038/s41597-022-01870-w</a>.</p>
+<p>Run on a single CUDA 12 GPU through <code class="docutils literal notranslate"><span class="pre">uv</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>cu12<span class="w"> </span>--extra<span class="w"> </span>aimnet<span class="w"> </span>python<span class="w">        </span>examples/advanced/11_batched_neb.py
+</pre></div>
+</div>
+<p>For CUDA 13, replace <code class="docutils literal notranslate"><span class="pre">--extra</span> <span class="pre">cu12</span></code> with <code class="docutils literal notranslate"><span class="pre">--extra</span> <span class="pre">cu13</span></code>.</p>
+<p>The default method is improved tangent. Set <code class="docutils literal notranslate"><span class="pre">method</span> <span class="pre">=</span> <span class="pre">&quot;dneb&quot;</span></code> below to try
+the custom doubly nudged force equation. The example writes
+<code class="docutils literal notranslate"><span class="pre">neb.csv</span></code> and <code class="docutils literal notranslate"><span class="pre">neb_energy_profiles.png</span></code>. Set
+<code class="docutils literal notranslate"><span class="pre">NVALCHEMI_SHOW_INITIAL_PATHS=0</span></code> to omit the linear and post-IDPP curves and
+skip their additional model evaluations.</p>
+<p>The full plotted workflow runs in about 40–70 seconds on a single NVIDIA L4
+GPU.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aimnet.calculators</span><span class="w"> </span><span class="kn">import</span> <span class="n">AIMNet2Calculator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NEB</span><span class="p">,</span>
+    <span class="n">ClimbingImageConfig</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">IDPPModel</span></a><span class="p">,</span>
+    <span class="n">NEBMethod</span><span class="p">,</span>
+    <span class="n">interpolate_paths</span><span class="p">,</span>
+    <span class="n">prepare_idpp_targets</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span><span class="p">,</span> <span class="n">ModelConfig</span>
+
+<span class="k">if</span> <span class="n">__package__</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">._dneb_method</span><span class="w"> </span><span class="kn">import</span> <span class="n">dneb_effective_force</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">_dneb_method</span><span class="w"> </span><span class="kn">import</span> <span class="n">dneb_effective_force</span>
+</pre></div>
+</div>
+<section id="load-the-reactant-and-product-endpoints">
+<h2>Load the reactant and product endpoints<a class="headerlink" href="#load-the-reactant-and-product-endpoints" title="Link to this heading">#</a></h2>
+<p>Each NEB path connects two endpoint images: a reactant structure and a product
+structure. The endpoint file provides this pair for each reaction. Every
+structure is loaded as <a class="reference internal" href="../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a>. The reactants are
+collected into one <a class="reference internal" href="../../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> and the products into
+another. Graph <code class="docutils literal notranslate"><span class="pre">i</span></code> in the two batches therefore defines path <code class="docutils literal notranslate"><span class="pre">i</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="n">example_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
+<span class="n">endpoints_path</span> <span class="o">=</span> <span class="n">example_dir</span> <span class="o">/</span> <span class="s2">&quot;batched_neb_endpoints&quot;</span> <span class="o">/</span> <span class="s2">&quot;endpoints.json&quot;</span>
+<span class="n">endpoints_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">endpoints_path</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+<span class="n">records</span> <span class="o">=</span> <span class="n">endpoints_data</span><span class="p">[</span><span class="s2">&quot;paths&quot;</span><span class="p">]</span>
+<span class="n">reaction_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;reaction_id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">endpoint</span><span class="p">(</span><span class="n">record</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct one toolkit endpoint from an endpoint record.&quot;&quot;&quot;</span>
+
+    <span class="n">positions</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_positions&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">)</span>
+    <span class="k">return</span> <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">long</span></a><span class="p">),</span>
+        <span class="n">charge</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">([[</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;charge&quot;</span><span class="p">]]],</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a><span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="n">initial</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">endpoint</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="s2">&quot;reactant&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">],</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">final</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">endpoint</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="s2">&quot;product&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">],</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loaded </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">reaction_ids</span><span class="p">)</span><span class="si">}</span><span class="s2"> paths from </span><span class="si">{</span><span class="n">endpoints_path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reaction IDs: </span><span class="si">{</span><span class="n">reaction_ids</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial batch: </span><span class="si">{</span><span class="n">initial</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2"> graphs, </span><span class="si">{</span><span class="n">initial</span><span class="o">.</span><span class="n">num_nodes</span><span class="si">}</span><span class="s2"> atoms&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Loaded 8 paths from endpoints.json
+Reaction IDs: [&#39;C2H2N2O/rxn2093&#39;, &#39;C2H2N2O/rxn3122&#39;, &#39;C2H3NO/rxn3840&#39;, &#39;C2H4O/rxn0722&#39;, &#39;C2HNO3/rxn1883&#39;, &#39;C3H2N2/rxn1185&#39;, &#39;C3HNO2/rxn0109&#39;, &#39;C4HNO/rxn3726&#39;]
+Initial batch: 8 graphs, 56 atoms
+</pre></div>
+</div>
+</section>
+<section id="interpolate-and-initialize-the-paths">
+<h2>Interpolate and initialize the paths<a class="headerlink" href="#interpolate-and-initialize-the-paths" title="Link to this heading">#</a></h2>
+<p>NEB optimization needs an initial band connecting each pair of endpoints.
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.interpolate_paths.html#nvalchemi.dynamics.mep.interpolate_paths" title="nvalchemi.dynamics.mep.interpolate_paths"><code class="xref py py-func docutils literal notranslate"><span class="pre">interpolate_paths()</span></code></a> constructs these bands.
+It pairs graph <code class="docutils literal notranslate"><span class="pre">i</span></code> in the reactant batch with graph <code class="docutils literal notranslate"><span class="pre">i</span></code> in the product
+batch and linearly interpolates <code class="docutils literal notranslate"><span class="pre">NUM_IMAGES</span></code> structures, including both
+endpoints.</p>
+<p>Linear interpolation can place atoms unphysically close together, so IDPP
+then relaxes the bands with a geometric pair-distance objective. This step
+does not require loading or evaluating an MLIP model.</p>
+<p>The paths are represented together in one <a class="reference internal" href="../../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>.
+Each image is an <a class="reference internal" href="../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> graph, and
+<code class="docutils literal notranslate"><span class="pre">group_layout</span></code> collects each ordered sequence of images into one path. Here
+the batch contains 80 graphs arranged as eight paths of ten images. The NEB
+engine later uses the same grouping to apply path operations independently
+while evaluating all images together.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">initialize_dynamics_fields</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Initialize the state required when a path enters an optimizer.&quot;&quot;&quot;</span>
+
+    <span class="n">batch</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+        <span class="mi">1</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><span class="n">batch</span><span class="o">.</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">forces</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+
+
+<span class="n">NUM_IMAGES</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">linear_band</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">=</span> <span class="n">interpolate_paths</span><span class="p">(</span><span class="n">initial</span><span class="p">,</span> <span class="n">final</span><span class="p">,</span> <span class="n">NUM_IMAGES</span><span class="p">)</span>
+<span class="n">idpp_band</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">=</span> <span class="n">prepare_idpp_targets</span><span class="p">(</span><span class="n">linear_band</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+<span class="n">initialize_dynamics_fields</span><span class="p">(</span><span class="n">idpp_band</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Images per path: </span><span class="si">{</span><span class="n">idpp_band</span><span class="o">.</span><span class="n">group_layout</span><span class="o">.</span><span class="n">num_graphs_per_group</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total image graphs: </span><span class="si">{</span><span class="n">idpp_band</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># IDPP regularizes the initial interpolation without MLIP model evaluation.</span>
+<span class="n">idpp</span> <span class="o">=</span> <span class="n">NEB</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">IDPPModel</span></a><span class="p">(),</span>
+    <span class="n">fmax</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">idpp_band</span> <span class="o">=</span> <span class="n">idpp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">idpp_band</span><span class="p">)</span>
+
+<span class="c1"># In this one-stage workflow, status ``1`` means every path met the IDPP force threshold;</span>
+<span class="c1"># status ``0`` means it did not before reaching the optimization step limit of ``n_steps``.</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.all.html#torch.all" title="torch.all" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">all</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">idpp_band</span><span class="o">.</span><span class="n">status</span></a> <span class="o">==</span> <span class="mi">1</span><span class="p">)):</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;IDPP did not converge within </span><span class="si">{</span><span class="n">idpp</span><span class="o">.</span><span class="n">n_steps</span><span class="si">}</span><span class="s2"> steps&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;IDPP converged for all paths (fmax &lt;= </span><span class="si">{</span><span class="n">idpp</span><span class="o">.</span><span class="n">fmax</span><span class="si">}</span><span class="s2"> eV/angstrom)&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Images per path: [10, 10, 10, 10, 10, 10, 10, 10]
+Total image graphs: 80
+IDPP converged for all paths (fmax &lt;= 0.1 eV/angstrom)
+</pre></div>
+</div>
+</section>
+<section id="load-the-model">
+<h2>Load the model<a class="headerlink" href="#load-the-model" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">AIMNet2rxnWrapper</span></code> below is constructed around
+<code class="xref py py-class docutils literal notranslate"><span class="pre">aimnet.calculators.AIMNet2Calculator</span></code> and exposes the toolkit model
+interface required by NEB. It loads the complete <code class="docutils literal notranslate"><span class="pre">aimnet2-rxn</span></code> potential,
+including the Coulomb and D3 contributions selected by the checkpoint.</p>
+<p>The existing <a class="reference internal" href="../../modules/generated/nvalchemi.models.aimnet2.AIMNet2Wrapper.html#nvalchemi.models.aimnet2.AIMNet2Wrapper" title="nvalchemi.models.aimnet2.AIMNet2Wrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">AIMNet2Wrapper</span></code></a> instead wraps
+the raw neural network and disables those calculator-managed contributions so
+they can be composed explicitly with toolkit models. Calling the calculator
+directly preserves them for this example.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">AIMNet2rxnWrapper</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Module</span></a><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Expose the full AIMNet2-rxn calculator through the toolkit model API.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">compile_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the AIMNet2-rxn adapter.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">calculator</span> <span class="o">=</span> <span class="n">AIMNet2Calculator</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="s2">&quot;aimnet2-rxn&quot;</span><span class="p">,</span>
+            <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><span class="nb">str</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">),</span>
+            <span class="n">compile_model</span><span class="o">=</span><span class="n">compile_model</span><span class="p">,</span>
+            <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calculator</span><span class="o">.</span><span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">required_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;charge&quot;</span><span class="p">}),</span>
+            <span class="n">supports_pbc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">needs_pbc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">active_outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">},</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">embedding_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return no embedding shapes because this adapter exposes no embeddings.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_embeddings</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise because this example adapter does not expose embeddings.&quot;&quot;&quot;</span>
+
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;AIMNet2rxnWrapper does not expose embeddings&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate full AIMNet2-rxn energies and forces for a molecular batch.&quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">AtomicData</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data</span><span class="p">])</span>
+        <span class="n">charge</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">&quot;charge&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">charge</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">charge</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><span class="n">data</span><span class="o">.</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">)</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calculator</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;coord&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span>
+                <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="p">,</span>
+                <span class="s2">&quot;charge&quot;</span><span class="p">:</span> <span class="n">charge</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+                <span class="s2">&quot;mol_idx&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">energy</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">energy</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="n">energy</span><span class="p">,</span> <span class="n">forces</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">])</span>
+
+
+<span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">AIMNet2rxnWrapper</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">)</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/aimnet/calculators/calculator.py:492: UserWarning: AIMNet2Calculator instances from different families have been constructed in this process: [&#39;rxn&#39;, &#39;wb97m-d3&#39;]. Energy targets and reference conventions differ across families (e.g. rxn uses a learned shifted-electronic scale, while wb97m-d3 and b973c-d3 use different DFT targets). Do not mix or compare energies across families.
+  self._maybe_warn_family_mix((metadata or {}).get(&quot;family&quot;) if metadata else None)
+</pre></div>
+</div>
+</section>
+<section id="run-the-neb">
+<h2>Run the NEB<a class="headerlink" href="#run-the-neb" title="Link to this heading">#</a></h2>
+<p>Start the AIMNet2-rxn NEB optimization from the IDPP-relaxed band. For each
+interior image, NEB combines the model force perpendicular to the path with a
+spring force parallel to the path. This allows the band to relax toward the
+minimum-energy path while maintaining reasonable spacing between images.</p>
+<p>By default, method=”improved_tangent” uses the Henkelman–Jónsson tangent
+estimate. Along monotonic sections of the path, the tangent points toward the
+higher-energy neighboring image. Near extrema, the forward and backward
+directions are weighted by their energy differences. This improves path
+stability and helps reduce kinks and corner cutting.</p>
+<p>The force formulation can also be customized. A
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.NEBMethod.html#nvalchemi.dynamics.mep.NEBMethod" title="nvalchemi.dynamics.mep.NEBMethod"><code class="xref py py-class docutils literal notranslate"><span class="pre">NEBMethod</span></code></a> may replace the tangent,
+regular-NEB force, or climbing-image force with custom <code class="docutils literal notranslate"><span class="pre">&#64;wp.func</span></code>
+functions:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">custom_method</span> <span class="o">=</span> <span class="n">NEBMethod</span><span class="p">(</span>
+    <span class="n">tangent_weights_fn</span><span class="o">=</span><span class="n">my_tangent_weights</span><span class="p">,</span>
+    <span class="n">effective_force_fn</span><span class="o">=</span><span class="n">my_neb_force</span><span class="p">,</span>
+    <span class="n">climbing_force_fn</span><span class="o">=</span><span class="n">my_climbing_force</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">custom_neb</span> <span class="o">=</span> <span class="n">NEB</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="n">custom_method</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The optional DNEB method below overrides only <code class="docutils literal notranslate"><span class="pre">effective_force_fn</span></code> with the
+equation in <code class="docutils literal notranslate"><span class="pre">_dneb_method.py</span></code>. It adds the perpendicular spring correction
+of Trygubenko and Wales (J. Chem. Phys. 120, 2082, 2004). The tangent and
+climbing-image equations keep their defaults.</p>
+<p>While <code class="docutils literal notranslate"><span class="pre">NEBMethod</span></code> defines the force equations,
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.ClimbingImageConfig.html#nvalchemi.dynamics.mep.ClimbingImageConfig" title="nvalchemi.dynamics.mep.ClimbingImageConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ClimbingImageConfig</span></code></a> controls the transition
+from regular NEB to climbing-image NEB. Each path first runs regular NEB until
+it reaches <code class="docutils literal notranslate"><span class="pre">regular_fmax=0.5</span></code>. The highest-energy interior image is then
+selected as the climbing image. Its spring force is removed and the component
+of the model force parallel to the path is reversed, driving the image toward
+the saddle point. Optimization terminates when the final <code class="docutils literal notranslate"><span class="pre">fmax=0.05</span></code>
+criterion is reached.</p>
+<p><code class="docutils literal notranslate"><span class="pre">spring=0.1</span></code> uses the same spring constant for every link in the band. For
+more advanced spring schemes, provide a custom
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.SpringConfig.html#nvalchemi.dynamics.mep.SpringConfig" title="nvalchemi.dynamics.mep.SpringConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">SpringConfig</span></code></a> to compute per-link values.
+The internal <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.FIRE2.html#nvalchemi.dynamics.FIRE2" title="nvalchemi.dynamics.FIRE2"><code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE2</span></code></a> stages use the NEB-tuned
+optimizer defaults, while <code class="docutils literal notranslate"><span class="pre">n_steps=500</span></code> limits the total number of
+optimization steps.</p>
+<p>Passing <code class="docutils literal notranslate"><span class="pre">diagnostics_log_path</span></code> enables a
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.PathDiagnosticsHook.html#nvalchemi.dynamics.mep.hooks.PathDiagnosticsHook" title="nvalchemi.dynamics.mep.hooks.PathDiagnosticsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">PathDiagnosticsHook</span></code></a> together with a
+CSV <a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a>. These hooks reuse the
+already-computed path state, so diagnostics require no additional model
+evaluation. <code class="docutils literal notranslate"><span class="pre">diagnostics_frequency</span></code> controls how often both hooks run. The
+next section reads the resulting diagnostics.</p>
+<p>Advanced users can build the same workflow explicitly with
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>, composing optimizer stages with
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook.html#nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook" title="nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">PathEnergyStatsHook</span></code></a>,
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook.html#nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook" title="nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ClimbingImageSelectionHook</span></code></a>,
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.NEBForceHook.html#nvalchemi.dynamics.mep.hooks.NEBForceHook" title="nvalchemi.dynamics.mep.hooks.NEBForceHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NEBForceHook</span></code></a>, convergence hooks,
+and observer hooks. <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.mep.NEB.html#nvalchemi.dynamics.mep.NEB" title="nvalchemi.dynamics.mep.NEB"><code class="xref py py-class docutils literal notranslate"><span class="pre">NEB</span></code></a> provides a
+higher-level interface that manages their ordering and lifecycle through
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">run()</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Copy the IDPP-relaxed positions into a fresh band so that ``idpp_band`` remains</span>
+<span class="c1"># available for comparison, without carrying over the IDPP dynamics state.</span>
+<span class="n">neb_band</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">=</span> <span class="n">linear_band</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="n">neb_band</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">idpp_band</span><span class="o">.</span><span class="n">positions</span></a><span class="p">)</span>
+<span class="n">initialize_dynamics_fields</span><span class="p">(</span><span class="n">neb_band</span><span class="p">)</span>
+
+<span class="n">method</span> <span class="o">=</span> <span class="s2">&quot;improved_tangent&quot;</span>  <span class="c1"># change to &quot;dneb&quot; to try the custom equation</span>
+<span class="n">method_label</span> <span class="o">=</span> <span class="s2">&quot;DNEB&quot;</span> <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;dneb&quot;</span> <span class="k">else</span> <span class="s2">&quot;NEB&quot;</span>
+<span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;dneb&quot;</span><span class="p">:</span>
+    <span class="n">method</span> <span class="o">=</span> <span class="n">NEBMethod</span><span class="p">(</span><span class="n">effective_force_fn</span><span class="o">=</span><span class="n">dneb_effective_force</span><span class="p">)</span>
+<span class="n">NEB_LOG</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;neb.csv&quot;</span><span class="p">)</span>
+<span class="n">neb</span> <span class="o">=</span> <span class="n">NEB</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">spring</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
+    <span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">climbing</span><span class="o">=</span><span class="n">ClimbingImageConfig</span><span class="p">(</span><span class="n">regular_fmax</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
+    <span class="n">diagnostics_log_path</span><span class="o">=</span><span class="n">NEB_LOG</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">neb_band</span> <span class="o">=</span> <span class="n">neb</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">neb_band</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="inspect-the-results">
+<h2>Inspect the results<a class="headerlink" href="#inspect-the-results" title="Link to this heading">#</a></h2>
+<p>The diagnostics CSV contains one row per path at every optimization step.
+It records path-level quantities including <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, energy barrier,
+highest-energy interior image, path length, and workflow status.</p>
+<p>status indicates the NEB stage: 0 for regular NEB, 1 for
+climbing-image NEB, and 2 for a completed path. With no per-stage step
+limits configured here, status=2 means the final force criterion was met.
+If n_steps is reached first, unfinished paths remain at 0 or 1.</p>
+<p>If max_regular_steps or max_climbing_steps is configured, a path may
+also advance when a stage-specific step budget is exhausted. In that case,
+inspect fmax together with status to determine convergence.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Read the final diagnostics for each path.</span>
+<span class="k">with</span> <span class="n">NEB_LOG</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">newline</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
+    <span class="n">log_rows</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">stream</span><span class="p">))</span>
+
+<span class="n">final_diagnostics</span> <span class="o">=</span> <span class="n">log_rows</span><span class="p">[</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">reaction_ids</span><span class="p">)</span> <span class="p">:]</span>
+<span class="n">converged_paths</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">])</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">final_diagnostics</span><span class="p">)</span>
+<span class="n">maximum_fmax</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;fmax&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">final_diagnostics</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Diagnostics: </span><span class="si">{</span><span class="n">NEB_LOG</span><span class="si">}</span><span class="s2"> &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">converged_paths</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">reaction_ids</span><span class="p">)</span><span class="si">}</span><span class="s2"> paths converged, &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;max fmax=</span><span class="si">{</span><span class="n">maximum_fmax</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV/angstrom)&quot;</span>
+<span class="p">)</span>
+
+<span class="c1"># Inspect the optimized batched paths.</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Optimized band: positions=</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">neb_band</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span></a><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;energies=</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">neb_band</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">shape</span></a><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;images per path=</span><span class="si">{</span><span class="n">NUM_IMAGES</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="p">)</span>
+
+<span class="c1"># Reshape these equal-size paths for convenient inspection.</span>
+<span class="n">n_paths</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">reaction_ids</span><span class="p">)</span>
+<span class="n">n_atoms</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">records</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">])</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">path_positions</span></a> <span class="o">=</span> <span class="n">neb_band</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n_paths</span><span class="p">,</span> <span class="n">NUM_IMAGES</span><span class="p">,</span> <span class="n">n_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">path_energies</span></a> <span class="o">=</span> <span class="n">neb_band</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n_paths</span><span class="p">,</span> <span class="n">NUM_IMAGES</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">relative_energies</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">path_energies</span></a> <span class="o">-</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">path_energies</span></a><span class="p">[:,</span> <span class="p">:</span><span class="mi">1</span><span class="p">]</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Diagnostics: neb.csv (8/8 paths converged, max fmax=0.0498 eV/angstrom)
+Optimized band: positions=(560, 3), energies=(80, 1), images per path=10
+</pre></div>
+</div>
+</section>
+<section id="compare-with-the-transition1x-dft-reference">
+<h2>Compare with the Transition1x DFT reference<a class="headerlink" href="#compare-with-the-transition1x-dft-reference" title="Link to this heading">#</a></h2>
+<p>NEB convergence only indicates that the effective forces satisfy the requested
+threshold on the AIMNet2-rxn potential-energy surface. To assess the optimized
+paths, the results are compared with reference NEB bands computed using DFT at
+the omega-B97x/6-31G(d) level of theory.</p>
+<p>Energy profiles are plotted against cumulative Cartesian path length,
+normalized from zero at the reactant to one at the product. Their maximum
+energies provide the reaction barriers summarized below.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">normalized_path_coordinate</span><span class="p">(</span><span class="n">positions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return cumulative Cartesian path length normalized from zero to one.&quot;&quot;&quot;</span>
+
+    <span class="n">displacements</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">coordinate</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+        <span class="p">([</span><span class="mf">0.0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">displacements</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)))</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">coordinate</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">coordinate</span> <span class="o">/</span> <span class="n">coordinate</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+
+<span class="c1"># Load the DFT reference bands and verify that their reaction order matches.</span>
+<span class="n">reference_path</span> <span class="o">=</span> <span class="n">endpoints_path</span><span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="s2">&quot;dft_reference.json&quot;</span><span class="p">)</span>
+<span class="n">reference_records</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">reference_path</span><span class="o">.</span><span class="n">read_text</span><span class="p">())[</span><span class="s2">&quot;paths&quot;</span><span class="p">]</span>
+<span class="k">if</span> <span class="p">[</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;reaction_id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">reference_records</span><span class="p">]</span> <span class="o">!=</span> <span class="n">reaction_ids</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;DFT reference reaction IDs do not match the endpoint data&quot;</span><span class="p">)</span>
+
+<span class="c1"># Move the optimized AIMNet2-rxn paths to NumPy for comparison and plotting.</span>
+<span class="n">model_positions</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">path_positions</span></a><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+<span class="n">model_relative_energies</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">relative_energies</span></a><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+<span class="n">comparison_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="c1"># Collect the DFT and AIMNet2-rxn energy profiles for every reaction.</span>
+<span class="k">for</span> <span class="n">path_index</span><span class="p">,</span> <span class="n">reference_record</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">reference_records</span><span class="p">):</span>
+    <span class="n">dft_positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reference_record</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">dft_relative_energies</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">reference_record</span><span class="p">[</span><span class="s2">&quot;relative_energies_ev&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
+    <span class="p">)</span>
+    <span class="n">dft_ts_index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">reference_record</span><span class="p">[</span><span class="s2">&quot;transition_state_index&quot;</span><span class="p">])</span>
+    <span class="n">model_ts_index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">model_relative_energies</span><span class="p">[</span><span class="n">path_index</span><span class="p">]))</span>
+    <span class="n">dft_barrier</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">dft_relative_energies</span><span class="p">[</span><span class="n">dft_ts_index</span><span class="p">])</span>
+    <span class="n">model_barrier</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">model_relative_energies</span><span class="p">[</span><span class="n">path_index</span><span class="p">,</span> <span class="n">model_ts_index</span><span class="p">])</span>
+
+    <span class="c1"># Retain the path profiles and summary metrics used below.</span>
+    <span class="n">comparison_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;reaction_id&quot;</span><span class="p">:</span> <span class="n">reference_record</span><span class="p">[</span><span class="s2">&quot;reaction_id&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;dft_coordinate&quot;</span><span class="p">:</span> <span class="n">normalized_path_coordinate</span><span class="p">(</span><span class="n">dft_positions</span><span class="p">),</span>
+            <span class="s2">&quot;dft_relative_energies&quot;</span><span class="p">:</span> <span class="n">dft_relative_energies</span><span class="p">,</span>
+            <span class="s2">&quot;dft_ts_index&quot;</span><span class="p">:</span> <span class="n">dft_ts_index</span><span class="p">,</span>
+            <span class="s2">&quot;model_coordinate&quot;</span><span class="p">:</span> <span class="n">normalized_path_coordinate</span><span class="p">(</span><span class="n">model_positions</span><span class="p">[</span><span class="n">path_index</span><span class="p">]),</span>
+            <span class="s2">&quot;model_relative_energies&quot;</span><span class="p">:</span> <span class="n">model_relative_energies</span><span class="p">[</span><span class="n">path_index</span><span class="p">],</span>
+            <span class="s2">&quot;model_ts_index&quot;</span><span class="p">:</span> <span class="n">model_ts_index</span><span class="p">,</span>
+            <span class="s2">&quot;dft_barrier&quot;</span><span class="p">:</span> <span class="n">dft_barrier</span><span class="p">,</span>
+            <span class="s2">&quot;model_barrier&quot;</span><span class="p">:</span> <span class="n">model_barrier</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="plot-the-normalized-energy-profiles">
+<h2>Plot the normalized energy profiles<a class="headerlink" href="#plot-the-normalized-energy-profiles" title="Link to this heading">#</a></h2>
+<p>The 2-by-4 comparison with Transition1x DFT is saved as
+<code class="docutils literal notranslate"><span class="pre">neb_energy_profiles.png</span></code> in the current working directory. Linear and
+post-IDPP AIMNet2-rxn profiles are included by default. Skip these additional
+evaluations with NVALCHEMI_SHOW_INITIAL_PATHS=0. Energies above 5 eV are
+clipped from the displayed range so the DFT and optimized profiles remain
+legible.
+Documentation builds enable plotting automatically so Sphinx-Gallery also
+displays the figure.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Configure the optional initial-path profiles and displayed energy range.</span>
+<span class="n">SHOW_INITIAL_PATHS</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;NVALCHEMI_SHOW_INITIAL_PATHS&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span>
+<span class="n">ENERGY_PLOT_MAX_EV</span> <span class="o">=</span> <span class="mf">5.0</span>
+<span class="n">PROFILE_PLOT</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;neb_energy_profiles.png&quot;</span><span class="p">)</span>
+
+
+<span class="c1"># Evaluate an unoptimized band once with AIMNet2-rxn.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">evaluate_energy_profiles</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">AIMNet2rxnWrapper</span></a><span class="p">,</span>
+    <span class="n">band</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="n">n_paths</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">n_images</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Evaluate AIMNet2-rxn single-point energy profiles on a copied band.&quot;&quot;&quot;</span>
+
+    <span class="n">evaluation_band</span> <span class="o">=</span> <span class="n">band</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">outputs</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">evaluation_band</span><span class="p">)</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">evaluation_band</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n_paths</span><span class="p">,</span> <span class="n">n_images</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">energies</span> <span class="o">=</span> <span class="n">outputs</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n_paths</span><span class="p">,</span> <span class="n">n_images</span><span class="p">)</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">relative_energies</span></a> <span class="o">=</span> <span class="n">energies</span> <span class="o">-</span> <span class="n">energies</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">positions</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">relative_energies</span></a><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
+    <span class="p">)</span>
+
+
+<span class="c1"># Generate the comparison figure and any requested initial-path profiles.</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="c1"># Import Matplotlib only in the plotting section.</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+    <span class="c1"># Define the optimized energy profiles and styles shared by all panels.</span>
+    <span class="n">profiles</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;model&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">method_label</span><span class="si">}</span><span class="s2"> (AIMNet2-rxn)&quot;</span><span class="p">,</span>
+            <span class="p">{</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;tab:blue&quot;</span><span class="p">,</span> <span class="s2">&quot;linestyle&quot;</span><span class="p">:</span> <span class="s2">&quot;--&quot;</span><span class="p">,</span> <span class="s2">&quot;marker&quot;</span><span class="p">:</span> <span class="s2">&quot;s&quot;</span><span class="p">},</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="s2">&quot;dft&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;NEB (Transition1x DFT)&quot;</span><span class="p">,</span>
+            <span class="p">{</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;black&quot;</span><span class="p">,</span> <span class="s2">&quot;marker&quot;</span><span class="p">:</span> <span class="s2">&quot;o&quot;</span><span class="p">},</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="c1"># Evaluate the linear and post-IDPP geometries only when displayed.</span>
+    <span class="k">if</span> <span class="n">SHOW_INITIAL_PATHS</span><span class="p">:</span>
+        <span class="n">linear_positions</span><span class="p">,</span> <span class="n">linear_relative_energies</span> <span class="o">=</span> <span class="n">evaluate_energy_profiles</span><span class="p">(</span>
+            <span class="n">model</span><span class="p">,</span>
+            <span class="n">linear_band</span><span class="p">,</span>
+            <span class="n">n_paths</span><span class="p">,</span>
+            <span class="n">NUM_IMAGES</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">idpp_positions</span><span class="p">,</span> <span class="n">idpp_relative_energies</span> <span class="o">=</span> <span class="n">evaluate_energy_profiles</span><span class="p">(</span>
+            <span class="n">model</span><span class="p">,</span>
+            <span class="n">idpp_band</span><span class="p">,</span>
+            <span class="n">n_paths</span><span class="p">,</span>
+            <span class="n">NUM_IMAGES</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Attach both preparation profiles to their comparison rows.</span>
+        <span class="k">for</span> <span class="n">path_index</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">comparison_rows</span><span class="p">):</span>
+            <span class="n">row</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;linear_coordinate&quot;</span><span class="p">:</span> <span class="n">normalized_path_coordinate</span><span class="p">(</span>
+                        <span class="n">linear_positions</span><span class="p">[</span><span class="n">path_index</span><span class="p">]</span>
+                    <span class="p">),</span>
+                    <span class="s2">&quot;linear_relative_energies&quot;</span><span class="p">:</span> <span class="n">linear_relative_energies</span><span class="p">[</span><span class="n">path_index</span><span class="p">],</span>
+                    <span class="s2">&quot;idpp_coordinate&quot;</span><span class="p">:</span> <span class="n">normalized_path_coordinate</span><span class="p">(</span>
+                        <span class="n">idpp_positions</span><span class="p">[</span><span class="n">path_index</span><span class="p">]</span>
+                    <span class="p">),</span>
+                    <span class="s2">&quot;idpp_relative_energies&quot;</span><span class="p">:</span> <span class="n">idpp_relative_energies</span><span class="p">[</span><span class="n">path_index</span><span class="p">],</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Add the two preparation profiles before the optimized profiles.</span>
+        <span class="n">profiles</span><span class="p">[:</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span>
+                <span class="s2">&quot;linear&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Linear (AIMNet2-rxn)&quot;</span><span class="p">,</span>
+                <span class="p">{</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;0.55&quot;</span><span class="p">,</span> <span class="s2">&quot;linestyle&quot;</span><span class="p">:</span> <span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="s2">&quot;marker&quot;</span><span class="p">:</span> <span class="s2">&quot;x&quot;</span><span class="p">},</span>
+            <span class="p">),</span>
+            <span class="p">(</span>
+                <span class="s2">&quot;idpp&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Post-IDPP (AIMNet2-rxn)&quot;</span><span class="p">,</span>
+                <span class="p">{</span><span class="s2">&quot;color&quot;</span><span class="p">:</span> <span class="s2">&quot;tab:orange&quot;</span><span class="p">,</span> <span class="s2">&quot;linestyle&quot;</span><span class="p">:</span> <span class="s2">&quot;-.&quot;</span><span class="p">,</span> <span class="s2">&quot;marker&quot;</span><span class="p">:</span> <span class="s2">&quot;x&quot;</span><span class="p">},</span>
+            <span class="p">),</span>
+        <span class="p">]</span>
+
+        <span class="c1"># Summarize all four barriers in the only per-reaction console table.</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">AIMNet2-rxn single-point barriers during path preparation:&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;Reaction&#39;</span><span class="si">:</span><span class="s2">&lt;20</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Linear&#39;</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Post-IDPP&#39;</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;Optimized&#39;</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;DFT&#39;</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;&#39;</span><span class="si">:</span><span class="s2">&lt;20</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;(eV)&#39;</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;(eV)&#39;</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;(eV)&#39;</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;(eV)&#39;</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">comparison_rows</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;reaction_id&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">&lt;20</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;linear_relative_energies&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">&gt;10.3f</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;idpp_relative_energies&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">&gt;10.3f</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;model_barrier&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">&gt;10.3f</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;dft_barrier&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">&gt;10.3f</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="c1"># Create one panel for each reaction path.</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ax</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axes</span><span class="o">.</span><span class="n">flat</span><span class="p">,</span> <span class="n">comparison_rows</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="c1"># Draw every requested energy profile for this reaction.</span>
+        <span class="k">for</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">style</span> <span class="ow">in</span> <span class="n">profiles</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+                <span class="n">row</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_coordinate&quot;</span><span class="p">],</span>
+                <span class="n">row</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_relative_energies&quot;</span><span class="p">],</span>
+                <span class="n">markersize</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="n">label</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">style</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Mark the DFT and AIMNet2-rxn transition-state estimates.</span>
+        <span class="k">for</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">color</span> <span class="ow">in</span> <span class="p">((</span><span class="s2">&quot;dft&quot;</span><span class="p">,</span> <span class="s2">&quot;black&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="s2">&quot;tab:blue&quot;</span><span class="p">)):</span>
+            <span class="n">ts_index</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_ts_index&quot;</span><span class="p">]</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+                <span class="n">row</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_coordinate&quot;</span><span class="p">][</span><span class="n">ts_index</span><span class="p">],</span>
+                <span class="n">row</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_relative_energies&quot;</span><span class="p">][</span><span class="n">ts_index</span><span class="p">],</span>
+                <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span>
+                <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;*&quot;</span><span class="p">,</span>
+                <span class="n">s</span><span class="o">=</span><span class="mi">70</span><span class="p">,</span>
+                <span class="n">zorder</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Label and format this reaction panel.</span>
+        <span class="n">formula</span><span class="p">,</span> <span class="n">reaction</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;reaction_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">formula</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">reaction</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">0.25</span><span class="p">,</span> <span class="n">ENERGY_PLOT_MAX_EV</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+
+    <span class="c1"># Add labels and one shared legend for the complete figure.</span>
+    <span class="n">handles</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="n">axes</span><span class="o">.</span><span class="n">flat</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_legend_handles_labels</span><span class="p">()</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">method_label</span><span class="si">}</span><span class="s2"> paths vs Transition1x DFT reference&quot;</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.995</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span>
+        <span class="n">handles</span><span class="p">,</span>
+        <span class="n">labels</span><span class="p">,</span>
+        <span class="n">loc</span><span class="o">=</span><span class="s2">&quot;upper center&quot;</span><span class="p">,</span>
+        <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.955</span><span class="p">),</span>
+        <span class="n">ncols</span><span class="o">=</span><span class="mi">4</span> <span class="k">if</span> <span class="n">SHOW_INITIAL_PATHS</span> <span class="k">else</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">supxlabel</span><span class="p">(</span><span class="s2">&quot;Normalized cumulative Cartesian path length&quot;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">supylabel</span><span class="p">(</span><span class="s2">&quot;Energy relative to reactant (eV)&quot;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.88</span><span class="p">))</span>
+
+    <span class="c1"># Save the figure in the current working directory and display it.</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">PROFILE_PLOT</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">150</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Saved energy profile comparison (display capped at &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ENERGY_PLOT_MAX_EV</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> eV) to </span><span class="si">{</span><span class="n">PROFILE_PLOT</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;matplotlib not available — skipping plot.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img src="../../_images/sphx_glr_11_batched_neb_001.png" srcset="../../_images/sphx_glr_11_batched_neb_001.png" alt="NEB paths vs Transition1x DFT reference, C2H2N2O/rxn2093, C2H2N2O/rxn3122, C2H3NO/rxn3840, C2H4O/rxn0722, C2HNO3/rxn1883, C3H2N2/rxn1185, C3HNO2/rxn0109, C4HNO/rxn3726" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>AIMNet2-rxn single-point barriers during path preparation:
+Reaction                 Linear  Post-IDPP  Optimized        DFT
+                           (eV)       (eV)       (eV)       (eV)
+C2H2N2O/rxn2093           3.471      2.414      2.044      2.265
+C2H2N2O/rxn3122           4.312      3.815      2.931      3.140
+C2H3NO/rxn3840           13.889      2.655      2.325      2.456
+C2H4O/rxn0722             3.663      3.998      3.110      3.536
+C2HNO3/rxn1883            3.240      2.646      2.201      2.540
+C3H2N2/rxn1185           13.937      3.064      2.626      2.782
+C3HNO2/rxn0109           14.055      2.286      1.718      2.075
+C4HNO/rxn3726            13.152      2.557      1.825      2.078
+Saved energy profile comparison (display capped at 5 eV) to neb_energy_profiles.png
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.889 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-11-batched-neb-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/d6c23ec4dc930a31738264029b0760c4/11_batched_neb.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">11_batched_neb.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/b704a0af89be37cf354c2c7e4f659aa4/11_batched_neb.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">11_batched_neb.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/a8aafe563c0559f981b0199f61930d4f/11_batched_neb.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">11_batched_neb.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="10_mace_training.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">MACE Training with ALCHEMI Training Utilities</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="12_umbrella_sampling.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Batched Umbrella Sampling with EnhancedSampling</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-the-reactant-and-product-endpoints">Load the reactant and product endpoints</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#interpolate-and-initialize-the-paths">Interpolate and initialize the paths</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-the-model">Load the model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-the-neb">Run the NEB</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#inspect-the-results">Inspect the results</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-with-the-transition1x-dft-reference">Compare with the Transition1x DFT reference</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plot-the-normalized-energy-profiles">Plot the normalized energy profiles</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/advanced/11_batched_neb.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

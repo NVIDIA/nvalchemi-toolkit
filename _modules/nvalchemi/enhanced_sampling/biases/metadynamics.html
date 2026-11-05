@@ -1,0 +1,1197 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.enhanced_sampling.biases.metadynamics &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/enhanced_sampling/biases/metadynamics';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.en...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.enhanced_sampling.biases.metadynamics</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Well-tempered metadynamics over one or more collective variables.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">KB_EV</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._adaptive</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdaptivePotentialMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._bias</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConservativeBias</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._history</span><span class="w"> </span><span class="kn">import</span> <span class="n">DepositHistoryMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling.cv._periodic</span><span class="w"> </span><span class="kn">import</span> <span class="n">periodic_difference</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._adaptive</span><span class="w"> </span><span class="kn">import</span> <span class="n">BiasContext</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;WellTemperedMetaDynamicsBias&quot;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="WellTemperedMetaDynamicsBias">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.html#nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">WellTemperedMetaDynamicsBias</span><span class="p">(</span>
+    <span class="n">AdaptivePotentialMixin</span><span class="p">,</span> <span class="n">DepositHistoryMixin</span><span class="p">,</span> <span class="n">ConservativeBias</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Gaussian hills deposited along a CV, with well-tempered damping.</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        V(s, t) = \sum_i h_i \exp\!\left(</span>
+<span class="sd">            -\sum_d \frac{(s_d - c_{i,d})^2}{2\sigma_d^2}\right)</span>
+
+<span class="sd">    Each deposition adds one hill per walker at that walker&#39;s current CV</span>
+<span class="sd">    value.  In the well-tempered scheme the height decays where the bias has</span>
+<span class="sd">    already accumulated,</span>
+
+<span class="sd">    .. math:: h_t = h_0 \exp\!\left(-\frac{V(s_t)}{k_B T (\gamma - 1)}\right)</span>
+
+<span class="sd">    which makes the sum converge instead of filling forever.  At convergence</span>
+<span class="sd">    the free energy is recovered as</span>
+<span class="sd">    :math:`F(s) = -\frac{\gamma}{\gamma - 1} V(s)` (Barducci, Bussi &amp;</span>
+<span class="sd">    Parrinello 2008), available from :meth:`free_energy`.</span>
+
+<span class="sd">    Passing ``bias_factor=None`` gives standard metadynamics — the</span>
+<span class="sd">    :math:`\gamma \to \infty` limit, where every hill has height ``h_0`` and</span>
+<span class="sd">    :math:`F(s) = -V(s)`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cv:</span>
+<span class="sd">        Differentiable ``cv(batch) -&gt; Tensor[B, D]``.</span>
+<span class="sd">    height:</span>
+<span class="sd">        Initial hill height ``h_0`` in eV.</span>
+<span class="sd">    sigma:</span>
+<span class="sd">        Hill width, either a scalar shared by every CV component or shape</span>
+<span class="sd">        ``[D]``.  Any other length is rejected on the first evaluation</span>
+<span class="sd">        rather than broadcast into the hill table.</span>
+<span class="sd">    temperature:</span>
+<span class="sd">        Simulation temperature in Kelvin, used for the well-tempered damping.</span>
+<span class="sd">    bias_factor:</span>
+<span class="sd">        ``gamma &gt; 1``, or ``None`` for standard metadynamics.</span>
+<span class="sd">    name:</span>
+<span class="sd">        Unique bias identifier.</span>
+<span class="sd">    frequency:</span>
+<span class="sd">        Dynamics steps between depositions (the deposition pace).  The</span>
+<span class="sd">        :class:`~nvalchemi.hooks.Hook` attribute, with the meaning it has</span>
+<span class="sd">        everywhere else.</span>
+<span class="sd">    storage:</span>
+<span class="sd">        ``&quot;preallocated&quot;``, ``&quot;grow&quot;``, or ``&quot;fifo&quot;`` — see Notes.</span>
+<span class="sd">    max_hills:</span>
+<span class="sd">        Capacity.  Required for ``&quot;preallocated&quot;`` and ``&quot;fifo&quot;``; the</span>
+<span class="sd">        initial chunk for ``&quot;grow&quot;``.</span>
+<span class="sd">    history:</span>
+<span class="sd">        ``&quot;shared&quot;`` (every walker sees every hill), ``&quot;state&quot;`` (hills</span>
+<span class="sd">        belong to the thermodynamic state that deposited them), or</span>
+<span class="sd">        ``&quot;walker&quot;`` (each walker sees only its own).</span>
+
+<span class="sd">        ``&quot;state&quot;`` and ``&quot;walker&quot;`` require the batch to carry</span>
+<span class="sd">        ``thermodynamic_state_id`` / ``walker_id`` respectively, and raise if</span>
+<span class="sd">        it does not.  :class:`~nvalchemi.enhanced_sampling.EnhancedSampling`</span>
+<span class="sd">        stamps both on every step, so a runner-driven bias never sees this;</span>
+<span class="sd">        a bias evaluated directly must supply the field itself.</span>
+<span class="sd">    periods:</span>
+<span class="sd">        Period per CV component, ``0`` for non-periodic, shape ``[D]``.</span>
+<span class="sd">        Applied to the ``s - c`` difference so a hill near a branch cut</span>
+<span class="sd">        still repels from both sides.  Unlike ``sigma`` a scalar is not</span>
+<span class="sd">        accepted for a multi-component CV: the entries carry per-component</span>
+<span class="sd">        meaning, so broadcasting one across all of them would quietly make</span>
+<span class="sd">        every component periodic.</span>
+<span class="sd">    ramp_depositions:</span>
+<span class="sd">        Number of *deposition events* over which a freshly added hill ramps</span>
+<span class="sd">        from zero to full height.  ``0`` activates immediately.  Counted in</span>
+<span class="sd">        depositions rather than dynamics steps because ``energy()`` sees the</span>
+<span class="sd">        hill table, not the step counter.</span>
+<span class="sd">    compute_stress:</span>
+<span class="sd">        Passed through to :class:`ConservativeBias`.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        For an invalid storage policy, history mode, non-positive height or</span>
+<span class="sd">        width, ``bias_factor &lt;= 1``, or a missing capacity.  A ``sigma`` or</span>
+<span class="sd">        ``periods`` length that disagrees with the CV is raised on first</span>
+<span class="sd">        evaluation, since the CV dimension is not knowable at construction</span>
+<span class="sd">        from a plain callable.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Storage policies</span>
+<span class="sd">        ``preallocated`` keeps tensor shapes fixed for the whole run and</span>
+<span class="sd">        **raises** when capacity is exhausted, rather than silently changing</span>
+<span class="sd">        the physics.  It is the compile-stable choice.</span>
+
+<span class="sd">        ``grow`` allocates in chunks of ``max_hills``; each growth changes</span>
+<span class="sd">        the hill-tensor shape, which forces a recompile if ``energy()`` is</span>
+<span class="sd">        compiled.  Under torch&#39;s default of static parameter shapes, Dynamo</span>
+<span class="sd">        caps retraces per code object at</span>
+<span class="sd">        ``torch._dynamo.config.recompile_limit`` (8), so a compiled run</span>
+<span class="sd">        **hard-fails once past it** — mid-trajectory, after the run is</span>
+<span class="sd">        already underway.</span>
+
+<span class="sd">        Both settings are process-global and other code changes them:</span>
+<span class="sd">        ``DistributedModel`` raises the limit to 64 *and* sets</span>
+<span class="sd">        ``force_parameter_static_shapes = False``.  The second matters more</span>
+<span class="sd">        than the first — with dynamic parameter shapes the hill-table</span>
+<span class="sd">        dimension is traced symbolically, growth stops triggering a retrace,</span>
+<span class="sd">        and the limit is never reached.  So the three ways out are: size</span>
+<span class="sd">        ``max_hills`` so growths stay under the limit, enable dynamic</span>
+<span class="sd">        parameter shapes, or use ``preallocated``, which holds one trace for</span>
+<span class="sd">        the whole run regardless.</span>
+
+<span class="sd">        ``fifo`` bounds memory by discarding the oldest hill.  This is</span>
+<span class="sd">        **scientifically meaningful, not merely a cache eviction**: the</span>
+<span class="sd">        accumulated bias is no longer the integral of everything deposited,</span>
+<span class="sd">        so the well-tempered convergence argument no longer applies and</span>
+<span class="sd">        :meth:`free_energy` is not a valid estimator.  Chosen deliberately</span>
+<span class="sd">        for exploration, and the natural policy for the RMSD variant.</span>
+
+<span class="sd">    Multi-walker history</span>
+<span class="sd">        ``shared`` is the multiple-walker scheme: every walker feels every</span>
+<span class="sd">        hill, so ``B`` walkers fill a basin roughly ``B`` times faster.</span>
+<span class="sd">        ``state`` keeps a separate history per thermodynamic state, which is</span>
+<span class="sd">        what a replica-exchange ladder needs.  ``walker`` runs ``B``</span>
+<span class="sd">        independent metadynamics simulations in one batch.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import torch</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.enhanced_sampling import (</span>
+<span class="sd">    ...     WellTemperedMetaDynamicsBias, pair_distance,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; idx = torch.tensor([0, 5])</span>
+<span class="sd">    &gt;&gt;&gt; bias = WellTemperedMetaDynamicsBias(</span>
+<span class="sd">    ...     cv=lambda b: pair_distance(b, idx),</span>
+<span class="sd">    ...     height=0.01, sigma=0.1, temperature=300.0, bias_factor=10.0,</span>
+<span class="sd">    ...     max_hills=1000,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; bias.hill_count.item()</span>
+<span class="sd">    0</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># DepositHistoryMixin: what this bias calls a deposit, and which buffers</span>
+    <span class="c1"># hold the table.  hill_centers comes first, so it supplies the device.</span>
+    <span class="n">_deposit_noun</span> <span class="o">=</span> <span class="s2">&quot;hill&quot;</span>
+    <span class="n">_capacity_option</span> <span class="o">=</span> <span class="s2">&quot;max_hills&quot;</span>
+    <span class="n">_full_advice</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;Raise max_hills, lengthen frequency, or switch to storage=&#39;grow&#39; &quot;</span>
+        <span class="s2">&quot;(recompiles when it resizes) or storage=&#39;fifo&#39; (bounded memory, but &quot;</span>
+        <span class="s2">&quot;discards the oldest hills and so is no longer a converging &quot;</span>
+        <span class="s2">&quot;well-tempered run).&quot;</span>
+    <span class="p">)</span>
+    <span class="n">_deposit_buffers</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="s2">&quot;hill_centers&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;hill_heights&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;hill_owner&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;hill_step&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_written_attr</span> <span class="o">=</span> <span class="s2">&quot;hills_written&quot;</span>
+    <span class="n">_owner_attr</span> <span class="o">=</span> <span class="s2">&quot;hill_owner&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">cv</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">],</span> <span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">height</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">sigma</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">bias_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;metadynamics&quot;</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">500</span><span class="p">,</span>
+        <span class="n">storage</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;preallocated&quot;</span><span class="p">,</span> <span class="s2">&quot;grow&quot;</span><span class="p">,</span> <span class="s2">&quot;fifo&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;preallocated&quot;</span><span class="p">,</span>
+        <span class="n">max_hills</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">history</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;shared&quot;</span><span class="p">,</span> <span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="s2">&quot;walker&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;shared&quot;</span><span class="p">,</span>
+        <span class="n">periods</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ramp_depositions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">compute_stress</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">compute_stress</span><span class="o">=</span><span class="n">compute_stress</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">validate_history_options</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">history</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">height</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias: height must be positive, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">height</span><span class="si">}</span><span class="s2">. A non-positive hill would attract the walker to &quot;</span>
+                <span class="s2">&quot;where it has already been.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">bias_factor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">bias_factor</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias: bias_factor must be greater &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;than 1, got </span><span class="si">{</span><span class="n">bias_factor</span><span class="si">}</span><span class="s2">. gamma = 1 divides by zero in the &quot;</span>
+                <span class="s2">&quot;well-tempered height; pass None for standard metadynamics.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias: frequency must be at least 1, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">frequency</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">ramp_depositions</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias: ramp_depositions must be &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;non-negative, got </span><span class="si">{</span><span class="n">ramp_depositions</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">storage</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;preallocated&quot;</span><span class="p">,</span> <span class="s2">&quot;fifo&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">max_hills</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias: storage=</span><span class="si">{</span><span class="n">storage</span><span class="si">!r}</span><span class="s2"> needs an &quot;</span>
+                <span class="s2">&quot;explicit max_hills — it is the whole point of the policy, &quot;</span>
+                <span class="s2">&quot;either the ceiling that raises or the ring that overwrites.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">capacity</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_hills</span><span class="p">)</span> <span class="k">if</span> <span class="n">max_hills</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">256</span>
+        <span class="k">if</span> <span class="n">capacity</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias: max_hills must be at least 1, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">max_hills</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">sigma_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">sigma</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">())</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">((</span><span class="n">sigma_t</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias: sigma must be positive, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">sigma_t</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">. A zero width is a delta function with no &quot;</span>
+                <span class="s2">&quot;gradient anywhere but one point.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv</span> <span class="o">=</span> <span class="n">cv</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">storage</span> <span class="o">=</span> <span class="n">storage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="n">history</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ramp_depositions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ramp_depositions</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">height</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">height</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">temperature</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bias_factor</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">bias_factor</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">bias_factor</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span> <span class="o">=</span> <span class="n">capacity</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;sigma&quot;</span><span class="p">,</span> <span class="n">sigma_t</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">periods</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">periods</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+                <span class="s2">&quot;periods&quot;</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">periods</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">())</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_allocate</span><span class="p">(</span><span class="n">capacity</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="n">sigma_t</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+
+        <span class="c1"># This bias reads thermodynamic_state_id only in &quot;state&quot; history, and</span>
+        <span class="c1"># even then the hills follow the state rather than the energy varying</span>
+        <span class="c1"># by state at fixed history — but the assignment does change which</span>
+        <span class="c1"># hills a walker feels, so a temperature ladder would need the</span>
+        <span class="c1"># combined acceptance rule that is not implemented.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_dependent_for_exchange</span> <span class="o">=</span> <span class="n">history</span> <span class="o">==</span> <span class="s2">&quot;state&quot;</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Storage</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_allocate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">capacity</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create or replace the hill buffers at *capacity*.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        capacity:</span>
+<span class="sd">            Number of hill slots.</span>
+<span class="sd">        dim:</span>
+<span class="sd">            CV dimension.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">.</span><span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;hill_centers&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">capacity</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;hill_heights&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">capacity</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;hill_owner&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">capacity</span><span class="p">,),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;hill_step&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">capacity</span><span class="p">,),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="c1"># hill_count saturates at capacity (how many slots are live);</span>
+        <span class="c1"># hills_written keeps counting, which is what makes the FIFO ring</span>
+        <span class="c1"># position unambiguous once it has wrapped.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;hill_count&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;hills_written&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;deposits&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Energy</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_hill_scale</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return each hill&#39;s ramp factor, shape ``[capacity]``.</span>
+
+<span class="sd">        A hill that switched on at full height would deliver a force</span>
+<span class="sd">        discontinuity at the deposition event; ramping over</span>
+<span class="sd">        ``ramp_depositions`` spreads that over a window instead.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step:</span>
+<span class="sd">            Current deposition counter.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Factors in ``[0, 1]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_depositions</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_heights</span><span class="p">)</span>
+        <span class="n">age</span> <span class="o">=</span> <span class="p">(</span><span class="n">step</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">hill_step</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_heights</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">age</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ramp_depositions</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_cv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check the CV output against ``sigma`` and ``periods``.</span>
+
+<span class="sd">        Every mismatch here is a *broadcast*, not an error: a CV of width one</span>
+<span class="sd">        against a two-component ``sigma`` broadcasts into a two-column hill</span>
+<span class="sd">        table, and the exponent then sums two terms instead of one.  The</span>
+<span class="sd">        Gaussian silently narrows and nothing in the run reports it.</span>
+
+<span class="sd">        Only tensor ranks and element counts are inspected, so this is a</span>
+<span class="sd">        compile-time guard rather than a data-dependent branch and</span>
+<span class="sd">        :meth:`gaussian_sum` still traces with ``fullgraph=True``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values:</span>
+<span class="sd">            CV values, expected shape ``[B, D]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            The CV dimension ``D``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If *values* is not rank 2, or if ``sigma`` or ``periods`` has an</span>
+<span class="sd">            element count that would broadcast against ``D`` rather than</span>
+<span class="sd">            match it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: cv must return &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;shape [B, D], got </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">. A CV returning [B] &quot;</span>
+                <span class="s2">&quot;for a scalar collective variable needs an explicit trailing &quot;</span>
+                <span class="s2">&quot;dimension — return values.unsqueeze(-1).&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">dim</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: cv returns &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2"> component(s) but sigma has </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;sigma must be a scalar (one width shared by every component) &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;or have exactly </span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2"> entries; any other count broadcasts &quot;</span>
+                <span class="s2">&quot;into the hill table and silently changes the Gaussian.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">periods</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">periods</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="n">dim</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: cv returns &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2"> component(s) but periods has &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">periods</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2">. periods is per-component — a 0 entry &quot;</span>
+                <span class="s2">&quot;marks that component non-periodic — so it must have exactly &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2"> entries rather than broadcast.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">dim</span>
+
+<div class="viewcode-block" id="WellTemperedMetaDynamicsBias.gaussian_sum">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.html#nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.gaussian_sum">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">gaussian_sum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">owner_key</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the accumulated bias at *values*, shape ``[B]``.</span>
+
+<span class="sd">        Contains no data-dependent Python branch, so it compiles with</span>
+<span class="sd">        ``fullgraph=True``: the live-hill mask comes from comparing an</span>
+<span class="sd">        ``arange`` against the count tensor rather than slicing by an int.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values:</span>
+<span class="sd">            CV values, shape ``[B, D]``.</span>
+<span class="sd">        owner_key:</span>
+<span class="sd">            History key per graph, shape ``[B]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Bias energy per graph, shape ``[B]``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If *values* does not agree with ``sigma`` and ``periods``; see</span>
+<span class="sd">            :meth:`_validate_cv`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_cv</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">dim</span><span class="p">:</span>
+            <span class="c1"># The hill table is still at its provisional width, which only</span>
+            <span class="c1"># happens before the first deposition resolves the CV dimension.</span>
+            <span class="c1"># An empty history contributes nothing whatever the width is.</span>
+            <span class="k">return</span> <span class="n">values</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="n">slots</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">live</span> <span class="o">=</span> <span class="n">slots</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">hill_count</span>
+
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">periodic_difference</span><span class="p">(</span>
+            <span class="n">values</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>  <span class="c1"># [B, 1, D]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>  <span class="c1"># [1, H, D]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">periods</span><span class="p">,</span>
+        <span class="p">)</span>  <span class="c1"># [B, H, D]</span>
+        <span class="n">exponent</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">((</span><span class="n">delta</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [B, H]</span>
+        <span class="n">gaussians</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">exponent</span><span class="p">)</span>
+
+        <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hill_scale</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">deposits</span><span class="p">)</span>  <span class="c1"># [H]</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hill_heights</span> <span class="o">*</span> <span class="n">scale</span>  <span class="c1"># [H]</span>
+
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">live</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># [1, H]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">!=</span> <span class="s2">&quot;shared&quot;</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_owner</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="n">owner_key</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">gaussians</span> <span class="o">*</span> <span class="n">weights</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="n">mask</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="WellTemperedMetaDynamicsBias.energy">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.html#nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.energy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the accumulated metadynamics bias, shape ``[B, 1]``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        current:</span>
+<span class="sd">            Batch with strained positions supplied by</span>
+<span class="sd">            :meth:`ConservativeBias.evaluate`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Shape ``[B, 1]`` in eV.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+        <span class="n">owner</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_owner_key</span><span class="p">(</span><span class="n">current</span><span class="p">,</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">gaussian_sum</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">owner</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Deposition</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_well_tempered_height</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bias_at_cv</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the damped hill height per walker.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        bias_at_cv:</span>
+<span class="sd">            Accumulated bias at the deposition point, shape ``[B]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Heights, shape ``[B]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_factor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">bias_at_cv</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">)</span>
+        <span class="n">damping</span> <span class="o">=</span> <span class="n">KB_EV</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias_factor</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">height</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">bias_at_cv</span> <span class="o">/</span> <span class="n">damping</span><span class="p">)</span>
+
+<div class="viewcode-block" id="WellTemperedMetaDynamicsBias.update">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.html#nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">BiasContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Deposit one hill per walker at its current CV value.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx:</span>
+<span class="sd">            The capture.  ``ctx.batch`` is the post-step frame; the bias&#39;s own</span>
+<span class="sd">            preceding contribution is on ``ctx.contribution``.</span>
+<span class="sd">        stage:</span>
+<span class="sd">            The stage being dispatched, always :attr:`stage`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the CV output disagrees with ``sigma`` or ``periods``.</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If the CV changes dimension part-way through a run, which would</span>
+<span class="sd">            silently invalidate every hill already deposited.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">frames</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>  <span class="c1"># [B, D]</span>
+            <span class="n">owner</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_owner_key</span><span class="p">(</span><span class="n">frames</span><span class="p">,</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">bias_at_cv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gaussian_sum</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">owner</span><span class="p">)</span>
+            <span class="n">heights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_well_tempered_height</span><span class="p">(</span><span class="n">bias_at_cv</span><span class="p">)</span>
+
+            <span class="n">count</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">dim</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">dim</span><span class="p">:</span>
+                <span class="c1"># The constructor sizes the hill table from sigma, which is</span>
+                <span class="c1"># only right when sigma is per-component; a scalar sigma says</span>
+                <span class="c1"># nothing about the CV width. The first deposition is where</span>
+                <span class="c1"># the true dimension becomes known.</span>
+                <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_count</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: cv &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;returned </span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2"> component(s) but the &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_count</span><span class="p">)</span><span class="si">}</span><span class="s2"> hill(s) already deposited &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;have </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">. A collective &quot;</span>
+                        <span class="s2">&quot;variable must keep its dimension for the whole run — &quot;</span>
+                        <span class="s2">&quot;the existing history is not comparable otherwise.&quot;</span>
+                    <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_allocate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+
+            <span class="n">slots</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_slots</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="p">[</span><span class="n">slots</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">hill_heights</span><span class="p">[</span><span class="n">slots</span><span class="p">]</span> <span class="o">=</span> <span class="n">heights</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_heights</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">hill_owner</span><span class="p">[</span><span class="n">slots</span><span class="p">]</span> <span class="o">=</span> <span class="n">owner</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">hill_step</span><span class="p">[</span><span class="n">slots</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">deposits</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">deposits</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">hills_written</span> <span class="o">+=</span> <span class="n">count</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">hill_count</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hills_written</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bump_state_version</span><span class="p">()</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Analysis</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="WellTemperedMetaDynamicsBias.free_energy">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.html#nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.free_energy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">free_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">owner_key</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the free-energy estimate at *values*.</span>
+
+<span class="sd">        ``F(s) = -(gamma / (gamma - 1)) V(s)`` for well-tempered, or</span>
+<span class="sd">        ``F(s) = -V(s)`` for standard metadynamics.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values:</span>
+<span class="sd">            CV values, shape ``[B, D]``.</span>
+<span class="sd">        owner_key:</span>
+<span class="sd">            History key per graph.  Defaults to the shared history.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Free energy in eV, shape ``[B]``, up to an additive constant.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If *values* does not match the deposited hills&#39; dimension, or</span>
+<span class="sd">            disagrees with ``sigma`` or ``periods``.</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            Under ``storage=&quot;fifo&quot;``, where discarded hills mean the</span>
+<span class="sd">            accumulated bias is no longer the integral of everything</span>
+<span class="sd">            deposited and the well-tempered relation does not hold.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span> <span class="o">==</span> <span class="s2">&quot;fifo&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: free_energy() is &quot;</span>
+                <span class="s2">&quot;not valid under storage=&#39;fifo&#39;. Discarding the oldest hills &quot;</span>
+                <span class="s2">&quot;means the accumulated bias is no longer the integral of &quot;</span>
+                <span class="s2">&quot;everything deposited, so the well-tempered relation between &quot;</span>
+                <span class="s2">&quot;bias and free energy does not hold. Use &#39;preallocated&#39; or &quot;</span>
+                <span class="s2">&quot;&#39;grow&#39; for a run you intend to reconstruct a profile from.&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># gaussian_sum answers a width mismatch with zeros, which is right for</span>
+        <span class="c1"># an empty history on the force path but reads as a flat profile here.</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_cv</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_count</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">dim</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;WellTemperedMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: free_energy() &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;was given </span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2">-component values but the deposited hills &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;have </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">. Evaluating the profile &quot;</span>
+                <span class="s2">&quot;on a grid of the wrong width would return zeros, which is &quot;</span>
+                <span class="s2">&quot;indistinguishable from a flat free energy.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">owner_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">owner_key</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],),</span>
+                <span class="o">-</span><span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">==</span> <span class="s2">&quot;shared&quot;</span> <span class="k">else</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">bias</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gaussian_sum</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">owner_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_factor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="o">-</span><span class="n">bias</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">bias</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias_factor</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias_factor</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="WellTemperedMetaDynamicsBias.config_fingerprint">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.html#nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.config_fingerprint">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">config_fingerprint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the settings the deposited hills are only valid under.</span>
+
+<span class="sd">        ``sigma`` and ``periods`` are held as buffers, so without this check</span>
+<span class="sd">        ``nn.Module.load_state_dict`` would replace the caller&#39;s values with</span>
+<span class="sd">        the checkpoint&#39;s rather than reject the mismatch.  ``bias_factor``</span>
+<span class="sd">        and ``temperature`` set the well-tempered damping the stored heights</span>
+<span class="sd">        were computed under, and the ratio ``free_energy`` applies to them.</span>
+<span class="sd">        ``storage`` and ``history`` decide retention and ownership.</span>
+
+<span class="sd">        ``max_hills`` is deliberately absent: ``grow`` legitimately reaches a</span>
+<span class="sd">        capacity the constructor never had, and :meth:`load_state_dict`</span>
+<span class="sd">        already resizes to match.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            The checked configuration.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;height&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">,</span>
+            <span class="s2">&quot;sigma&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
+            <span class="s2">&quot;bias_factor&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_factor</span><span class="p">,</span>
+            <span class="s2">&quot;storage&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">,</span>
+            <span class="s2">&quot;history&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">,</span>
+            <span class="s2">&quot;ramp_depositions&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_depositions</span><span class="p">,</span>
+            <span class="s2">&quot;periods&quot;</span><span class="p">:</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">periods</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">periods</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="WellTemperedMetaDynamicsBias.load_state_dict">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.html#nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.load_state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore state, resizing the hill buffers to match the checkpoint.</span>
+
+<span class="sd">        ``storage=&quot;grow&quot;`` means the saved capacity is whatever the run had</span>
+<span class="sd">        reached, which is almost never the constructor&#39;s initial chunk —</span>
+<span class="sd">        ``nn.Module.load_state_dict`` would reject the size mismatch.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state:</span>
+<span class="sd">            Mapping from :meth:`state_dict`.</span>
+<span class="sd">        *args, **kwargs:</span>
+<span class="sd">            Forwarded up the MRO.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Any</span>
+<span class="sd">            Whatever the next ``load_state_dict`` returns.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">centers</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;hill_centers&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">centers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">centers</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">hill_centers</span><span class="o">.</span><span class="n">shape</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_allocate</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">centers</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">centers</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a concise description of the bias.&quot;&quot;&quot;</span>
+        <span class="n">gamma</span> <span class="o">=</span> <span class="s2">&quot;None&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_factor</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">bias_factor</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(name=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;hills=</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hill_count</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;storage=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="si">!r}</span><span class="s2">, history=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;bias_factor=</span><span class="si">{</span><span class="n">gamma</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

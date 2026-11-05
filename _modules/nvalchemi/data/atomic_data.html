@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.data.atomic_data &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.data.atomic_data &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/atomic_data';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -434,11 +434,19 @@ document.write(`
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">periodictable</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">PlainSerializer</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseModel</span><span class="p">,</span>
+    <span class="n">ConfigDict</span><span class="p">,</span>
+    <span class="n">Field</span><span class="p">,</span>
+    <span class="n">PlainSerializer</span><span class="p">,</span>
+    <span class="n">PrivateAttr</span><span class="p">,</span>
+    <span class="n">model_validator</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi</span><span class="w"> </span><span class="kn">import</span> <span class="n">OptionalDependency</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi</span><span class="w"> </span><span class="kn">import</span> <span class="n">_typing</span> <span class="k">as</span> <span class="n">t</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataMixin</span>  <span class="c1"># type: ignore</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.level_storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_ATTRIBUTE_MAP</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Atoms</span>
@@ -462,6 +470,23 @@ document.write(`
     <span class="k">if</span> <span class="n">tensor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
     <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_warn_first</span><span class="p">(</span><span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">stacklevel</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Emit ``message`` as a ``UserWarning`` the first time ``key`` is seen.</span>
+
+<span class="sd">    ``key`` is recorded in ``seen`` so repeats stay silent. ``stacklevel`` is</span>
+<span class="sd">    relative to the caller (this frame is added on top).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+        <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="n">stacklevel</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+
+<span class="c1"># Process-global record of (field, src_dtype, tgt_dtype) casts already warned</span>
+<span class="c1"># about, so check_fp_dtype_consistency warns once per cast rather than per</span>
+<span class="c1"># construction. Module-level so it stays out of the AtomicData schema.</span>
+<span class="n">_FP_CAST_WARNED</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">AtomicNumberTable</span><span class="p">:</span>
@@ -492,6 +517,7 @@ document.write(`
 
 
 <span class="n">_DEFAULT_MASS_TABLE</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">_BUILTIN_FIELD_NAMES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">()</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="n">DEFAULT_ATTRIBUTE_MAP</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_default_mass_table</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
@@ -588,7 +614,15 @@ document.write(`
 <span class="sd">      populated from :mod:`periodictable` using ``atomic_numbers``.</span>
 <span class="sd">    - Floating-point fields are coerced to the dtype of ``positions``; passing a</span>
 <span class="sd">      ``float64`` label alongside ``float32`` positions triggers a cast and a</span>
-<span class="sd">      :class:`UserWarning`. Pass matching dtypes to silence it.</span>
+<span class="sd">      :class:`UserWarning` (once per field and dtype pair per process). Pass</span>
+<span class="sd">      matching dtypes to silence it, or name the field in</span>
+<span class="sd">      ``precision_preserving_keys`` to keep its dtype, e.g. so an extensive</span>
+<span class="sd">      total energy is not quantized by ``float32``. Set the class attribute on</span>
+<span class="sd">      :class:`AtomicData` itself when the data flows through</span>
+<span class="sd">      :class:`~nvalchemi.data.datapipes.Dataset` or</span>
+<span class="sd">      :func:`~nvalchemi.data.transforms.make_supercell`, which rebuild samples</span>
+<span class="sd">      as plain :class:`AtomicData`; a subclass override only covers objects</span>
+<span class="sd">      constructed through the subclass (including ``Batch.to_data_list``).</span>
 <span class="sd">    - ``validate_assignment=True`` means re-assigning a field re-runs validation;</span>
 <span class="sd">      use :meth:`add_node_property` and friends (not raw attribute assignment) to</span>
 <span class="sd">      register new custom keys so they are tracked in the correct property group.</span>
@@ -794,6 +828,10 @@ document.write(`
         <span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span>
         <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Additional unstructured information about the system.&quot;</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="c1"># Batch stores custom level definitions privately on an extracted</span>
+    <span class="c1"># AtomicData so an immediate unbatch/rebatch cycle retains its schema.</span>
+    <span class="c1"># PrivateAttr keeps this metadata out of field enumeration and dumps.</span>
+    <span class="n">_level_schema</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
     <span class="c1"># &quot;Node key&quot; means dim(0) == num_nodes; tensors may have any rank.</span>
     <span class="n">_default_node_keys</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
         <span class="p">{</span>
@@ -831,6 +869,9 @@ document.write(`
             <span class="s2">&quot;spin&quot;</span><span class="p">,</span>
         <span class="p">}</span>
     <span class="p">)</span>
+
+    <span class="c1"># Floating fields exempt from check_fp_dtype_consistency; see class Notes.</span>
+    <span class="n">precision_preserving_keys</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">()</span>
 
     <span class="c1"># Pydantic configuration</span>
     <span class="n">model_config</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">ConfigDict</span><span class="p">]</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span>
@@ -928,31 +969,28 @@ document.write(`
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">check_fp_dtype_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Ensures all floating point tensors are at the same precision</span>
-<span class="sd">        as the positions tensor.</span>
+<span class="sd">        Cast floating point tensors to the positions dtype. Fields in</span>
+<span class="sd">        ``precision_preserving_keys`` are exempt. Casting is unconditional, but</span>
+<span class="sd">        each distinct ``(field, src, tgt)`` cast warns only once per process.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span>
-        <span class="n">casted</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision_preserving_keys</span><span class="p">:</span>
+                <span class="k">continue</span>
             <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-                <span class="n">tensor_dtype</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span>
-                <span class="k">if</span> <span class="n">tensor_dtype</span><span class="o">.</span><span class="n">is_floating_point</span> <span class="ow">and</span> <span class="n">tensor_dtype</span> <span class="o">!=</span> <span class="n">dtype</span><span class="p">:</span>
-                    <span class="c1"># using __dict__ to avoid re-validation</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
-                    <span class="n">casted</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">casted</span><span class="p">:</span>
-            <span class="n">casted</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
-            <span class="c1"># Keep the warning attributed to the user&#39;s AtomicData(...) call</span>
-            <span class="c1"># instead of Pydantic&#39;s internal validation frames. This may need</span>
-            <span class="c1"># adjustment if Pydantic&#39;s construction stack changes.</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;AtomicData fields </span><span class="si">{</span><span class="n">casted</span><span class="si">}</span><span class="s2"> were cast from their original &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;dtypes to </span><span class="si">{</span><span class="n">dtype</span><span class="si">}</span><span class="s2"> to match positions. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Pass tensors with matching dtypes to silence this warning.&quot;</span><span class="p">,</span>
-                <span class="ne">UserWarning</span><span class="p">,</span>
-                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">dtype</span><span class="p">:</span>
+                <span class="c1"># stacklevel=3 keeps the warning on the user&#39;s AtomicData(...) call</span>
+                <span class="n">_warn_first</span><span class="p">(</span>
+                    <span class="n">_FP_CAST_WARNED</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">)),</span>
+                    <span class="sa">f</span><span class="s2">&quot;AtomicData field &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; was cast from </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2"> to &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dtype</span><span class="si">}</span><span class="s2"> to match positions; pass a matching dtype to silence &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;this (warned once per field/dtype).&quot;</span><span class="p">,</span>
+                    <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>  <span class="c1"># __dict__ skips re-validation</span>
         <span class="k">return</span> <span class="bp">self</span>
 
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
@@ -1114,6 +1152,48 @@ document.write(`
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add a system property to the graph.&quot;&quot;&quot;</span>
         <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__system_keys__</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">clone</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a deep copy, including an independent private level schema.&quot;&quot;&quot;</span>
+        <span class="n">cloned</span> <span class="o">=</span> <span class="n">DataMixin</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_level_schema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cloned</span><span class="o">.</span><span class="n">_level_schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_level_schema</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">cloned</span>  <span class="c1"># type: ignore[return-value]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">non_blocking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a device-moved copy with synchronized level metadata.</span>
+
+<span class="sd">        Floating custom-field dtype declarations follow an explicit dtype</span>
+<span class="sd">        conversion so the returned object can be batched again immediately.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the requested dtype cannot be represented by the level schema.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">moved</span> <span class="o">=</span> <span class="n">DataMixin</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">non_blocking</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_level_schema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_level_schema</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">group_name</span> <span class="ow">in</span> <span class="n">schema</span><span class="o">.</span><span class="n">attr_to_group</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_BUILTIN_FIELD_NAMES</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="n">original</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="n">converted</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">moved</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="nb">isinstance</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+                        <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">converted</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+                        <span class="ow">and</span> <span class="n">original</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">is_floating_point</span>
+                        <span class="ow">and</span> <span class="n">original</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">converted</span><span class="o">.</span><span class="n">dtype</span>
+                    <span class="p">):</span>
+                        <span class="n">schema</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">converted</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="n">moved</span><span class="o">.</span><span class="n">_level_schema</span> <span class="o">=</span> <span class="n">schema</span>
+        <span class="k">return</span> <span class="n">moved</span>  <span class="c1"># type: ignore[return-value]</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">chemical_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>

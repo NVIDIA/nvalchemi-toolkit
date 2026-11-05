@@ -1,0 +1,6 @@
+﻿nvalchemi.dynamics.mep.validate\_paths
+======================================
+
+.. currentmodule:: nvalchemi.dynamics.mep
+
+.. autofunction:: validate_paths

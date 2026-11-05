@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.data.datapipes.dataset &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.data.datapipes.dataset &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/datapipes/dataset';</script>
-    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -453,6 +453,7 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.atomic_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Reader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.level_storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">LevelSchema</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Compose</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
@@ -602,6 +603,10 @@ document.write(`
 <span class="sd">        Exception if loading failed, or None.</span>
 <span class="sd">    event : torch.cuda.Event | None</span>
 <span class="sd">        CUDA event for stream synchronization, or None.</span>
+<span class="sd">    field_levels : dict[str, str] | None</span>
+<span class="sd">        Field classifications captured for this read, or None on error.</span>
+<span class="sd">    level_schema : LevelSchema | None</span>
+<span class="sd">        Independent level schema captured for this read, or None.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">batch_splits</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
@@ -610,6 +615,8 @@ document.write(`
     <span class="n">metadata</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">event</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">field_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">level_schema</span><span class="p">:</span> <span class="n">LevelSchema</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="nd">@dataclass</span>
@@ -780,7 +787,9 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">target_device</span> <span class="o">=</span> <span class="n">target_device</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">skip_validation</span> <span class="o">=</span> <span class="n">skip_validation</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_field_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;field_levels&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reader_metadata_revision</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;_metadata_revision&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_field_levels</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;field_levels&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_level_schema</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;level_schema&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
         <span class="c1"># Prefetch state</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_futures</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Future</span><span class="p">[</span><span class="n">_PrefetchResult</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
@@ -853,12 +862,30 @@ document.write(`
             <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">indices</span>
         <span class="p">]</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_snapshot_level_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">LevelSchema</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Capture field classifications and an independent level schema.&quot;&quot;&quot;</span>
+        <span class="n">revision</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;_metadata_revision&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">revision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">revision</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reader_metadata_revision</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_field_levels</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;field_levels&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{})</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_level_schema</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="p">,</span> <span class="s2">&quot;level_schema&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reader_metadata_revision</span> <span class="o">=</span> <span class="n">revision</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field_levels</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_level_schema</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_to_atomic_samples</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">raw_samples</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]],</span>
+        <span class="n">level_schema</span><span class="p">:</span> <span class="n">LevelSchema</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">attach_level_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]],</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate raw samples and transfer them to the target device.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate raw samples and transfer them to the target device.</span>
+
+<span class="sd">        ``attach_level_schema=False`` is used only by fused batch reads, whose</span>
+<span class="sd">        result carries the explicit schema into ``Batch`` construction. Direct</span>
+<span class="sd">        sample reads retain independent per-sample schema attachments so they</span>
+<span class="sd">        can be implicitly rebatched by callers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span>
             <span class="p">(</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">data_dict</span><span class="p">),</span> <span class="n">metadata</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">data_dict</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">raw_samples</span>
@@ -877,11 +904,20 @@ document.write(`
                         <span class="bp">self</span><span class="o">.</span><span class="n">_sample_transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span>
                         <span class="k">for</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">samples</span>
                     <span class="p">]</span>
+                <span class="k">if</span> <span class="n">attach_level_schema</span> <span class="ow">and</span> <span class="n">level_schema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">data</span><span class="p">,</span> <span class="n">_metadata</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">:</span>
+                        <span class="n">data</span><span class="o">.</span><span class="n">_level_schema</span> <span class="o">=</span> <span class="n">level_schema</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
             <span class="n">event</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
             <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_finalize_on_device</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span> <span class="k">for</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">samples</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_finalize_on_device</span><span class="p">(</span>
+                    <span class="n">data</span><span class="p">,</span>
+                    <span class="n">metadata</span><span class="p">,</span>
+                    <span class="n">level_schema</span><span class="p">,</span>
+                    <span class="n">attach_level_schema</span><span class="o">=</span><span class="n">attach_level_schema</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">samples</span>
             <span class="p">]</span>
 
         <span class="k">return</span> <span class="n">samples</span><span class="p">,</span> <span class="n">event</span>
@@ -910,8 +946,9 @@ document.write(`
         <span class="n">result</span> <span class="o">=</span> <span class="n">_PrefetchResult</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">level_schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_snapshot_level_metadata</span><span class="p">()</span>
             <span class="n">samples</span><span class="p">,</span> <span class="n">event</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">([</span><span class="n">index</span><span class="p">]),</span> <span class="n">stream</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">([</span><span class="n">index</span><span class="p">]),</span> <span class="n">level_schema</span><span class="p">,</span> <span class="n">stream</span>
             <span class="p">)</span>
             <span class="n">result</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
             <span class="n">result</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
@@ -1009,6 +1046,9 @@ document.write(`
         <span class="n">result</span> <span class="o">=</span> <span class="n">_FusedBatchPrefetchResult</span><span class="p">(</span><span class="n">batch_splits</span><span class="o">=</span><span class="n">batch_splits</span><span class="p">,</span> <span class="n">raw</span><span class="o">=</span><span class="n">raw</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
+            <span class="n">field_levels</span><span class="p">,</span> <span class="n">level_schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_snapshot_level_metadata</span><span class="p">()</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">field_levels</span> <span class="o">=</span> <span class="n">field_levels</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">level_schema</span> <span class="o">=</span> <span class="n">level_schema</span>
             <span class="n">all_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">batch_indices</span> <span class="ow">in</span> <span class="n">batch_index_lists</span><span class="p">:</span>
                 <span class="n">all_indices</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">)</span>
@@ -1020,7 +1060,12 @@ document.write(`
                 <span class="n">result</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">raw_dicts</span>
                 <span class="n">result</span><span class="o">.</span><span class="n">event</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">samples</span><span class="p">,</span> <span class="n">event</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span><span class="n">raw_samples</span><span class="p">,</span> <span class="n">stream</span><span class="p">)</span>
+                <span class="n">samples</span><span class="p">,</span> <span class="n">event</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span>
+                    <span class="n">raw_samples</span><span class="p">,</span>
+                    <span class="n">level_schema</span><span class="p">,</span>
+                    <span class="n">stream</span><span class="p">,</span>
+                    <span class="n">attach_level_schema</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
                 <span class="n">result</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">[</span><span class="n">atomic_data</span> <span class="k">for</span> <span class="n">atomic_data</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">]</span>
                 <span class="n">result</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="p">[</span><span class="n">metadata</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">]</span>
                 <span class="n">result</span><span class="o">.</span><span class="n">event</span> <span class="o">=</span> <span class="n">event</span>
@@ -1088,7 +1133,8 @@ document.write(`
                     <span class="n">Batch</span><span class="o">.</span><span class="n">from_raw_dicts</span><span class="p">(</span>
                         <span class="n">batch_slice</span><span class="p">,</span>
                         <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">target_device</span><span class="p">,</span>
-                        <span class="n">field_levels</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_field_levels</span><span class="p">,</span>
+                        <span class="n">attr_map</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">level_schema</span><span class="p">,</span>
+                        <span class="n">field_levels</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">field_levels</span><span class="p">,</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -1096,7 +1142,8 @@ document.write(`
                     <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
                         <span class="n">batch_slice</span><span class="p">,</span>
                         <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                        <span class="n">field_levels</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_field_levels</span><span class="p">,</span>
+                        <span class="n">attr_map</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">level_schema</span><span class="p">,</span>
+                        <span class="n">field_levels</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">field_levels</span><span class="p">,</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
         <span class="k">return</span> <span class="n">batches</span>
@@ -1236,8 +1283,9 @@ document.write(`
             <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">metadata</span>
 
         <span class="c1"># Not prefetched, load synchronously through the reader batch path.</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">level_schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_snapshot_level_metadata</span><span class="p">()</span>
         <span class="n">raw_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">([</span><span class="n">index</span><span class="p">])</span>
-        <span class="n">samples</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span><span class="n">raw_samples</span><span class="p">)</span>
+        <span class="n">samples</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span><span class="n">raw_samples</span><span class="p">,</span> <span class="n">level_schema</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">samples</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
 <div class="viewcode-block" id="Dataset.read_many">
@@ -1257,8 +1305,9 @@ document.write(`
 <span class="sd">        list[tuple[AtomicData, dict[str, Any]]]</span>
 <span class="sd">            Ordered ``(AtomicData, metadata)`` pairs.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">level_schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_snapshot_level_metadata</span><span class="p">()</span>
         <span class="n">raw_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_raw_samples</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
-        <span class="n">samples</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span><span class="n">raw_samples</span><span class="p">)</span>
+        <span class="n">samples</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_atomic_samples</span><span class="p">(</span><span class="n">raw_samples</span><span class="p">,</span> <span class="n">level_schema</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">samples</span></div>
 
 
@@ -1294,7 +1343,12 @@ document.write(`
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_finalize_on_device</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">level_schema</span><span class="p">:</span> <span class="n">LevelSchema</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">attach_level_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Move ``data`` to ``target_device`` and apply the transform pipeline.</span>
 
@@ -1310,6 +1364,12 @@ document.write(`
 <span class="sd">            Freshly constructed sample on the reader&#39;s (CPU) device.</span>
 <span class="sd">        metadata : dict[str, Any]</span>
 <span class="sd">            Per-sample metadata dict.</span>
+<span class="sd">        level_schema : LevelSchema | None</span>
+<span class="sd">            Schema captured with the reader operation that produced ``data``.</span>
+<span class="sd">        attach_level_schema : bool, default=True</span>
+<span class="sd">            Attach an independent schema clone to the returned sample. Fused</span>
+<span class="sd">            batch conversion disables this because it supplies the schema</span>
+<span class="sd">            explicitly to :class:`~nvalchemi.data.batch.Batch`.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1320,6 +1380,8 @@ document.write(`
             <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">attach_level_schema</span> <span class="ow">and</span> <span class="n">level_schema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">_level_schema</span> <span class="o">=</span> <span class="n">level_schema</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -1500,6 +1562,98 @@ document.write(`
             <span class="sa">f</span><span class="s2">&quot;device=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">target_device</span><span class="si">}</span><span class="s2">, &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;num_workers=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="si">}</span><span class="s2">)&quot;</span>
         <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="dataset_device">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.datapipes.dataset_device.html#nvalchemi.data.dataset_device">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">dataset_device</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">:</span> <span class="n">BatchDatasetProtocol</span><span class="p">,</span> <span class="n">probe</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the concrete device *dataset* emits its batches on.</span>
+
+<span class="sd">    The device comes from a declaration when the dataset has one: a</span>
+<span class="sd">    ``target_device``, or the device of a resident ``in_memory_batch``.</span>
+<span class="sd">    Otherwise a batch is drawn and its device is read. A</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` declares no</span>
+<span class="sd">    device, and a store opened without a device declares an index-less</span>
+<span class="sd">    ``cuda`` that names whichever device is current, so the device of both is</span>
+<span class="sd">    measured from a batch.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dataset : BatchDatasetProtocol</span>
+<span class="sd">        Dataset to resolve the emission device of.</span>
+<span class="sd">    probe : Batch | None, optional</span>
+<span class="sd">        A batch already drawn from *dataset*. When the device has to be</span>
+<span class="sd">        measured, this batch is read instead of drawing a new one. Default</span>
+<span class="sd">        ``None``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.device</span>
+<span class="sd">        Device batches are emitted on.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.data.datapipes import InMemoryDataset, dataset_device</span>
+<span class="sd">    &gt;&gt;&gt; dataset_device(InMemoryDataset(in_memory_batch=batch))  # doctest: +SKIP</span>
+<span class="sd">    device(type=&#39;cpu&#39;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">target</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s2">&quot;target_device&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">resident</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s2">&quot;in_memory_batch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">declared</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">target</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">resident</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="n">resident</span><span class="o">.</span><span class="n">device</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">declared</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
+        <span class="n">declared</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span> <span class="ow">and</span> <span class="n">declared</span><span class="o">.</span><span class="n">index</span> <span class="ow">is</span> <span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="n">declared</span>
+    <span class="k">if</span> <span class="n">probe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">probe</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([[</span><span class="mi">0</span><span class="p">]])[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">probe</span><span class="o">.</span><span class="n">device</span></div>
+
+
+
+<div class="viewcode-block" id="same_device">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.datapipes.same_device.html#nvalchemi.data.same_device">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">same_device</span><span class="p">(</span><span class="n">left</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">right</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether tensors on two devices collate without a cross-device copy.</span>
+
+<span class="sd">    An index-less device matches any device of the same type. Two indexed</span>
+<span class="sd">    devices must name the same device. ``None`` on either side matches any</span>
+<span class="sd">    device.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    left : torch.device | None</span>
+<span class="sd">        One device, or ``None`` for no constraint.</span>
+<span class="sd">    right : torch.device | None</span>
+<span class="sd">        The other device, or ``None`` for no constraint.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        ``True`` when the two devices are compatible.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import torch</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.data.datapipes import same_device</span>
+<span class="sd">    &gt;&gt;&gt; same_device(torch.device(&quot;cuda&quot;), torch.device(&quot;cuda:1&quot;))</span>
+<span class="sd">    True</span>
+<span class="sd">    &gt;&gt;&gt; same_device(torch.device(&quot;cuda:0&quot;), torch.device(&quot;cuda:1&quot;))</span>
+<span class="sd">    False</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">left</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">right</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="n">left</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">right</span><span class="o">.</span><span class="n">type</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="n">left</span><span class="o">.</span><span class="n">index</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">right</span><span class="o">.</span><span class="n">index</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">left</span><span class="o">.</span><span class="n">index</span> <span class="o">==</span> <span class="n">right</span><span class="o">.</span><span class="n">index</span></div>
 
 </pre></div>
 

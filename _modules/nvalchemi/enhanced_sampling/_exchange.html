@@ -1,0 +1,1607 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.enhanced_sampling._exchange &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/enhanced_sampling/_exchange';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.en...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.enhanced_sampling._exchange</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Synchronous replica exchange over a batch of walkers.</span>
+
+<span class="sd">Exchange swaps **thermodynamic-state labels, not atomic coordinates**.  A</span>
+<span class="sd">walker keeps its execution slot, its history, and its integrator arrays; what</span>
+<span class="sd">changes is the temperature or bias window assigned to it.  That keeps the</span>
+<span class="sd">move local — no coordinate traffic, no reallocation — which is what makes it</span>
+<span class="sd">viable inside one batched GPU step.</span>
+
+<span class="sd">Every walker holds exactly one state and every state exactly one walker, so</span>
+<span class="sd">an exchange is a permutation of :attr:`Batch.thermodynamic_state_id`.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">KB_EV</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks.swap</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">PairSwapHook</span><span class="p">,</span>
+    <span class="n">apply_pair_swaps</span><span class="p">,</span>
+    <span class="n">even_odd_pairs</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;ReplicaExchange&quot;</span><span class="p">,</span> <span class="s2">&quot;ThermodynamicState&quot;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="ThermodynamicState">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ThermodynamicState.html#nvalchemi.enhanced_sampling.ThermodynamicState">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ThermodynamicState</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;One set of conditions a walker can be assigned to.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    state_id:</span>
+<span class="sd">        Index into the ladder.  Must be dense and start at zero across the</span>
+<span class="sd">        set of states, because pairing walks neighbouring indices.</span>
+<span class="sd">    temperature:</span>
+<span class="sd">        Temperature in Kelvin.  Equal across all states means the ladder</span>
+<span class="sd">        varies by bias window instead, which selects umbrella acceptance.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">state_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">temperature</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">gt</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ReplicaExchange">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReplicaExchange</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Synchronous replica exchange with an even/odd pair schedule.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    states:</span>
+<span class="sd">        The ladder.  ``state_id`` values must be exactly ``0..S-1``.</span>
+<span class="sd">    initial_state_ids:</span>
+<span class="sd">        Assignment of states to walkers, shape ``[B]``.  Must be a</span>
+<span class="sd">        permutation of ``0..S-1``: replica exchange presumes a bijection</span>
+<span class="sd">        between walkers and states, and a duplicate would let two walkers</span>
+<span class="sd">        claim the same rung.</span>
+<span class="sd">    mode:</span>
+<span class="sd">        ``&quot;synchronous&quot;`` only.  Asynchronous exchange is not implemented.</span>
+<span class="sd">    attempt_interval:</span>
+<span class="sd">        Dynamics steps per exchange segment.</span>
+<span class="sd">    random_seed:</span>
+<span class="sd">        Base seed for acceptance draws.  Randomness is derived per attempt as</span>
+<span class="sd">        ``random_seed + exchange_id`` rather than from a long-lived generator,</span>
+<span class="sd">        so a checkpoint needs two integers instead of an opaque RNG blob —</span>
+<span class="sd">        the same counter-based scheme ``NVTLangevin`` uses for its noise.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the mode is unsupported, ``attempt_interval`` is below 1, the</span>
+<span class="sd">        ladder is not dense, or the assignment is not a permutation.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Acceptance</span>
+<span class="sd">        Which rule applies is inferred from the ladder and validated, rather</span>
+<span class="sd">        than being a free parameter that can silently disagree with it.</span>
+
+<span class="sd">        *Temperature exchange* — temperatures differ:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \log a = \min\bigl(0,\ (\beta_i - \beta_j)(U_i - U_j)\bigr)</span>
+
+<span class="sd">        A cold replica holding anomalously high energy therefore moves up the</span>
+<span class="sd">        ladder with probability one, which is the point of the method.</span>
+
+<span class="sd">        *Umbrella exchange* — temperatures are equal and the states differ by</span>
+<span class="sd">        bias window:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \log a = \min\bigl(0,\ u_i(x_i) + u_j(x_j)</span>
+<span class="sd">                                 - u_i(x_j) - u_j(x_i)\bigr)</span>
+
+<span class="sd">        with :math:`u_k` the reduced bias potential of state *k*.  The two</span>
+<span class="sd">        cross terms need the bias re-evaluated under swapped labels, which</span>
+<span class="sd">        costs one extra bias evaluation per attempt.</span>
+
+<span class="sd">    Not supported</span>
+<span class="sd">        A ladder that varies temperature *and* bias window at once needs a</span>
+<span class="sd">        combined acceptance rule that is not implemented.  The temperature</span>
+<span class="sd">        rule alone omits the cross-state bias terms, so running it anyway</span>
+<span class="sd">        would break detailed balance with no symptom — it is therefore</span>
+<span class="sd">        **rejected**, twice over: a bias that declares</span>
+<span class="sd">        ``state_dependent_for_exchange`` is refused at construction, and the</span>
+<span class="sd">        runner additionally probes empirically at prime time by evaluating</span>
+<span class="sd">        every bias under a permuted assignment.  Vary one or the other.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">states</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ThermodynamicState</span><span class="p">],</span>
+        <span class="n">initial_state_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;synchronous&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;synchronous&quot;</span><span class="p">,</span>
+        <span class="n">attempt_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">random_seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1234</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">mode</span> <span class="o">!=</span> <span class="s2">&quot;synchronous&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: mode=</span><span class="si">{</span><span class="n">mode</span><span class="si">!r}</span><span class="s2"> is not supported. Only &quot;</span>
+                <span class="s2">&quot;&#39;synchronous&#39; is implemented; asynchronous exchange &quot;</span>
+                <span class="s2">&quot;(pair-local rendezvous, non-blocking workers) is future work.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: need at least 2 states to exchange, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">ladder</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">states</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">state_id</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">state_id</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">ladder</span><span class="p">]</span> <span class="o">!=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ladder</span><span class="p">))):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: state_id values must be exactly 0..</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ladder</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">state_id</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">states</span><span class="p">)</span><span class="si">}</span><span class="s2">. Pairing walks &quot;</span>
+                <span class="s2">&quot;neighbouring indices, so a sparse ladder has no defined &quot;</span>
+                <span class="s2">&quot;neighbours.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">attempt_interval</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: attempt_interval must be at least 1, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">attempt_interval</span><span class="si">}</span><span class="s2">. A non-positive interval has no meaning &quot;</span>
+                <span class="s2">&quot;as a segment length — it would be clamped to every-step &quot;</span>
+                <span class="s2">&quot;exchange while the checkpoint recorded the value you passed, &quot;</span>
+                <span class="s2">&quot;so the run and its metadata would disagree.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">states</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">ladder</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attempt_interval</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">attempt_interval</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">random_seed</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">random_seed</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_acceptance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_infer_acceptance</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initial_state_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">validate_assignment</span><span class="p">(</span>
+            <span class="n">initial_state_ids</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;initial_state_ids&quot;</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exchange_id</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attempts</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">accepted</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># Per neighbouring-state-pair tallies, for the acceptance-rate</span>
+        <span class="c1"># diagnostics a REMD run is tuned on.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pair_attempts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pair_accepted</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Configuration</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ReplicaExchange.validate_assignment">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.validate_assignment">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate_assignment</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">num_graphs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;assignment&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return *state_ids* as a validated ``[B]`` long tensor.</span>
+
+<span class="sd">        The bijection between walkers and states is the assumption every</span>
+<span class="sd">        other piece rests on: pairing looks up &quot;which walker holds state k&quot;,</span>
+<span class="sd">        and a duplicate or a wrong-length assignment makes that lookup</span>
+<span class="sd">        meaningless.  Without this the failures surface far from their cause</span>
+<span class="sd">        — a length mismatch as ``ValueError: Length mismatch: 4 vs 2`` from</span>
+<span class="sd">        inside the batch storage, a duplicate as ``KeyError: 3`` from the</span>
+<span class="sd">        pair lookup — neither of which names the ladder or the batch.</span>
+
+<span class="sd">        Used for both the constructor argument and whatever assignment the</span>
+<span class="sd">        batch actually carries, so the rule lives in one place.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state_ids : torch.Tensor</span>
+<span class="sd">            Candidate assignment, any shape reshapeable to ``[B]``.</span>
+<span class="sd">        num_graphs : int | None</span>
+<span class="sd">            Walker count to check the ladder against, when known.</span>
+<span class="sd">        source : str</span>
+<span class="sd">            Name of the thing being validated, used in the error.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            The assignment as a 1-D long tensor.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the walker count disagrees with the ladder, or the assignment</span>
+<span class="sd">            is not a permutation of ``0..S-1``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n_states</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_graphs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">num_graphs</span> <span class="o">!=</span> <span class="n">n_states</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: the ladder has </span><span class="si">{</span><span class="n">n_states</span><span class="si">}</span><span class="s2"> state(s) but the &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;batch has </span><span class="si">{</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2"> walker(s). Replica exchange presumes &quot;</span>
+                <span class="s2">&quot;one walker per state — pairing looks up which walker holds &quot;</span>
+                <span class="s2">&quot;each rung, which has no answer when the counts differ. Build &quot;</span>
+                <span class="s2">&quot;the batch with one graph per ThermodynamicState.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">state_ids</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ids</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="n">n_states</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: </span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="s2"> has </span><span class="si">{</span><span class="n">ids</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> entr(ies) but the &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;ladder has </span><span class="si">{</span><span class="n">n_states</span><span class="si">}</span><span class="s2"> state(s); they must agree.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">ids</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span> <span class="o">!=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_states</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: </span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="s2"> must be a permutation of &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;0..</span><span class="si">{</span><span class="n">n_states</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">ids</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">. Replica exchange &quot;</span>
+                <span class="s2">&quot;presumes one walker per state; a duplicate would let two &quot;</span>
+                <span class="s2">&quot;walkers claim the same rung of the ladder, and leave another &quot;</span>
+                <span class="s2">&quot;rung held by none.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ids</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_infer_acceptance</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">,</span> <span class="s2">&quot;umbrella&quot;</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return which acceptance rule this ladder implies.</span>
+
+<span class="sd">        A :class:`ThermodynamicState` carries only a temperature, so the</span>
+<span class="sd">        rule is read from the ladder: varying temperatures mean temperature</span>
+<span class="sd">        exchange, equal ones mean the states can only differ by which bias</span>
+<span class="sd">        window they select.</span>
+
+<span class="sd">        Inferring rather than accepting a parameter is deliberate — a</span>
+<span class="sd">        mismatch between a declared rule and the ladder it runs on would be</span>
+<span class="sd">        silent, and wrong acceptance breaks detailed balance without any</span>
+<span class="sd">        symptom a run would show.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Literal[&quot;temperature&quot;, &quot;umbrella&quot;]</span>
+<span class="sd">            The applicable rule.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">temperatures</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">temperature</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">]</span>
+        <span class="n">varies_temperature</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">temperatures</span><span class="p">)</span> <span class="o">-</span> <span class="nb">min</span><span class="p">(</span><span class="n">temperatures</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">1e-12</span>
+        <span class="k">return</span> <span class="s2">&quot;temperature&quot;</span> <span class="k">if</span> <span class="n">varies_temperature</span> <span class="k">else</span> <span class="s2">&quot;umbrella&quot;</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acceptance</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the inferred acceptance rule name.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acceptance</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">temperatures</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the ladder temperatures in Kelvin, shape ``[S]``.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">s</span><span class="o">.</span><span class="n">temperature</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">])</span>
+
+<div class="viewcode-block" id="ReplicaExchange.validate_for">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.validate_for">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate_for</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">biases</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject bias/ladder combinations whose acceptance is undefined.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        biases:</span>
+<span class="sd">            The runner&#39;s bias mapping.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If umbrella exchange is configured with no bias to exchange over,</span>
+<span class="sd">            if any bias cannot supply the energy the acceptance rule needs, or</span>
+<span class="sd">            if a state-dependent bias is combined with a temperature ladder.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acceptance</span> <span class="o">==</span> <span class="s2">&quot;umbrella&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">biases</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;ReplicaExchange: every state has the same temperature, so the &quot;</span>
+                <span class="s2">&quot;ladder can only differ by bias window — but no biases were &quot;</span>
+                <span class="s2">&quot;registered. Either vary the temperatures for temperature &quot;</span>
+                <span class="s2">&quot;exchange, or register the bias whose windows the states select.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">bias</span> <span class="ow">in</span> <span class="n">biases</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">energy_less</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;supplies_exchange_energy&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">energy_less</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: bias </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> declares that it supplies &quot;</span>
+                    <span class="s2">&quot;no exchange energy (a force-only bias such as adaptive &quot;</span>
+                    <span class="s2">&quot;biasing force). The acceptance rule needs a cross-state &quot;</span>
+                    <span class="s2">&quot;bias energy, so such a bias cannot participate; run it &quot;</span>
+                    <span class="s2">&quot;without replica exchange.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acceptance</span> <span class="o">==</span> <span class="s2">&quot;temperature&quot;</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;state_dependent_for_exchange&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: the ladder varies temperature, which &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;selects temperature acceptance, but bias </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> has &quot;</span>
+                    <span class="s2">&quot;per-state parameters. The combined temperature-plus-window &quot;</span>
+                    <span class="s2">&quot;acceptance rule is not implemented, and the temperature &quot;</span>
+                    <span class="s2">&quot;rule alone omits the cross-state bias terms — so detailed &quot;</span>
+                    <span class="s2">&quot;balance would be wrong with nothing to show for it. Use a &quot;</span>
+                    <span class="s2">&quot;single-window bias with a temperature ladder, or equal &quot;</span>
+                    <span class="s2">&quot;temperatures with a multi-window bias.&quot;</span>
+                <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Scheduling</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ReplicaExchange.pair_schedule">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.pair_schedule">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pair_schedule</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">segment</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the neighbouring state pairs attempted in *segment*.</span>
+
+<span class="sd">        Alternating even/odd offsets means every rung of the ladder is</span>
+<span class="sd">        exchangeable with both neighbours over two segments, while no state</span>
+<span class="sd">        appears in two pairs of the same segment — which is what lets all</span>
+<span class="sd">        pairs be decided simultaneously.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        segment:</span>
+<span class="sd">            Exchange segment index.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[tuple[int, int]]</span>
+<span class="sd">            Neighbouring ``(state_id, state_id + 1)`` pairs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">even_odd_pairs</span><span class="p">(</span><span class="n">segment</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_uniforms</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Draw acceptance uniforms for one attempt, reproducibly.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        count:</span>
+<span class="sd">            Number of draws.</span>
+<span class="sd">        device:</span>
+<span class="sd">            Device for the result.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Shape ``[count]`` in ``[0, 1)``.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Drawn on the CPU from a generator seeded with</span>
+<span class="sd">        ``random_seed + exchange_id``, then moved.  Seeding per attempt makes</span>
+<span class="sd">        the sequence a pure function of two checkpointed integers, and drawing</span>
+<span class="sd">        on the CPU keeps it independent of the device the run happens to use —</span>
+<span class="sd">        so a restored run reproduces the same accept/reject decisions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">generator</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">()</span>
+        <span class="n">generator</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_seed</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange_id</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Acceptance</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ReplicaExchange.decide">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.decide">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">decide</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">segment</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">state_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">energies</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">bias_current</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">bias_swapped</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Decide this segment&#39;s swaps and return the new assignment.</span>
+
+<span class="sd">        Pure with respect to the batch: it takes energies and returns a</span>
+<span class="sd">        permutation, so the caller owns every side effect (rebinding the</span>
+<span class="sd">        integrator, rescaling velocities, re-priming forces).  That keeps the</span>
+<span class="sd">        acceptance rule testable against hand-computed numbers.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        segment:</span>
+<span class="sd">            Exchange segment index, which selects the even/odd pairing.</span>
+<span class="sd">        state_ids:</span>
+<span class="sd">            Current assignment, shape ``[B]``.</span>
+<span class="sd">        energies:</span>
+<span class="sd">            Per-walker potential energy ``U`` in eV, shape ``[B]``.  Used by</span>
+<span class="sd">            temperature acceptance.</span>
+<span class="sd">        bias_current:</span>
+<span class="sd">            Reduced bias potential per walker under its current state, shape</span>
+<span class="sd">            ``[B]``.  Required for umbrella acceptance.</span>
+<span class="sd">        bias_swapped:</span>
+<span class="sd">            Reduced bias potential per walker under its proposed state, shape</span>
+<span class="sd">            ``[B]``.  Required for umbrella acceptance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[torch.Tensor, list[tuple[int, int]], torch.Tensor]</span>
+<span class="sd">            The new state assignment ``[B]``, the pairs attempted, and the</span>
+<span class="sd">            boolean accept mask over those pairs.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If *state_ids* is not a permutation of the ladder, or if umbrella</span>
+<span class="sd">            acceptance is in force but the bias energies were not supplied.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Validate before touching any counter. Pairing looks up &quot;which walker</span>
+        <span class="c1"># holds state k&quot;, which a duplicate or short assignment answers with a</span>
+        <span class="c1"># bare KeyError — and by then attempts/pair_attempts have already been</span>
+        <span class="c1"># incremented, leaving the tallies corrupted by a call that failed.</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">validate_assignment</span><span class="p">(</span><span class="n">state_ids</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;state_ids&quot;</span><span class="p">)</span>
+        <span class="n">pairs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pair_schedule</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pairs</span><span class="p">:</span>
+            <span class="n">empty</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">ids</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">ids</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">empty</span>
+
+        <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pair_rows</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">pairs</span><span class="p">)</span>
+        <span class="n">accepted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_decide_rows</span><span class="p">(</span>
+            <span class="n">ids</span><span class="p">,</span>
+            <span class="n">rows_i</span><span class="p">,</span>
+            <span class="n">rows_j</span><span class="p">,</span>
+            <span class="n">energies</span><span class="o">=</span><span class="n">energies</span><span class="p">,</span>
+            <span class="n">bias_current</span><span class="o">=</span><span class="n">bias_current</span><span class="p">,</span>
+            <span class="n">bias_swapped</span><span class="o">=</span><span class="n">bias_swapped</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Nothing is applied here, so the decision is already final.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tally</span><span class="p">(</span><span class="n">pairs</span><span class="p">,</span> <span class="n">accepted</span><span class="p">)</span>
+        <span class="n">new_ids</span> <span class="o">=</span> <span class="n">apply_pair_swaps</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span><span class="p">,</span> <span class="n">accepted</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">new_ids</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">accepted</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pair_rows</span><span class="p">(</span>
+        <span class="n">state_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">pairs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the graph rows holding each pair&#39;s two states.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state_ids:</span>
+<span class="sd">            Assignment, shape ``[B]``.</span>
+<span class="sd">        pairs:</span>
+<span class="sd">            Neighbouring ``(state_id, state_id)`` pairs.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[torch.Tensor, torch.Tensor]</span>
+<span class="sd">            Row indices, shape ``[P]`` each.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">row_of_state</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="p">):</span> <span class="n">row</span> <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">state</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">state_ids</span><span class="o">.</span><span class="n">tolist</span><span class="p">())}</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">row_of_state</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">],</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">state_ids</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">row_of_state</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">],</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">state_ids</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_decide_rows</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">slots</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">rows_i</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">rows_j</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">energies</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">bias_current</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">bias_swapped</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply the acceptance rule to one round of proposed pairs.</span>
+
+<span class="sd">        The single implementation of the rule.  Both callers reach it — the</span>
+<span class="sd">        :class:`~nvalchemi.dynamics.hooks.PairSwapHook` that runs a live</span>
+<span class="sd">        ladder, and :meth:`decide`, which exposes the same decision without a</span>
+<span class="sd">        batch so the formula can be checked against hand-computed numbers.</span>
+<span class="sd">        Two implementations would drift, and a drifted acceptance rule breaks</span>
+<span class="sd">        detailed balance with nothing to show for it.</span>
+
+<span class="sd">        Counts nothing and leaves the draw counter where it is: the caller</span>
+<span class="sd">        calls :meth:`_tally` once the decision is final.  For the hook that</span>
+<span class="sd">        is after the swap commits, so a swap that fails to apply and is</span>
+<span class="sd">        retried is decided again from the same draw and counted once.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        slots:</span>
+<span class="sd">            Current assignment, shape ``[B]``.</span>
+<span class="sd">        rows_i, rows_j:</span>
+<span class="sd">            Graph rows holding each proposed pair&#39;s two slots, shape ``[P]``.</span>
+<span class="sd">        energies:</span>
+<span class="sd">            Per-walker potential energy ``U``.  Temperature acceptance only.</span>
+<span class="sd">        bias_current, bias_swapped:</span>
+<span class="sd">            Reduced bias potential under the current and proposed assignment.</span>
+<span class="sd">            Umbrella acceptance only.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            One boolean per pair.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the inputs the rule in force needs were not supplied.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acceptance</span> <span class="o">==</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">energies</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;ReplicaExchange: temperature acceptance needs the &quot;</span>
+                    <span class="s2">&quot;per-walker potential energy, but none was supplied.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">energies</span> <span class="o">=</span> <span class="n">energies</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">energies</span><span class="o">.</span><span class="n">isfinite</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: temperature acceptance read a &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;non-finite potential energy </span><span class="si">{</span><span class="n">energies</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">. The &quot;</span>
+                    <span class="s2">&quot;exponent becomes nan, which compares false, so every &quot;</span>
+                    <span class="s2">&quot;swap would be rejected and the ladder would look merely &quot;</span>
+                    <span class="s2">&quot;badly tuned.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">log_alpha</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_acceptance_temperature_rows</span><span class="p">(</span>
+                <span class="n">slots</span><span class="p">,</span> <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span><span class="p">,</span> <span class="n">energies</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">bias_current</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">bias_swapped</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;ReplicaExchange: umbrella acceptance needs the bias &quot;</span>
+                    <span class="s2">&quot;energy under both the current and the proposed state &quot;</span>
+                    <span class="s2">&quot;assignment, but one was not supplied.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">log_alpha</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_acceptance_umbrella_rows</span><span class="p">(</span>
+                <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span><span class="p">,</span> <span class="n">bias_current</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">bias_swapped</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="n">uniforms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uniforms</span><span class="p">(</span><span class="n">rows_i</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="n">log_alpha</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">log_acceptance_is_accepted</span><span class="p">(</span><span class="n">log_alpha</span><span class="p">,</span> <span class="n">uniforms</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_tally</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pairs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span> <span class="n">accepted</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Record one round of attempts, and advance the acceptance RNG.</span>
+
+<span class="sd">        Called once per round, when its outcome is final — directly by</span>
+<span class="sd">        :meth:`decide`, and as the swap hook&#39;s ``record_fn`` otherwise.</span>
+
+<span class="sd">        All or nothing: a ``record_fn`` that raised is called again, so a</span>
+<span class="sd">        partial tally would be counted twice.  Everything that can fail runs</span>
+<span class="sd">        before the first counter moves.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        pairs:</span>
+<span class="sd">            The pairs that were decided.</span>
+<span class="sd">        accepted:</span>
+<span class="sd">            One boolean per pair.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rounds</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">pairs</span><span class="p">,</span> <span class="n">accepted</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+        <span class="n">pair_attempts</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pair_attempts</span><span class="p">)</span>
+        <span class="n">pair_accepted</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pair_accepted</span><span class="p">)</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">state_i</span><span class="p">,</span> <span class="n">_state_j</span><span class="p">),</span> <span class="n">take</span> <span class="ow">in</span> <span class="n">rounds</span><span class="p">:</span>
+            <span class="n">pair_attempts</span><span class="p">[</span><span class="n">state_i</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">take</span><span class="p">:</span>
+                <span class="n">pair_accepted</span><span class="p">[</span><span class="n">state_i</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attempts</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">rounds</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">accepted</span> <span class="o">+=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="n">take</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">take</span> <span class="ow">in</span> <span class="n">rounds</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pair_attempts</span> <span class="o">=</span> <span class="n">pair_attempts</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pair_accepted</span> <span class="o">=</span> <span class="n">pair_accepted</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exchange_id</span> <span class="o">+=</span> <span class="mi">1</span>
+
+<div class="viewcode-block" id="ReplicaExchange.proposed_assignment">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.proposed_assignment">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">proposed_assignment</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">segment</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">state_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the assignment that would result if every pair swapped.</span>
+
+<span class="sd">        Umbrella acceptance needs the bias evaluated under the proposed</span>
+<span class="sd">        labels *before* the decision is made, so the caller needs the</span>
+<span class="sd">        proposal separately from the outcome.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        segment:</span>
+<span class="sd">            Exchange segment index.</span>
+<span class="sd">        state_ids:</span>
+<span class="sd">            Current assignment, shape ``[B]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            The all-swaps-accepted assignment, shape ``[B]``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If *state_ids* is not a permutation of the ladder.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">validate_assignment</span><span class="p">(</span><span class="n">state_ids</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;state_ids&quot;</span><span class="p">)</span>
+        <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pair_rows</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pair_schedule</span><span class="p">(</span><span class="n">segment</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">apply_pair_swaps</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># The PairSwapHook surface</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ReplicaExchange.swap_hook">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.swap_hook">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">swap_hook</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">bias_energy_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">on_swap</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">slot_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;thermodynamic_state_id&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PairSwapHook</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the generic swap hook that runs this ladder.</span>
+
+<span class="sd">        Everything mechanical — the pair schedule, the permutation, the</span>
+<span class="sd">        cadence, the parameter rebinding — belongs to</span>
+<span class="sd">        :class:`~nvalchemi.dynamics.hooks.PairSwapHook`.  This supplies the</span>
+<span class="sd">        two pieces that are enhanced-sampling physics: the Sugita-Okamoto</span>
+<span class="sd">        acceptance rule and the temperature table it rebinds from.  The</span>
+<span class="sd">        tallies and the draw counter advance through the hook&#39;s</span>
+<span class="sd">        ``record_fn``, so only a segment that actually commits counts.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        bias_energy_fn:</span>
+<span class="sd">            ``(batch, state_ids) -&gt; Tensor[B]`` giving the reduced bias</span>
+<span class="sd">            potential under an assignment.  Required for umbrella acceptance,</span>
+<span class="sd">            which evaluates the bias under both the current and the proposed</span>
+<span class="sd">            labels; unused by temperature acceptance.</span>
+<span class="sd">        on_swap:</span>
+<span class="sd">            Called with the batch after an accepted swap.  Forces computed</span>
+<span class="sd">            under the previous labels are what this is for.</span>
+<span class="sd">        slot_field:</span>
+<span class="sd">            Per-graph batch field holding the assignment.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        PairSwapHook</span>
+<span class="sd">            Configured for this ladder&#39;s interval and rung count.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">PairSwapHook</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_make_accept_fn</span><span class="p">(</span><span class="n">bias_energy_fn</span><span class="p">,</span> <span class="n">slot_field</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">per_system_params</span><span class="p">,</span>
+            <span class="n">slot_field</span><span class="o">=</span><span class="n">slot_field</span><span class="p">,</span>
+            <span class="n">n_slots</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">),</span>
+            <span class="n">frequency</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">attempt_interval</span><span class="p">,</span>
+            <span class="n">on_swap</span><span class="o">=</span><span class="n">on_swap</span><span class="p">,</span>
+            <span class="n">record_fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_tally</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ReplicaExchange.per_system_params">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.per_system_params">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">per_system_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the integrator parameters implied by an assignment.</span>
+
+<span class="sd">        The ``params_fn`` half of the swap: a state id is an index into the</span>
+<span class="sd">        ladder, and what the integrator needs is the temperature it points at.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state_ids:</span>
+<span class="sd">            Assignment, shape ``[B]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, torch.Tensor]</span>
+<span class="sd">            ``{&quot;temperature&quot;: T}`` in Kelvin per graph, shape ``[B]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperatures</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">state_ids</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="n">table</span><span class="p">[</span><span class="n">state_ids</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)]}</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_accept_fn</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">bias_energy_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">slot_field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the ``accept_fn`` a :class:`PairSwapHook` calls.</span>
+
+<span class="sd">        The rule is read off the pairs rather than off a segment index, which</span>
+<span class="sd">        is what lets it match the generic ``accept_fn(batch, i, j)``</span>
+<span class="sd">        signature: the proposal is &quot;swap the slots these rows hold&quot;, and both</span>
+<span class="sd">        acceptance formulas need only that.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        bias_energy_fn:</span>
+<span class="sd">            Reduced bias potential under a given assignment, or ``None``.</span>
+<span class="sd">        slot_field:</span>
+<span class="sd">            Per-graph batch field holding the assignment.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Callable</span>
+<span class="sd">            ``(batch, rows_i, rows_j) -&gt; Bool[Tensor, &quot;P&quot;]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">accept</span><span class="p">(</span>
+            <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">rows_i</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">rows_j</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+            <span class="n">slots</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">slot_field</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acceptance</span> <span class="o">==</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_decide_rows</span><span class="p">(</span>
+                    <span class="n">slots</span><span class="p">,</span> <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span><span class="p">,</span> <span class="n">energies</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_energies</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+                <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">bias_energy_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;ReplicaExchange: umbrella acceptance needs the bias &quot;</span>
+                    <span class="s2">&quot;energy under both the current and the proposed state &quot;</span>
+                    <span class="s2">&quot;assignment, but no bias_energy_fn was supplied.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">proposed</span> <span class="o">=</span> <span class="n">apply_pair_swaps</span><span class="p">(</span><span class="n">slots</span><span class="p">,</span> <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_decide_rows</span><span class="p">(</span>
+                <span class="n">slots</span><span class="p">,</span>
+                <span class="n">rows_i</span><span class="p">,</span>
+                <span class="n">rows_j</span><span class="p">,</span>
+                <span class="n">bias_current</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_reduced_bias_energy</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">slots</span><span class="p">,</span> <span class="n">bias_energy_fn</span><span class="p">),</span>
+                <span class="n">bias_swapped</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_reduced_bias_energy</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">proposed</span><span class="p">,</span> <span class="n">bias_energy_fn</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">accept</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_batch_energies</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the per-walker potential energy the rule needs.</span>
+
+<span class="sd">        Raises rather than substituting zeros, matching :meth:`decide`.  Zero</span>
+<span class="sd">        is not a neutral stand-in here: temperature acceptance is</span>
+<span class="sd">        ``(beta_i - beta_j)(U_i - U_j)``, so equal energies make every</span>
+<span class="sd">        exponent zero and **every swap accepted** — a random relabelling with</span>
+<span class="sd">        no energetic criterion, and an acceptance rate of 1.00 in the</span>
+<span class="sd">        diagnostics a ladder is tuned on, which reads as rungs that are too</span>
+<span class="sd">        close together rather than as a missing field.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Potential energy per walker, shape ``[B]``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the batch carries no ``energy``.  Finiteness is checked in</span>
+<span class="sd">            :meth:`_decide_rows`, where both entry points meet.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">energies</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">energies</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;ReplicaExchange: temperature acceptance needs the per-walker &quot;</span>
+                <span class="s2">&quot;potential energy, but the batch has no &#39;energy&#39; field. &quot;</span>
+                <span class="s2">&quot;Construct it with energy=torch.zeros(1, 1) so the model can &quot;</span>
+                <span class="s2">&quot;write into it — a bias-free ladder needs the buffer just as &quot;</span>
+                <span class="s2">&quot;much as a biased one, because the acceptance rule reads it.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">energies</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reduced_bias_energy</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">state_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">bias_energy_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``beta * E_bias`` per walker under *state_ids*.</span>
+
+<span class="sd">        The reduction is the ladder&#39;s, not the bias&#39;s: ``beta`` comes from the</span>
+<span class="sd">        temperature a state id points at, and the bias knows nothing about</span>
+<span class="sd">        temperatures.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        state_ids:</span>
+<span class="sd">            Assignment to evaluate under, shape ``[B]``.</span>
+<span class="sd">        bias_energy_fn:</span>
+<span class="sd">            Total bias energy per walker under a given assignment.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            ``beta * E_bias`` per walker, shape ``[B]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="n">bias_energy_fn</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">state_ids</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">temperatures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperatures</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">total</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">total</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">KB_EV</span> <span class="o">*</span> <span class="n">temperatures</span><span class="p">[</span><span class="n">state_ids</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)])</span>
+        <span class="k">return</span> <span class="n">beta</span> <span class="o">*</span> <span class="n">total</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_log_acceptance_temperature_rows</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">slots</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">rows_i</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">rows_j</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">energies</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``log a`` per pair for temperature exchange, by row.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        slots:</span>
+<span class="sd">            Current assignment, shape ``[B]``.</span>
+<span class="sd">        rows_i, rows_j:</span>
+<span class="sd">            Graph rows holding each pair&#39;s two slots, shape ``[P]``.</span>
+<span class="sd">        energies:</span>
+<span class="sd">            Per-walker potential energy ``U``, shape ``[B]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            ``log a`` per pair, capped at zero.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">KB_EV</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperatures</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">energies</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">energies</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="p">(</span><span class="n">beta</span><span class="p">[</span><span class="n">slots</span><span class="p">[</span><span class="n">rows_i</span><span class="p">]]</span> <span class="o">-</span> <span class="n">beta</span><span class="p">[</span><span class="n">slots</span><span class="p">[</span><span class="n">rows_j</span><span class="p">]])</span> <span class="o">*</span> <span class="p">(</span>
+            <span class="n">energies</span><span class="p">[</span><span class="n">rows_i</span><span class="p">]</span> <span class="o">-</span> <span class="n">energies</span><span class="p">[</span><span class="n">rows_j</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_log_acceptance_umbrella_rows</span><span class="p">(</span>
+        <span class="n">rows_i</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">rows_j</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">bias_current</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">bias_swapped</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``log a`` per pair for umbrella exchange, by row.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rows_i, rows_j:</span>
+<span class="sd">            Graph rows holding each pair&#39;s two slots, shape ``[P]``.</span>
+<span class="sd">        bias_current:</span>
+<span class="sd">            Reduced bias potential under the current assignment, shape ``[B]``.</span>
+<span class="sd">        bias_swapped:</span>
+<span class="sd">            Reduced bias potential under the proposed one, shape ``[B]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            ``log a`` per pair, capped at zero.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">before</span> <span class="o">=</span> <span class="n">bias_current</span><span class="p">[</span><span class="n">rows_i</span><span class="p">]</span> <span class="o">+</span> <span class="n">bias_current</span><span class="p">[</span><span class="n">rows_j</span><span class="p">]</span>
+        <span class="n">after</span> <span class="o">=</span> <span class="n">bias_swapped</span><span class="p">[</span><span class="n">rows_i</span><span class="p">]</span> <span class="o">+</span> <span class="n">bias_swapped</span><span class="p">[</span><span class="n">rows_j</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">before</span> <span class="o">-</span> <span class="n">after</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># State</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="ReplicaExchange.config_fingerprint">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.config_fingerprint">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">config_fingerprint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the configuration a restored run must match.</span>
+
+<span class="sd">        Exchange semantics live in the ladder, not in the counters: the</span>
+<span class="sd">        temperatures set the acceptance exponent, the rule follows from them,</span>
+<span class="sd">        and the interval sets the segment cadence.  Restoring a run into a</span>
+<span class="sd">        different ladder would keep the counters and the walker assignment</span>
+<span class="sd">        while silently changing what a swap *means* — the walkers would carry</span>
+<span class="sd">        on labelled 0..S-1 against temperatures they were never sampled at.</span>
+
+<span class="sd">        ``initial_state_ids`` is deliberately excluded.  It seeds the</span>
+<span class="sd">        assignment only when the batch does not already carry one, and a</span>
+<span class="sd">        restored batch always does, so it has no effect after step zero and</span>
+<span class="sd">        would be a false mismatch.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            JSON-representable configuration.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span>
+            <span class="s2">&quot;acceptance&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acceptance</span><span class="p">,</span>
+            <span class="s2">&quot;attempt_interval&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attempt_interval</span><span class="p">),</span>
+            <span class="s2">&quot;temperatures&quot;</span><span class="p">:</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">temperature</span><span class="p">)</span> <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">],</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="ReplicaExchange.describe_config_mismatch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.describe_config_mismatch">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe_config_mismatch</span><span class="p">(</span>
+        <span class="n">saved</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">actual</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return human-readable differences between two fingerprints.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        saved:</span>
+<span class="sd">            The checkpoint&#39;s fingerprint, or ``None`` when it had no exchange.</span>
+<span class="sd">        actual:</span>
+<span class="sd">            The live runner&#39;s fingerprint, or ``None`` when it has none.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[str]</span>
+<span class="sd">            One line per difference; empty when they agree.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">saved</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">actual</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">saved</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span>
+                <span class="s2">&quot;  exchange: the checkpoint was written without replica &quot;</span>
+                <span class="s2">&quot;exchange, but this runner has one configured&quot;</span>
+            <span class="p">]</span>
+        <span class="k">if</span> <span class="n">actual</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span>
+                <span class="s2">&quot;  exchange: the checkpoint was written with replica exchange &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">saved</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;acceptance&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">saved</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;temperatures&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">[]))</span><span class="si">}</span><span class="s2"> states), but this &quot;</span>
+                <span class="s2">&quot;runner has replica_exchange=None&quot;</span>
+            <span class="p">]</span>
+
+        <span class="n">problems</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="sa">f</span><span class="s2">&quot;  exchange </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: checkpoint has </span><span class="si">{</span><span class="n">saved</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;this runner has </span><span class="si">{</span><span class="n">actual</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;mode&quot;</span><span class="p">,</span> <span class="s2">&quot;acceptance&quot;</span><span class="p">,</span> <span class="s2">&quot;attempt_interval&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">saved</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">!=</span> <span class="n">actual</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="n">saved_temps</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">saved</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;temperatures&quot;</span><span class="p">,</span> <span class="p">[])]</span>
+        <span class="n">actual_temps</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">actual</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;temperatures&quot;</span><span class="p">,</span> <span class="p">[])]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">saved_temps</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">actual_temps</span><span class="p">):</span>
+            <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;  exchange ladder: checkpoint has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">saved_temps</span><span class="p">)</span><span class="si">}</span><span class="s2"> state(s), &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;this runner has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">actual_temps</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">rel_tol</span><span class="o">=</span><span class="mf">1e-9</span><span class="p">,</span> <span class="n">abs_tol</span><span class="o">=</span><span class="mf">1e-9</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">saved_temps</span><span class="p">,</span> <span class="n">actual_temps</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;  exchange temperatures: checkpoint has </span><span class="si">{</span><span class="n">saved_temps</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;this runner has </span><span class="si">{</span><span class="n">actual_temps</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">problems</span></div>
+
+
+<div class="viewcode-block" id="ReplicaExchange.state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return exchange state for checkpointing.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            Counters and the acceptance-RNG position.  The position is two</span>
+<span class="sd">            integers rather than a generator blob; see :meth:`_uniforms`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;exchange_id&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">exchange_id</span><span class="p">),</span>
+            <span class="s2">&quot;attempts&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attempts</span><span class="p">),</span>
+            <span class="s2">&quot;accepted&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">accepted</span><span class="p">),</span>
+            <span class="s2">&quot;random_seed&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_seed</span><span class="p">),</span>
+            <span class="s2">&quot;pair_attempts&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pair_attempts</span><span class="p">),</span>
+            <span class="s2">&quot;pair_accepted&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pair_accepted</span><span class="p">),</span>
+            <span class="c1"># Carried so the component is self-describing: loading it into a</span>
+            <span class="c1"># different ladder is refused rather than silently accepted.</span>
+            <span class="s2">&quot;config&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_fingerprint</span><span class="p">(),</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="ReplicaExchange.load_state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.load_state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore exchange state produced by :meth:`state_dict`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state:</span>
+<span class="sd">            The mapping previously returned by :meth:`state_dict`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the saved configuration disagrees with this instance&#39;s.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">saved_config</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;config&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">saved_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">problems</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">describe_config_mismatch</span><span class="p">(</span>
+                <span class="n">saved_config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_fingerprint</span><span class="p">()</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">problems</span><span class="p">:</span>
+                <span class="n">detail</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">problems</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;ReplicaExchange.load_state_dict: the saved exchange was &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;configured differently:</span><span class="se">\n</span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                    <span class="s2">&quot;Counters and the acceptance-RNG position only mean &quot;</span>
+                    <span class="s2">&quot;anything against the ladder they were produced on.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">exchange_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;exchange_id&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attempts</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;attempts&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">accepted</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;accepted&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="c1"># random_seed is RNG *position* and is restored; attempt_interval is</span>
+        <span class="c1"># configuration and is validated above, never silently overwritten.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">random_seed</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;random_seed&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">random_seed</span><span class="p">))</span>
+        <span class="n">pair_attempts</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pair_attempts&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pair_attempts</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pair_attempts</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">pair_attempts</span><span class="p">]</span>
+        <span class="n">pair_accepted</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pair_accepted&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pair_accepted</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pair_accepted</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">pair_accepted</span><span class="p">]</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acceptance_rate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the fraction of attempted pair swaps that were accepted.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">accepted</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">attempts</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">attempts</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+<div class="viewcode-block" id="ReplicaExchange.pair_acceptance_rates">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ReplicaExchange.html#nvalchemi.enhanced_sampling.ReplicaExchange.pair_acceptance_rates">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pair_acceptance_rates</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the per-neighbouring-pair acceptance rates.</span>
+
+<span class="sd">        A REMD ladder is tuned on these: a pair far below the others is a gap</span>
+<span class="sd">        the walkers cannot cross, and the ladder needs another rung there.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[float]</span>
+<span class="sd">            One rate per neighbouring pair, ``0.0`` where never attempted.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">accepted</span> <span class="o">/</span> <span class="n">attempts</span> <span class="k">if</span> <span class="n">attempts</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">accepted</span><span class="p">,</span> <span class="n">attempts</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pair_accepted</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pair_attempts</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+        <span class="p">]</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a concise description of the exchange.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(states=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;acceptance=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_acceptance</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;attempt_interval=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">attempt_interval</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;accepted=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">accepted</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">attempts</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">log_acceptance_is_accepted</span><span class="p">(</span>
+    <span class="n">log_alpha</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">uniforms</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the accept mask for the given log-acceptance values.</span>
+
+<span class="sd">    ``log_alpha`` is capped at zero, so ``log_alpha == 0`` means accept with</span>
+<span class="sd">    probability one.  Comparing ``log(u) &lt; log_alpha`` rather than</span>
+<span class="sd">    ``u &lt; exp(log_alpha)`` keeps a very negative ``log_alpha`` from</span>
+<span class="sd">    underflowing to exactly zero and turning a rare-but-possible swap into an</span>
+<span class="sd">    impossible one.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    log_alpha : torch.Tensor</span>
+<span class="sd">        Log acceptance probability per pair, ``&lt;= 0``.</span>
+<span class="sd">    uniforms : torch.Tensor</span>
+<span class="sd">        Draws in ``[0, 1)``, same shape.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        Boolean accept mask.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">safe</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">uniforms</span><span class="p">,</span> <span class="nb">min</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">uniforms</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">tiny</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">safe</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">log_alpha</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.evaluation.MetricFamily
+=======================================================
+
+.. currentmodule:: nvalchemi.training.distillation.evaluation
+
+.. autodata:: MetricFamily

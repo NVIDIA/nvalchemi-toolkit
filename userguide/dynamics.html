@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Dynamics: Optimization and Molecular Dynamics &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Dynamics: Optimization and Molecular Dynamics &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/dynamics';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Optimization and Integrators" href="dynamics_simulations.html" />
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -496,36 +504,58 @@ loop is broken into discrete stages, enumerated by
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ON_ADMISSION</span></code></p></td>
+<td><p>Once when a batch enters the engine, before force priming and the first step</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code></p></td>
 <td><p>At the very beginning of a step, before any operations</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_PRE_UPDATE</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_PRE_UPDATE</span></code></p></td>
 <td><p>Just before the integrator’s first half-step</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_PRE_UPDATE</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_PRE_UPDATE</span></code></p></td>
 <td><p>After the first half-step completes</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code></p></td>
 <td><p>Just before the model forward pass</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code></p></td>
 <td><p>After the model forward pass completes</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_POST_UPDATE</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_POST_UPDATE</span></code></p></td>
 <td><p>Just before the integrator’s second half-step</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_POST_UPDATE</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_POST_UPDATE</span></code></p></td>
 <td><p>After the second half-step completes</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code></p></td>
 <td><p>At the very end of a step, after all operations</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code></p></td>
-<td><p>When a convergence criterion is met</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code></p></td>
+<td><p>After convergence evaluation; for fused sub-stages, runs at the hook’s configured interval</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ON_GRADUATE</span></code></p></td>
+<td><p>After <code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code>; <code class="docutils literal notranslate"><span class="pre">ctx.graduated_mask</span></code> marks the systems whose status reached <code class="docutils literal notranslate"><span class="pre">exit_status</span></code> this step. Dispatched whenever a hook listens and the batch carries a <code class="docutils literal notranslate"><span class="pre">status</span></code> column, so the mask may be all <code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
 </tr>
 </tbody>
 </table>
-<p>A single call to <code class="docutils literal notranslate"><span class="pre">step()</span></code> proceeds through these stages in order:</p>
+<p>When a batch is newly admitted, <strong>ON_ADMISSION</strong> hooks fire before force
+priming and before the first step. Admission is reset for every new <code class="docutils literal notranslate"><span class="pre">run()</span></code> and
+for managed membership changes such as inflight refill or pipeline communication.
+Repeated <code class="docutils literal notranslate"><span class="pre">step()</span></code> calls do not re-fire admission until it is reset. Because
+admission is an event rather than a recurring step stage, it ignores a hook’s
+<code class="docutils literal notranslate"><span class="pre">frequency</span></code>; for a multi-stage hook, the frequency still applies at its other
+stages.</p>
+<p>After initial force priming, inflight refill in <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> and <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>
+lets existing graphs continue updating normally. Newly added graphs skip both
+integrator updates for one iteration while the regular model evaluation computes
+their initial forces.
+This avoids an extra whole-batch model evaluation. Newly added graphs begin
+integrator updates on the following step. In <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>, their stage step
+counters do not advance during the iteration that computes their initial forces.
+If no graphs remain before a refill, the refilled batch is primed as a fresh
+batch instead.</p>
+<p>Each step then proceeds through these stages in order:</p>
 <ol class="arabic simple">
 <li><p><strong>BEFORE_STEP</strong> hooks fire.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">pre_update(batch)</span></code> — the integrator’s first half-step (e.g. update velocities
@@ -535,23 +565,71 @@ needed), bracketed by BEFORE/AFTER_COMPUTE hooks.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">post_update(batch)</span></code> — the integrator’s second half-step (e.g. complete the
 velocity update with the new forces), bracketed by BEFORE/AFTER_POST_UPDATE hooks.</p></li>
 <li><p><strong>AFTER_STEP</strong> hooks fire (convergence checks, logging, …).</p></li>
-<li><p>Convergence is evaluated: converged systems fire <strong>ON_CONVERGE</strong> hooks and (in
-multi-stage pipelines) migrate to the next stage.</p></li>
+<li><p>Convergence is evaluated. Standard dynamics fire <strong>ON_CONVERGE</strong> hooks only
+when systems converge. Fused sub-stages evaluate convergence every step;
+registered hooks run when allowed by <code class="docutils literal notranslate"><span class="pre">hook.frequency</span></code>, receive that
+sub-stage’s convergence mask as <code class="docutils literal notranslate"><span class="pre">ctx.converged_mask</span></code>, and must inspect it to
+determine which systems converged. Converged systems in a multi-stage
+pipeline then migrate to the next stage.</p></li>
+<li><p><strong>ON_GRADUATE</strong> hooks fire, when any are registered and the batch carries a
+<code class="docutils literal notranslate"><span class="pre">status</span></code> column. A system graduates on the step its status reaches
+<code class="docutils literal notranslate"><span class="pre">exit_status</span></code>, whatever changed it, and <code class="docutils literal notranslate"><span class="pre">ctx.graduated_mask</span></code> marks the
+systems that graduated during this step.</p></li>
 </ol>
 <p><code class="docutils literal notranslate"><span class="pre">run(batch,</span> <span class="pre">n_steps)</span></code> calls <code class="docutils literal notranslate"><span class="pre">step()</span></code> in a loop until all systems converge or
 <code class="docutils literal notranslate"><span class="pre">n_steps</span></code> is reached. Every hook declares which
 <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DynamicsStage.html#nvalchemi.dynamics.DynamicsStage" title="nvalchemi.dynamics.base.DynamicsStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStage</span></code></a> stage it should fire at and at
 what frequency, so you have fine-grained control over when callbacks execute.</p>
 </section>
+<section id="declarative-dynamics-strategies">
+<h2>Declarative dynamics strategies<a class="headerlink" href="#declarative-dynamics-strategies" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DynamicsStrategy.html#nvalchemi.dynamics.DynamicsStrategy" title="nvalchemi.dynamics.strategy.DynamicsStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStrategy</span></code></a> stores engine
+configuration and reconstructible hook specs. For a workflow using one engine,
+set <code class="docutils literal notranslate"><span class="pre">engine</span></code> and pass additional constructor arguments in <code class="docutils literal notranslate"><span class="pre">engine_kwargs</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStrategy</span><span class="p">,</span> <span class="n">NVTLangevin</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">DynamicsStrategy</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">engine</span><span class="o">=</span><span class="n">NVTLangevin</span><span class="p">,</span>
+    <span class="n">engine_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">300.0</span><span class="p">,</span> <span class="s2">&quot;friction&quot;</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">},</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">cache_engine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The default <code class="docutils literal notranslate"><span class="pre">build_engine()</span></code> supplies <code class="docutils literal notranslate"><span class="pre">model</span></code>, <code class="docutils literal notranslate"><span class="pre">n_steps</span></code>, and <code class="docutils literal notranslate"><span class="pre">build_hooks()</span></code>
+to the engine. Keep those three keys out of <code class="docutils literal notranslate"><span class="pre">engine_kwargs</span></code>. <code class="docutils literal notranslate"><span class="pre">build_hooks()</span></code>
+returns a new list of <code class="docutils literal notranslate"><span class="pre">extra_hooks</span></code>. Subclasses can override it to add their own
+hooks, or override <code class="docutils literal notranslate"><span class="pre">build_engine()</span></code> for workflows with multiple stages, such as
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.NEB.html#nvalchemi.dynamics.mep.NEB" title="nvalchemi.dynamics.mep.NEB"><code class="xref py py-class docutils literal notranslate"><span class="pre">NEB</span></code></a>. Without an <code class="docutils literal notranslate"><span class="pre">engine</span></code> or a
+<code class="docutils literal notranslate"><span class="pre">build_engine()</span></code> override, construction raises <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code> when the
+builder is called.</p>
+<p>By default, every <code class="docutils literal notranslate"><span class="pre">run()</span></code> builds a fresh engine. With <code class="docutils literal notranslate"><span class="pre">cache_engine=True</span></code>, the
+first run builds the engine and later runs reuse its original configuration and
+runtime state, including the step counter. A subclass can opt in by declaring
+<code class="docutils literal notranslate"><span class="pre">cache_engine:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">True</span></code>. Calling <code class="docutils literal notranslate"><span class="pre">build_engine()</span></code> directly always constructs
+a fresh engine.</p>
+<p><code class="docutils literal notranslate"><span class="pre">to_spec_dict()</span></code> serializes the engine class as an importable dotted path and
+hooks as constructor specs. Restore it with
+<code class="docutils literal notranslate"><span class="pre">DynamicsStrategy.from_spec_dict(spec,</span> <span class="pre">model=model)</span></code>. The live model and cached
+engine state are excluded, so a restored strategy starts with an empty cache.</p>
+</section>
 <section id="using-dynamics-as-a-context-manager">
 <h2>Using dynamics as a context manager<a class="headerlink" href="#using-dynamics-as-a-context-manager" title="Link to this heading">#</a></h2>
 <p>All dynamics objects (optimizers, integrators, fused stages) support Python’s
 context manager protocol. The <code class="docutils literal notranslate"><span class="pre">with</span></code> block manages a dedicated
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.Stream_class.html#torch.cuda.Stream" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Stream</span></code></a> for the simulation and ensures hooks are
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.Stream_class.html#torch.cuda.Stream" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Stream</span></code></a> for the simulation and ensures hooks are
 properly opened and closed:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
 
-<span class="k">with</span> <span class="n">FIRE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)])</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
+<span class="k">with</span> <span class="n">FIRE2</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">),</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
     <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -566,9 +644,11 @@ hook state (e.g. open log files) alive.</p>
 MD at increasing temperatures, then relax again. The
 <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.base.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a> abstraction lets you compose stages
 with the <code class="docutils literal notranslate"><span class="pre">+</span></code> operator:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">NVTLangevin</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span><span class="p">,</span> <span class="n">NVTLangevin</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
 
-<span class="n">relax</span> <span class="o">=</span> <span class="n">FIRE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)])</span>
+<span class="n">relax</span> <span class="o">=</span> <span class="n">FIRE2</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="p">)</span>
 <span class="n">md</span> <span class="o">=</span> <span class="n">NVTLangevin</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span> <span class="n">friction</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">5000</span><span class="p">)</span>
 
 <span class="n">pipeline</span> <span class="o">=</span> <span class="n">relax</span> <span class="o">+</span> <span class="n">md</span>
@@ -606,10 +686,16 @@ In that case, <code class="docutils literal notranslate"><span class="pre">torch
 construction.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Not all hooks are graph-break-free under <code class="docutils literal notranslate"><span class="pre">fullgraph=True</span></code>. Hooks that perform
-Python-side control flow (e.g. logging, I/O) will introduce graph breaks. If you
-need an unbroken graph, ensure your hooks are written with torch-compatible
-operations only.</p>
+<p>Per-step hooks run inside the compiled <code class="docutils literal notranslate"><span class="pre">_step_impl</span></code> and must be compatible with
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>. Hooks that perform Python-side or data-dependent control flow
+(e.g. logging, I/O, or <code class="docutils literal notranslate"><span class="pre">NaNDetectorHook</span></code>) introduce graph breaks.
+<code class="docutils literal notranslate"><span class="pre">NeighborListHook</span></code> separately calls compiler-disabled helpers. Consequently, these
+hooks are not compatible with <code class="docutils literal notranslate"><span class="pre">fullgraph=True</span></code>. Use only torch-compatible per-step
+hooks when an unbroken graph is required.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">DynamicsStage.ON_ADMISSION</span></code> for one-time validation, shape-dependent tensor
+allocation, and Python-side setup. <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> dispatches admission before force
+priming and outside compiled <code class="docutils literal notranslate"><span class="pre">_step_impl</span></code>, so this setup does not enter the
+steady-state graph.</p>
 </div>
 </section>
 </section>
@@ -627,13 +713,13 @@ automatically.</p>
 <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.base.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>) instance. Stages are collected in a
 dictionary keyed by global rank and handed to
 <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.base.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">NVTLangevin</span><span class="p">,</span> <span class="n">DistributedPipeline</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span><span class="p">,</span> <span class="n">NVTLangevin</span><span class="p">,</span> <span class="n">DistributedPipeline</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BufferConfig</span>
 
 <span class="n">buffer_cfg</span> <span class="o">=</span> <span class="n">BufferConfig</span><span class="p">(</span><span class="n">num_systems</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_nodes</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">num_edges</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
 <span class="n">stages</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="mi">0</span><span class="p">:</span> <span class="n">FIRE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>        <span class="c1"># upstream — relaxation</span>
+    <span class="mi">0</span><span class="p">:</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>        <span class="c1"># upstream — relaxation</span>
     <span class="mi">1</span><span class="p">:</span> <span class="n">NVTLangevin</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>  <span class="c1"># downstream — MD</span>
 <span class="p">}</span>
 
@@ -642,6 +728,31 @@ dictionary keyed by global rank and handed to
     <span class="n">pipeline</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
 </pre></div>
 </div>
+<p>Dynamics default to <code class="docutils literal notranslate"><span class="pre">reprime_on_entry=False</span></code>: received graphs use the
+upstream stage’s forces for their first update when they carry every model output
+the receiving dynamics needs. Graphs missing any of those outputs are primed
+locally, as with <code class="docutils literal notranslate"><span class="pre">True</span></code>: they skip one update while the stage’s next model
+evaluation supplies them. This assumes the stages use compatible models and force
+modifications. To refresh forces under the receiving stage’s model and hooks
+before updating, opt in explicitly on the receiving stage’s dynamics:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">coarse</span> <span class="o">=</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">fast_model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">fine</span> <span class="o">=</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">accurate_model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">reprime_on_entry</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pipeline</span> <span class="o">=</span> <span class="n">coarse</span> <span class="o">|</span> <span class="n">fine</span>
+</pre></div>
+</div>
+<p>With this option, received graphs skip one update while the stage’s next regular
+model evaluation gives them forces. Residents keep their forces and keep updating,
+so graphs arriving at different steps add no extra model evaluations. Sending,
+final-stage removal, and sampler refill do not refresh residents’ forces.</p>
+<p>With either setting, initial sampler batches are primed locally. When received
+graphs need local forces, an empty or unprimed receiving stage primes the whole
+batch instead of skipping their update.</p>
+<p>Inside a <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>, the flag works the same way for sub-stage transitions. Set
+it on a sub-stage’s dynamics, and graphs whose status changes into that sub-stage
+skip one update while their forces are refreshed.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code> stage reads the flag from the dynamics it wraps. It holds one
+system at a time, so a received system that needs local forces is primed as a
+whole before its first update.</p>
 <p>By default, <code class="docutils literal notranslate"><span class="pre">setup()</span></code> (called automatically by the context manager) sorts stages by
 rank and wires <code class="docutils literal notranslate"><span class="pre">prior_rank</span></code> / <code class="docutils literal notranslate"><span class="pre">next_rank</span></code> between adjacent stages as a simple linear
 chain. For more sophisticated topologies — such as multiple independent
@@ -649,10 +760,10 @@ sub-pipelines running in the same job — set <code class="docutils literal notr
 on each stage:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">stages</span> <span class="o">=</span> <span class="p">{</span>
     <span class="c1"># Sub-pipeline A: rank 0 → rank 1</span>
-    <span class="mi">0</span><span class="p">:</span> <span class="n">FIRE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="n">prior_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">next_rank</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>
+    <span class="mi">0</span><span class="p">:</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="n">prior_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">next_rank</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>
     <span class="mi">1</span><span class="p">:</span> <span class="n">NVTLangevin</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="n">prior_rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">next_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>
     <span class="c1"># Sub-pipeline B: rank 2 → rank 3</span>
-    <span class="mi">2</span><span class="p">:</span> <span class="n">FIRE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="n">prior_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">next_rank</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>
+    <span class="mi">2</span><span class="p">:</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="n">prior_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">next_rank</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>
     <span class="mi">3</span><span class="p">:</span> <span class="n">NVTLangevin</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span> <span class="n">prior_rank</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">next_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">),</span>
 <span class="p">}</span>
 </pre></div>
@@ -687,7 +798,7 @@ data a single transfer can carry:</p>
 <td><p>Total atom capacity across all graphs in the buffer. Must be large enough for the worst-case combination of systems. For example, transferring up to 4 structures of at most 50 atoms each requires <code class="docutils literal notranslate"><span class="pre">num_nodes=200</span></code>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">num_edges</span></code></p></td>
-<td><p>Total edge capacity. Set to <strong>0</strong> when the downstream model recomputes edges via its neighbor list (the common case). Only set a non-zero value if pre-computed edge attributes must be transferred.</p></td>
+<td><p>Total edge capacity. Set to <strong>0</strong> when the downstream model recomputes edges via its neighbor list (the common case). Edges are omitted from transport, and arriving graphs have no edges until the neighbor-list hook rebuilds them. Only set a non-zero value if pre-computed edge attributes must be transferred.</p></td>
 </tr>
 </tbody>
 </table>
@@ -713,8 +824,7 @@ step — this is the back-pressure mechanism described below.</p>
 send and receive buffers during a single step. The upstream rank pushes converged
 samples; the downstream rank pulls them into its active batch.</p>
 <figure class="align-default" id="id1">
-<div class="graphviz"><object data="../_images/graphviz-e44be71c694bb31418d75d6d6495182a969da951.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">digraph buffer_sync {
+digraph buffer_sync {
     rankdir=LR
     compound=true
 
@@ -754,8 +864,7 @@ samples; the downstream rank pulls them into its active batch.</p>
         fontcolor=&quot;#eeeeee&quot;;
         penwidth=2;
     ]
-}</p></object></div>
-<figcaption>
+}<figcaption>
 <p><span class="caption-text">Buffer synchronization between two adjacent ranks in a DistributedPipeline.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
@@ -821,17 +930,64 @@ including multi-pipeline topologies and monitoring with persistent storage.</p>
 </div>
 </section>
 </section>
+<section id="structure-sources">
+<span id="dynamics-structure-sources"></span><h2>Structure sources<a class="headerlink" href="#structure-sources" title="Link to this heading">#</a></h2>
+<p>A run that graduates structures needs fresh ones to take their place, and a run
+that starts many trajectories needs them dealt out once.
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler" title="nvalchemi.dynamics.OrderedStructureSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrderedStructureSampler</span></code></a> is that supply: a
+dataset served in row order from one position, <code class="docutils literal notranslate"><span class="pre">next_row</span></code>. The initial batch,
+and every later <em>backfill</em> (the structures drawn to replace the ones that
+finished) read from that position. A structure is therefore propagated once per
+pass over the rows, and a sampler restored from its <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> (<code class="docutils literal notranslate"><span class="pre">next_row</span></code>,
+<code class="docutils literal notranslate"><span class="pre">wraps</span></code>, <code class="docutils literal notranslate"><span class="pre">next_system_id</span></code>, <code class="docutils literal notranslate"><span class="pre">rank</span></code>, and <code class="docutils literal notranslate"><span class="pre">world_size</span></code>) picks up where it stopped
+rather than at row zero. <code class="docutils literal notranslate"><span class="pre">shard()</span></code> resets the position, so a caller that
+re-shards at start-up, as the distillation segment loop does, begins at the
+first row of the shard unless it restores the state afterwards.</p>
+<p>An <em>unbudgeted</em> sampler serves every row it owns as one batch, so that batch
+<em>is</em> the set of systems the run generates from. A budget — <code class="docutils literal notranslate"><span class="pre">max_atoms</span></code>,
+<code class="docutils literal notranslate"><span class="pre">max_batch_size</span></code>, or <code class="docutils literal notranslate"><span class="pre">max_edges</span></code> — packs the initial batch first-fit in row
+order instead. Packing stops at the first structure that does not fit and leaves
+the remainder, in row order, for the backfill. The initial packing and each
+backfill are one <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler.draw" title="nvalchemi.dynamics.OrderedStructureSampler.draw"><code class="xref py py-meth docutils literal notranslate"><span class="pre">draw()</span></code></a>
+call under a <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.WithinBudget.html#nvalchemi.dynamics.WithinBudget" title="nvalchemi.dynamics.WithinBudget"><code class="xref py py-class docutils literal notranslate"><span class="pre">WithinBudget</span></code></a> policy: the initial
+batch with <code class="docutils literal notranslate"><span class="pre">on_miss=&quot;stop&quot;</span></code>, and a backfill with <code class="docutils literal notranslate"><span class="pre">on_miss=&quot;skip&quot;</span></code>, which passes
+over a row that does not fit rather than stalling on it. When you drive <code class="docutils literal notranslate"><span class="pre">draw</span></code>
+yourself, <code class="docutils literal notranslate"><span class="pre">fits=</span></code> takes any <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FitPolicy.html#nvalchemi.dynamics.FitPolicy" title="nvalchemi.dynamics.FitPolicy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FitPolicy</span></code></a>, a
+callable over the running atom and edge totals of the batch being drawn.
+<code class="docutils literal notranslate"><span class="pre">max_edges</span></code> counts the edges a store saved, not the neighbor list a propagator’s
+hook rebuilds each step, so set it only when the stored count is the one that
+matters.</p>
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler.shard" title="nvalchemi.dynamics.OrderedStructureSampler.shard"><code class="xref py py-meth docutils literal notranslate"><span class="pre">shard()</span></code></a> narrows the
+sampler to the rows one rank owns, dealt strided and unpadded through
+<a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.distributed_shard.html#nvalchemi.data.datapipes.distributed_shard" title="nvalchemi.data.datapipes.distributed_shard"><code class="xref py py-func docutils literal notranslate"><span class="pre">distributed_shard()</span></code></a>: rank <code class="docutils literal notranslate"><span class="pre">r</span></code> takes every
+<code class="docutils literal notranslate"><span class="pre">world_size</span></code>-th row from offset <code class="docutils literal notranslate"><span class="pre">r</span></code>, so the shards are disjoint and cover the
+dataset. <code class="docutils literal notranslate"><span class="pre">recycle=True</span></code> wraps the position to the front of the shard when it
+reaches the end instead of reporting the sampler exhausted; <code class="docutils literal notranslate"><span class="pre">wraps</span></code> counts how
+often that happened, and the <code class="docutils literal notranslate"><span class="pre">system_id</span></code>s keep climbing across a wrap. One
+<code class="docutils literal notranslate"><span class="pre">draw</span></code> reaches every row at most once, so a single call never serves two copies
+of one structure.</p>
+<p>Every batch the sampler hands over is stamped with the bookkeeping an in-flight
+run maintains: <code class="docutils literal notranslate"><span class="pre">status</span></code> zeros and consecutive <code class="docutils literal notranslate"><span class="pre">system_id</span></code>s. A store written by an
+earlier run, whose exit statuses a propagator would otherwise read as finished,
+can therefore be propagated again without a manual cleanup pass. Any object
+satisfying the <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.StructureSource.html#nvalchemi.dynamics.StructureSource" title="nvalchemi.dynamics.StructureSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">StructureSource</span></code></a> protocol can
+stand in for the sampler; <a class="reference internal" href="../modules/dynamics/api.html"><span class="doc">API Reference</span></a> lists its members.</p>
+</section>
 <section id="what-s-next">
 <h2>What’s next<a class="headerlink" href="#what-s-next" title="Link to this heading">#</a></h2>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l1"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </div>
 <ul class="simple">
-<li><p><a class="reference internal" href="dynamics_simulations.html"><span class="doc std std-doc">Optimization and Integrators</span></a> — FIRE, NVE, NVT, NPT and
+<li><p><a class="reference internal" href="dynamics_simulations.html"><span class="doc std std-doc">Optimization and Integrators</span></a> — FIRE2, NVE, NVT, NPT and
 their configuration.</p></li>
+<li><p><a class="reference internal" href="dynamics_mep.html#dynamics-mep-guide"><span class="std std-ref">Reaction Paths and NEB</span></a> — batched nudged elastic band,
+using either the high-level <code class="docutils literal notranslate"><span class="pre">NEB</span></code> strategy or hooks attached directly to an
+optimizer.</p></li>
 <li><p><a class="reference internal" href="hooks.html#hooks-guide"><span class="std std-ref">Hooks</span></a> — the hook protocol, built-in hooks, and writing custom
 hooks.</p></li>
 <li><p><a class="reference internal" href="dynamics_sinks.html"><span class="doc std std-doc">Data Sinks</span></a> — recording trajectories and simulation results.</p></li>
@@ -897,6 +1053,7 @@ structures consumed by dynamics.</p></li>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-execution-loop">The execution loop</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#declarative-dynamics-strategies">Declarative dynamics strategies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#using-dynamics-as-a-context-manager">Using dynamics as a context manager</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-stage-pipelines-with-fusedstage">Multi-stage pipelines with FusedStage</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#compiling-with-torch-compile">Compiling with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code></a></li>
@@ -910,6 +1067,7 @@ structures consumed by dynamics.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#launching">Launching</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#structure-sources">Structure sources</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-s-next">What’s next</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

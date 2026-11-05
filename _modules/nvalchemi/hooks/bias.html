@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.hooks.bias &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.hooks.bias &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/hooks/bias';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -428,10 +428,20 @@ document.write(`
 
 <span class="sd">Provides :class:`BiasedPotentialHook`, which adds external bias</span>
 <span class="sd">potentials to the forces and energy computed by the ML model.</span>
+
+<span class="sd">.. deprecated:: 0.3.0</span>
+
+<span class="sd">    :class:`BiasedPotentialHook` is superseded by</span>
+<span class="sd">    :mod:`nvalchemi.enhanced_sampling`, whose ``EnhancedSampling`` runner</span>
+<span class="sd">    covers everything this hook does and carries a cell response it cannot.</span>
+<span class="sd">    See that module&#39;s docstring for which to use when.  This hook still</span>
+<span class="sd">    works and no removal date is set; see :class:`BiasedPotentialHook` for</span>
+<span class="sd">    the specific limitations that motivated the replacement.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
 
@@ -452,6 +462,35 @@ document.write(`
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.BiasedPotentialHook.html#nvalchemi.hooks.BiasedPotentialHook">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">BiasedPotentialHook</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Add an external bias potential to forces and energy after the forward pass.</span>
+
+<span class="sd">    .. deprecated:: 0.3.0</span>
+
+<span class="sd">        Superseded by :mod:`nvalchemi.enhanced_sampling`.  Constructing this</span>
+<span class="sd">        hook emits a :class:`DeprecationWarning`.  It remains functional so</span>
+<span class="sd">        existing code keeps working, and no removal date is set — but new</span>
+<span class="sd">        biases should be written against</span>
+<span class="sd">        :class:`~nvalchemi.enhanced_sampling.ConservativeBias` and run</span>
+<span class="sd">        through :class:`~nvalchemi.enhanced_sampling.EnhancedSampling`, which</span>
+<span class="sd">        together cover everything this hook does.</span>
+
+<span class="sd">        Three limitations of the ``bias_fn`` contract motivated the</span>
+<span class="sd">        replacement:</span>
+
+<span class="sd">        * **No cell response.**  ``bias_fn`` returns only</span>
+<span class="sd">          ``(energy, forces)``, so a bias contributes no stress or virial.</span>
+<span class="sd">          Under NPT/NPH the barostat reads ``batch.stress``, which the bias</span>
+<span class="sd">          never touches, so the cell evolves as if the bias were absent —</span>
+<span class="sd">          silently, with no error.</span>
+<span class="sd">        * **Forces are hand-written.**  Nothing checks that ``bias_forces``</span>
+<span class="sd">          is ``-dE/dr`` for the returned ``bias_energy``, so a bias can be</span>
+<span class="sd">          non-conservative by accident.</span>
+<span class="sd">          :class:`~nvalchemi.enhanced_sampling.ConservativeBias` derives</span>
+<span class="sd">          forces and stress from one energy definition by autograd.</span>
+<span class="sd">        * **Sequential in-place composition.**  Each hook mutates</span>
+<span class="sd">          ``batch.forces`` in turn, so a second bias that reads</span>
+<span class="sd">          ``batch.forces`` observes the first one&#39;s contribution.</span>
+<span class="sd">          :func:`~nvalchemi.models._utils.aggregate_contributions` sums</span>
+<span class="sd">          every bias against the same unmodified model output instead.</span>
 
 <span class="sd">    This hook enables enhanced sampling techniques by composing an</span>
 <span class="sd">    arbitrary bias potential on top of the ML potential **without**</span>
@@ -534,6 +573,10 @@ document.write(`
 <span class="sd">    * The ``bias_fn`` is called **after** the model forward pass, so</span>
 <span class="sd">      it has access to the model-computed forces and energy via the</span>
 <span class="sd">      batch if needed (e.g. for force-matching penalties).</span>
+<span class="sd">    * When only some graphs are active, ``bias_fn`` is still called with the</span>
+<span class="sd">      entire batch and must return energies and forces for the entire batch.</span>
+<span class="sd">      The hook adds those values only to the active graphs and their atoms,</span>
+<span class="sd">      while inactive graphs remain unchanged.</span>
 <span class="sd">    * Because the bias modifies forces in-place, it interacts correctly</span>
 <span class="sd">      with :class:`MaxForceClampHook` — register the clamp hook</span>
 <span class="sd">      **after** the bias hook to clamp the total (model + bias) forces.</span>
@@ -553,6 +596,17 @@ document.write(`
         <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;BiasedPotentialHook is deprecated in favour of &quot;</span>
+            <span class="s2">&quot;nvalchemi.enhanced_sampling (EnhancedSampling / ConservativeBias), &quot;</span>
+            <span class="s2">&quot;which derives forces and stress from a single energy definition. &quot;</span>
+            <span class="s2">&quot;bias_fn returns only (energy, forces), so a bias applied through &quot;</span>
+            <span class="s2">&quot;this hook contributes no stress and is invisible to the NPT/NPH &quot;</span>
+            <span class="s2">&quot;barostat. It remains functional and no removal date is set; run &quot;</span>
+            <span class="s2">&quot;new biases through EnhancedSampling instead.&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bias_fn</span> <span class="o">=</span> <span class="n">bias_fn</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
@@ -560,10 +614,12 @@ document.write(`
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute and add the bias potential.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_bias</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_bias</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s2">&quot;active_graph_mask&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_bias</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply bias potential to the batch.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_bias</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">active_graph_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply bias potential to all or only the active graphs in ``batch``.&quot;&quot;&quot;</span>
         <span class="n">bias_energy</span><span class="p">,</span> <span class="n">bias_forces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_fn</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">is_compiling</span><span class="p">():</span>
@@ -577,6 +633,17 @@ document.write(`
                     <span class="sa">f</span><span class="s2">&quot;bias_forces shape </span><span class="si">{</span><span class="n">bias_forces</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> does not match &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;batch.forces shape </span><span class="si">{</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">active_graph_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">active_atoms</span> <span class="o">=</span> <span class="n">active_graph_mask</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">]</span>
+            <span class="n">bias_energy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">active_graph_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+                <span class="n">bias_energy</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">bias_energy</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">bias_forces</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">active_atoms</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">bias_forces</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">bias_forces</span><span class="p">)</span>
+            <span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="p">:</span>
             <span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">bias_energy</span><span class="p">)</span>

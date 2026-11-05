@@ -1,0 +1,6 @@
+﻿nvalchemi.data.datapipes.dataset\_device
+========================================
+
+.. currentmodule:: nvalchemi.data.datapipes
+
+.. autofunction:: dataset_device

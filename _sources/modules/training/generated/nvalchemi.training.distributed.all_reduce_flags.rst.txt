@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distributed.all\_reduce\_flags
+=================================================
+
+.. currentmodule:: nvalchemi.training.distributed
+
+.. autofunction:: all_reduce_flags

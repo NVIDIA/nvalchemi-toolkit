@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>AIMNet2 + Ewald Pipeline Geometry Optimization &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>AIMNet2 + Ewald Pipeline Geometry Optimization &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/08_aimnet2_ewald_pipeline';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics" href="09_uma_nve.html" />
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -507,7 +518,7 @@ only compute energies.</p></li>
 which backpropagates through both the Ewald and AIMNet2 graphs.</p></li>
 </ol>
 <p>We then optimize a batch of distorted water clusters using the
-<code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE2</span></code> optimizer.</p>
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.FIRE2.html#nvalchemi.dynamics.FIRE2" title="nvalchemi.dynamics.optimizers.fire2.FIRE2"><code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE2</span></code></a> optimizer.</p>
 <section id="key-concepts-demonstrated">
 <h2>Key concepts demonstrated<a class="headerlink" href="#key-concepts-demonstrated" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -516,7 +527,7 @@ which backpropagates through both the Ewald and AIMNet2 graphs.</p></li>
 <li><p>AIMNet2 charge prediction auto-wired to Ewald electrostatics
 (both use the key <code class="docutils literal notranslate"><span class="pre">&quot;charges&quot;</span></code> — no explicit wire mapping needed).</p></li>
 <li><p>Batched geometry optimization with
-<code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE2</span></code>.</p></li>
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.FIRE2.html#nvalchemi.dynamics.FIRE2" title="nvalchemi.dynamics.optimizers.fire2.FIRE2"><code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE2</span></code></a>.</p></li>
 <li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.ConvergenceHook.html#nvalchemi.dynamics.ConvergenceHook" title="nvalchemi.dynamics.base.ConvergenceHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvergenceHook</span></code></a> for per-system
 convergence monitoring.</p></li>
 </ul>
@@ -704,7 +715,7 @@ Pipeline: [&#39;AIMNet2Wrapper&#39;, &#39;EwaldModelWrapper&#39;]
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Log → </span><span class="si">{</span><span class="n">OPT_LOG</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Optimization completed in 95 steps
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Optimization completed in 94 steps
 Log → aimnet2_ewald_optimization.csv
 </pre></div>
 </div>
@@ -749,68 +760,68 @@ Log → aimnet2_ewald_optimization.csv
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  step     energy (eV)     fmax (eV/Å)  system
 --------------------------------------------------------
-     0     -10400.6123         23.4682       0
-     0     -10402.3193         16.8440       1
-     0     -10402.9639         12.5703       2
-     0     -10402.0645         16.2362       3
-     0     -10403.9424          9.4354       4
-     0     -10403.2383         10.8009       5
-     0     -10403.2246         17.4852       6
-     0     -10403.6875          8.3472       7
-     0     -10404.3203          6.4198       8
-     0     -10402.1514         16.6543       9
-    20     -10404.8906          2.2696       0
-    20     -10404.8672          1.9737       1
-    20     -10404.9775          1.4736       2
-    20     -10404.9424          1.8235       3
-    20     -10405.0654          1.0731       4
-    20     -10405.0098          1.4613       5
-    20     -10405.0371          1.2685       6
-    20     -10405.0264          0.8512       7
-    20     -10405.0439          0.7171       8
-    20     -10404.9512          1.9664       9
-    40     -10405.0215          1.2345       0
-    40     -10404.9531          0.9435       1
-    40     -10405.0283          1.0000       2
-    40     -10405.0322          1.0886       3
-    40     -10405.0830          0.5507       4
-    40     -10405.0518          1.0469       5
-    40     -10405.0732          0.5793       6
-    40     -10405.0439          0.7121       7
-    40     -10405.0625          0.5764       8
-    40     -10405.0215          1.0538       9
-    60     -10405.0918          0.5273       0
-    60     -10405.0469          0.6912       1
-    60     -10405.0791          0.4905       2
-    60     -10405.0898          0.5114       3
-    60     -10405.1035          0.2559       4
-    60     -10405.0889          0.4586       5
-    60     -10405.1016          0.3485       6
-    60     -10405.0801          0.5254       7
-    60     -10405.0918          0.3445       8
-    60     -10405.0801          0.5271       9
-    80     -10405.1113          0.1125       0
-    80     -10405.1064          0.2462       1
-    80     -10405.1094          0.1464       2
-    80     -10405.1104          0.1388       3
-    80     -10405.1143          0.0549       4
-    80     -10405.1104          0.1089       5
-    80     -10405.1133          0.0560       6
-    80     -10405.1064          0.2120       7
-    80     -10405.1104          0.1245       8
-    80     -10405.1113          0.1432       9
+     0     -10400.7959         22.4185       0
+     0     -10402.4199         16.2790       1
+     0     -10403.0303         12.2351       2
+     0     -10402.1768         15.6055       3
+     0     -10403.9746          9.2348       4
+     0     -10403.2832         10.5660       5
+     0     -10403.2930         16.8780       6
+     0     -10403.7227          8.1796       7
+     0     -10404.3359          6.3116       8
+     0     -10402.2559         16.0969       9
+    20     -10404.8799          2.4372       0
+    20     -10404.8555          1.9626       1
+    20     -10404.9775          1.6017       2
+    20     -10404.9375          2.3821       3
+    20     -10405.0645          1.0686       4
+    20     -10405.0098          1.6983       5
+    20     -10405.0342          1.5637       6
+    20     -10405.0244          0.8418       7
+    20     -10405.0459          0.9120       8
+    20     -10404.9473          2.0460       9
+    40     -10405.0791          0.7237       0
+    40     -10405.0146          0.8085       1
+    40     -10405.0645          0.5300       2
+    40     -10405.0752          0.6454       3
+    40     -10405.0967          0.3184       4
+    40     -10405.0811          0.4795       5
+    40     -10405.0928          0.4407       6
+    40     -10405.0684          0.6004       7
+    40     -10405.0830          0.4160       8
+    40     -10405.0664          0.6337       9
+    60     -10405.1113          0.2033       0
+    60     -10405.1084          0.2339       1
+    60     -10405.1113          0.1872       2
+    60     -10405.1094          0.2469       3
+    60     -10405.1133          0.1013       4
+    60     -10405.1104          0.1626       5
+    60     -10405.1123          0.1364       6
+    60     -10405.1084          0.2022       7
+    60     -10405.1104          0.1162       8
+    60     -10405.1084          0.1868       9
+    80     -10405.1123          0.0763       0
+    80     -10405.1123          0.0617       1
+    80     -10405.1113          0.0374       2
+    80     -10405.1133          0.0705       3
+    80     -10405.1123          0.0365       4
+    80     -10405.1113          0.0362       5
+    80     -10405.1123          0.0488       6
+    80     -10405.1123          0.0118       7
+    80     -10405.1133          0.0287       8
+    80     -10405.1133          0.0487       9
 
 Final per-system results (threshold = 0.05 eV/Å):
-  Cluster 0: energy = -10405.1123 eV, fmax = 0.0490 eV/Å  [CONVERGED]
-  Cluster 1: energy = -10405.1133 eV, fmax = 0.0344 eV/Å  [CONVERGED]
-  Cluster 2: energy = -10405.1123 eV, fmax = 0.0229 eV/Å  [CONVERGED]
-  Cluster 3: energy = -10405.1113 eV, fmax = 0.0457 eV/Å  [CONVERGED]
-  Cluster 4: energy = -10405.1123 eV, fmax = 0.0158 eV/Å  [CONVERGED]
-  Cluster 5: energy = -10405.1113 eV, fmax = 0.0347 eV/Å  [CONVERGED]
-  Cluster 6: energy = -10405.1123 eV, fmax = 0.0203 eV/Å  [CONVERGED]
-  Cluster 7: energy = -10405.1123 eV, fmax = 0.0125 eV/Å  [CONVERGED]
-  Cluster 8: energy = -10405.1113 eV, fmax = 0.0148 eV/Å  [CONVERGED]
-  Cluster 9: energy = -10405.1113 eV, fmax = 0.0448 eV/Å  [CONVERGED]
+  Cluster 0: energy = -10405.1123 eV, fmax = 0.0494 eV/Å  [CONVERGED]
+  Cluster 1: energy = -10405.1133 eV, fmax = 0.0211 eV/Å  [CONVERGED]
+  Cluster 2: energy = -10405.1113 eV, fmax = 0.0101 eV/Å  [CONVERGED]
+  Cluster 3: energy = -10405.1133 eV, fmax = 0.0275 eV/Å  [CONVERGED]
+  Cluster 4: energy = -10405.1133 eV, fmax = 0.0042 eV/Å  [CONVERGED]
+  Cluster 5: energy = -10405.1113 eV, fmax = 0.0055 eV/Å  [CONVERGED]
+  Cluster 6: energy = -10405.1113 eV, fmax = 0.0060 eV/Å  [CONVERGED]
+  Cluster 7: energy = -10405.1123 eV, fmax = 0.0087 eV/Å  [CONVERGED]
+  Cluster 8: energy = -10405.1113 eV, fmax = 0.0062 eV/Å  [CONVERGED]
+  Cluster 9: energy = -10405.1123 eV, fmax = 0.0058 eV/Å  [CONVERGED]
 </pre></div>
 </div>
 </section>
@@ -857,7 +868,7 @@ Final per-system results (threshold = 0.05 eV/Å):
 <img src="../../_images/sphx_glr_08_aimnet2_ewald_pipeline_001.png" srcset="../../_images/sphx_glr_08_aimnet2_ewald_pipeline_001.png" alt="AIMNet2 + Ewald FIRE2 Optimization (10 water clusters, 5 H₂O each)" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Saved aimnet2_ewald_optimization.png
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 7.131 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 6.665 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-08-aimnet2-ewald-pipeline-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/b33ee1fd170626f4682de680838abf36/08_aimnet2_ewald_pipeline.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">08_aimnet2_ewald_pipeline.ipynb</span></code></a></p>

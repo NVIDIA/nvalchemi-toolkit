@@ -1,0 +1,6 @@
+﻿nvalchemi.dynamics.mep.prepare\_idpp\_targets
+=============================================
+
+.. currentmodule:: nvalchemi.dynamics.mep
+
+.. autofunction:: prepare_idpp_targets

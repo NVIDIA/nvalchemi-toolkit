@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/distributed/07_fire_nvt_dd';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="API Reference" href="../../modules/index.html" />
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Distributed Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -477,13 +488,21 @@ to download the full example code.</p>
 <span id="sphx-glr-examples-distributed-07-fire-nvt-dd-py"></span><h1>2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed<a class="headerlink" href="#d-parallel-dynamics-fire-nvt-each-stage-domain-decomposed" title="Link to this heading">#</a></h1>
 <p>A two-stage streaming pipeline — FIRE relaxation then NVT Langevin MD — where
 <strong>each stage is itself domain-decomposed</strong> across a group of GPUs. This is the
-2-D generalization of <span class="xref std std-ref">01_distributed_pipeline</span>: that example maps one rank
+2-D generalization of <a class="reference internal" href="01_distributed_pipeline.html"><span class="doc">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</span></a>: that example maps one rank
 per stage; here each stage is a whole <strong>domain sub-mesh</strong> cooperating on one large
 system, and the two stages form the pipeline dimension.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">FIRE</span></code> is deprecated in favour of <code class="docutils literal notranslate"><span class="pre">FIRE2</span></code>, and constructing it emits a
+<code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>. This example still uses <code class="docutils literal notranslate"><span class="pre">FIRE</span></code> on purpose:
+<code class="docutils literal notranslate"><span class="pre">FIRE2</span></code> is not supported under <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code> yet, because it does not
+declare the global <code class="docutils literal notranslate"><span class="pre">v·f</span></code>, <code class="docutils literal notranslate"><span class="pre">v·v</span></code> and <code class="docutils literal notranslate"><span class="pre">f·f</span></code> reductions that the domain
+coordinator needs, so its timestep adaptation would run on per-shard values.
+Switch this example to <code class="docutils literal notranslate"><span class="pre">FIRE2</span></code> once it supports <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>.</p>
+</div>
 <p class="rubric">Topology</p>
 <figure class="align-default" id="id1">
-<div class="graphviz"><object data="../../_images/graphviz-3d306487c059ad10e5d21ca538619d453d27e9de.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">digraph topology {
+digraph topology {
     rankdir=LR
     fontname=&quot;Helvetica&quot;
     node [fontname=&quot;Helvetica&quot; fontsize=11 shape=box style=&quot;rounded,filled&quot; fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;]
@@ -503,8 +522,7 @@ system, and the two stages form the pipeline dimension.</p>
     r0 -&gt; r1 [dir=both style=dashed label=&quot;halo&quot;]
     r2 -&gt; r3 [dir=both style=dashed label=&quot;halo&quot;]
     r0 -&gt; r2 [style=bold color=&quot;#c0392b&quot; penwidth=2 label=&quot;hand off\n(lead→lead)&quot;]
-}</p></object></div>
-<figcaption>
+}<figcaption>
 <p><span class="caption-text">FIRE (domain group {0,1}) → NVT (domain group {2,3}) on a 2×2 mesh.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
@@ -560,13 +578,13 @@ no distributed-aware code leaks into the model or the integrators.</p>
 <span class="n">_DISTRIBUTED_ENV</span> <span class="o">=</span> <span class="s2">&quot;RANK&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span> <span class="ow">and</span> <span class="s2">&quot;WORLD_SIZE&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span>
 
 <span class="c1"># Reuse the SiO2 supercell builder shared across the distributed examples.</span>
-<span class="c1"># Sphinx-Gallery executes examples without defining ``__file__`` and skips the</span>
-<span class="c1"># launcher path below, so only resolve the benchmark import for a real run.</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="n">_DOCS_BUILD</span><span class="p">:</span>
-    <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span>
-        <span class="mi">0</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parents</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">/</span> <span class="s2">&quot;benchmark&quot;</span> <span class="o">/</span> <span class="s2">&quot;distributed&quot;</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">_benchmark_common</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_sio2_supercell</span>  <span class="c1"># noqa: E402</span>
+<span class="c1"># Sphinx-Gallery does not define ``__file__``; it runs each example from the</span>
+<span class="c1"># example&#39;s own directory, so fall back to the working directory there.</span>
+<span class="n">_EXAMPLE_DIR</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span> <span class="k">if</span> <span class="s2">&quot;__file__&quot;</span> <span class="ow">in</span> <span class="nb">globals</span><span class="p">()</span> <span class="k">else</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span>
+<span class="p">)</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">_EXAMPLE_DIR</span><span class="o">.</span><span class="n">parents</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="s2">&quot;benchmark&quot;</span> <span class="o">/</span> <span class="s2">&quot;distributed&quot;</span><span class="p">))</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">_benchmark_common</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_sio2_supercell</span>  <span class="c1"># noqa: E402</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">build_initial_batch</span><span class="p">(</span>
@@ -653,6 +671,7 @@ no distributed-aware code leaks into the model or the integrators.</p>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run the FIRE to NVT pipeline over a domain sub-mesh.&quot;&quot;&quot;</span>
     <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
         <span class="n">description</span><span class="o">=</span><span class="s2">&quot;FIRE → NVT as a 2-D-parallel (pipeline × domain) pipeline.&quot;</span>
     <span class="p">)</span>
@@ -837,7 +856,7 @@ no distributed-aware code leaks into the model or the integrators.</p>
     <span class="n">main</span><span class="p">()</span>
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.002 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.003 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-distributed-07-fire-nvt-dd-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/c989df3c737a16ae977429104e08d8bd/07_fire_nvt_dd.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">07_fire_nvt_dd.ipynb</span></code></a></p>

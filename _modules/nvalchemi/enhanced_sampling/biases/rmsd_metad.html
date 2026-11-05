@@ -1,0 +1,1255 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.enhanced_sampling.biases.rmsd_metad &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/enhanced_sampling/biases/rmsd_metad';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.en...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.enhanced_sampling.biases.rmsd_metad</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;xTB-style Cartesian RMSD metadynamics for conformer exploration.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._adaptive</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdaptivePotentialMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._bias</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConservativeBias</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._history</span><span class="w"> </span><span class="kn">import</span> <span class="n">DepositHistoryMixin</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._adaptive</span><span class="w"> </span><span class="kn">import</span> <span class="n">BiasContext</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;RMSDMetaDynamicsBias&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_squared_rmsd</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">references</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Return the optimally aligned squared RMSD, shape ``[B, R]``.</span>
+
+<span class="sd">    Alignment is solved by the quaternion characteristic-polynomial route</span>
+<span class="sd">    (Coutsias, Seok &amp; Dill 2004) rather than an SVD Kabsch: the maximum of</span>
+<span class="sd">    :math:`\mathrm{tr}(\mathbf{R}\mathbf{H})` over proper rotations is the</span>
+<span class="sd">    largest eigenvalue of a symmetric ``4 x 4`` key matrix built from the</span>
+<span class="sd">    covariance ``H``.  Two properties matter here:</span>
+
+<span class="sd">    * The proper-rotation constraint is built in.  An SVD needs an explicit</span>
+<span class="sd">      ``det`` correction, and the sign flip is a non-differentiable branch on</span>
+<span class="sd">      the compiled path.</span>
+<span class="sd">    * Only an eigen*value* is needed, never an eigenvector or a rotation</span>
+<span class="sd">      matrix.  Eigenvector gradients blow up when singular values are nearly</span>
+<span class="sd">      degenerate, which is exactly what happens for symmetric-top and linear</span>
+<span class="sd">      molecules; the largest eigenvalue stays simple.</span>
+
+<span class="sd">    The result is the *squared* RMSD throughout.  ``sqrt`` has infinite</span>
+<span class="sd">    derivative at zero, and a reference structure is visited at RMSD zero</span>
+<span class="sd">    every time one is deposited, so taking the square root would put a force</span>
+<span class="sd">    singularity at the most frequently sampled point of the run.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coords:</span>
+<span class="sd">        Current coordinates, shape ``[B, M, 3]``.</span>
+<span class="sd">    references:</span>
+<span class="sd">        Reference coordinates, shape ``[R, M, 3]``.  Assumed already</span>
+<span class="sd">        centered on their centroid.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Tensor</span>
+<span class="sd">        Squared RMSD in ``A^2``, shape ``[B, R]``, clamped at zero.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">centered</span> <span class="o">=</span> <span class="n">coords</span> <span class="o">-</span> <span class="n">coords</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># [B, M, 3]</span>
+
+    <span class="c1"># Inner products, both invariant to rotation.</span>
+    <span class="n">g_x</span> <span class="o">=</span> <span class="p">(</span><span class="n">centered</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>  <span class="c1"># [B]</span>
+    <span class="n">g_y</span> <span class="o">=</span> <span class="p">(</span><span class="n">references</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>  <span class="c1"># [R]</span>
+
+    <span class="c1"># Covariance for every (walker, reference) pair.</span>
+    <span class="n">cov</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;bmi,rmj-&gt;brij&quot;</span><span class="p">,</span> <span class="n">centered</span><span class="p">,</span> <span class="n">references</span><span class="p">)</span>  <span class="c1"># [B, R, 3, 3]</span>
+    <span class="n">xx</span><span class="p">,</span> <span class="n">xy</span><span class="p">,</span> <span class="n">xz</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">cov</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">cov</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+    <span class="n">yx</span><span class="p">,</span> <span class="n">yy</span><span class="p">,</span> <span class="n">yz</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">cov</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">cov</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+    <span class="n">zx</span><span class="p">,</span> <span class="n">zy</span><span class="p">,</span> <span class="n">zz</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">cov</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">cov</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+
+    <span class="n">key</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">xx</span> <span class="o">+</span> <span class="n">yy</span> <span class="o">+</span> <span class="n">zz</span><span class="p">,</span> <span class="n">yz</span> <span class="o">-</span> <span class="n">zy</span><span class="p">,</span> <span class="n">zx</span> <span class="o">-</span> <span class="n">xz</span><span class="p">,</span> <span class="n">xy</span> <span class="o">-</span> <span class="n">yx</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">yz</span> <span class="o">-</span> <span class="n">zy</span><span class="p">,</span> <span class="n">xx</span> <span class="o">-</span> <span class="n">yy</span> <span class="o">-</span> <span class="n">zz</span><span class="p">,</span> <span class="n">xy</span> <span class="o">+</span> <span class="n">yx</span><span class="p">,</span> <span class="n">zx</span> <span class="o">+</span> <span class="n">xz</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">zx</span> <span class="o">-</span> <span class="n">xz</span><span class="p">,</span> <span class="n">xy</span> <span class="o">+</span> <span class="n">yx</span><span class="p">,</span> <span class="o">-</span><span class="n">xx</span> <span class="o">+</span> <span class="n">yy</span> <span class="o">-</span> <span class="n">zz</span><span class="p">,</span> <span class="n">yz</span> <span class="o">+</span> <span class="n">zy</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">xy</span> <span class="o">-</span> <span class="n">yx</span><span class="p">,</span> <span class="n">zx</span> <span class="o">+</span> <span class="n">xz</span><span class="p">,</span> <span class="n">yz</span> <span class="o">+</span> <span class="n">zy</span><span class="p">,</span> <span class="o">-</span><span class="n">xx</span> <span class="o">-</span> <span class="n">yy</span> <span class="o">+</span> <span class="n">zz</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span>
+    <span class="p">)</span>  <span class="c1"># [B, R, 4, 4]</span>
+
+    <span class="n">lambda_max</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigvalsh</span><span class="p">(</span><span class="n">key</span><span class="p">)[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># [B, R]</span>
+    <span class="n">msd</span> <span class="o">=</span> <span class="p">(</span><span class="n">g_x</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">g_y</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">lambda_max</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_atoms</span>
+    <span class="c1"># Exactly-aligned pairs land a rounding step below zero.</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">msd</span><span class="p">,</span> <span class="nb">min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="RMSDMetaDynamicsBias">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.html#nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RMSDMetaDynamicsBias</span><span class="p">(</span>
+    <span class="n">AdaptivePotentialMixin</span><span class="p">,</span> <span class="n">DepositHistoryMixin</span><span class="p">,</span> <span class="n">ConservativeBias</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Repulsive Gaussian bias over retained reference structures.</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        V(x, t) = \sum_r f_r(t)\, k_\mathrm{push}</span>
+<span class="sd">                  \exp\!\left(-\alpha\, \mathrm{RMSD}_A(x, x_r)^2\right)</span>
+
+<span class="sd">    where :math:`\mathrm{RMSD}_A` is the Cartesian RMSD after optimal</span>
+<span class="sd">    translation and rotation.  Each deposition appends the current geometry</span>
+<span class="sd">    to the reference set, so the bias pushes the system away from everywhere</span>
+<span class="sd">    it has already been.  This is the conformer-exploration scheme used by</span>
+<span class="sd">    xTB/CREST metadynamics.</span>
+
+<span class="sd">    Unlike :class:`~nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias`,</span>
+<span class="sd">    there is no collective variable to choose: the &quot;CV&quot; is the whole</span>
+<span class="sd">    (selected) geometry, which is what makes it a general-purpose explorer</span>
+<span class="sd">    for molecules whose interesting degrees of freedom are not known in</span>
+<span class="sd">    advance.  The price is that it has no free-energy interpretation — it is</span>
+<span class="sd">    a structure-generation method, not an estimator, and there is</span>
+<span class="sd">    deliberately no ``free_energy`` here.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    k_push:</span>
+<span class="sd">        Per-reference bias amplitude in eV.  Must be positive; a negative</span>
+<span class="sd">        amplitude would attract the system to structures it has already</span>
+<span class="sd">        visited.</span>
+<span class="sd">    alpha:</span>
+<span class="sd">        Gaussian width parameter in ``A^-2``.  Larger is narrower.</span>
+<span class="sd">    name:</span>
+<span class="sd">        Unique bias identifier.</span>
+<span class="sd">    atom_indices:</span>
+<span class="sd">        Atom indices *within each graph* to align and compare, shape ``[M]``.</span>
+<span class="sd">        ``None`` uses every atom.  The usual choice is heavy atoms only:</span>
+<span class="sd">        hydrogens rotating on a methyl group produce RMSD the exploration</span>
+<span class="sd">        does not care about.</span>
+<span class="sd">    frequency:</span>
+<span class="sd">        Dynamics steps between depositions.  The</span>
+<span class="sd">        :class:`~nvalchemi.hooks.Hook` attribute, with the meaning it has</span>
+<span class="sd">        everywhere else.</span>
+<span class="sd">    storage:</span>
+<span class="sd">        ``&quot;fifo&quot;`` (default), ``&quot;preallocated&quot;``, or ``&quot;grow&quot;``.  FIFO is the</span>
+<span class="sd">        xTB-compatible default and is not a compromise here the way it is for</span>
+<span class="sd">        well-tempered metadynamics: with no free energy to reconstruct,</span>
+<span class="sd">        discarding the oldest references is a deliberate choice to keep</span>
+<span class="sd">        pushing outward rather than accumulating an ever-stiffer cage.</span>
+<span class="sd">    max_references:</span>
+<span class="sd">        Capacity.  Required for ``&quot;preallocated&quot;`` and ``&quot;fifo&quot;``; the</span>
+<span class="sd">        initial chunk for ``&quot;grow&quot;``.</span>
+<span class="sd">    history:</span>
+<span class="sd">        ``&quot;shared&quot;``, ``&quot;state&quot;``, or ``&quot;walker&quot;``, as for well-tempered</span>
+<span class="sd">        metadynamics.  The latter two require the batch to carry</span>
+<span class="sd">        ``thermodynamic_state_id`` / ``walker_id`` and raise if it does not;</span>
+<span class="sd">        :class:`~nvalchemi.enhanced_sampling.EnhancedSampling` stamps both on</span>
+<span class="sd">        every step, so only direct evaluation has to supply them.</span>
+<span class="sd">    ramp_depositions:</span>
+<span class="sd">        Deposition events over which a new reference ramps from zero to full</span>
+<span class="sd">        amplitude.  A freshly deposited reference is at RMSD zero, so without</span>
+<span class="sd">        a ramp it switches on at its full value exactly where the system is</span>
+<span class="sd">        standing, which is the worst possible place for a force</span>
+<span class="sd">        discontinuity.  Defaults to ``1``.</span>
+<span class="sd">    references:</span>
+<span class="sd">        Optional warm start, shape ``[R, M, 3]``, in chronological order.</span>
+<span class="sd">        The xTB convention of seeding with a displaced copy of the initial</span>
+<span class="sd">        structure is expressed by passing it here.</span>
+<span class="sd">    compute_stress:</span>
+<span class="sd">        Passed through to :class:`ConservativeBias`.  Defaults to ``False``:</span>
+<span class="sd">        this bias rejects periodic systems, so there is no cell to</span>
+<span class="sd">        differentiate with respect to.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        For a non-positive ``k_push`` or ``alpha``, an invalid storage</span>
+<span class="sd">        policy or history mode, a missing capacity, a malformed</span>
+<span class="sd">        ``atom_indices``, or warm-start references of the wrong shape.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Periodic systems are rejected</span>
+<span class="sd">        Cartesian RMSD against a stored reference is not well defined under</span>
+<span class="sd">        periodic boundary conditions: an atom that diffuses across a cell</span>
+<span class="sd">        face is physically unmoved but Cartesian-displaced by a lattice</span>
+<span class="sd">        vector, so the RMSD jumps and the bias delivers a large spurious</span>
+<span class="sd">        force.  Making this correct needs a minimum-image-aware,</span>
+<span class="sd">        correspondence-resolving metric.  Rather than return a plausible</span>
+<span class="sd">        wrong number, :meth:`evaluate` raises.</span>
+
+<span class="sd">        Periodicity is read from ``batch.pbc``, not from the presence of a</span>
+<span class="sd">        cell.  A molecular batch carrying a **bounding box** with ``pbc``</span>
+<span class="sd">        all-False is accepted, which is the common case for a solvated or</span>
+<span class="sd">        boxed molecule; a slab (``pbc=[True, True, False]``) is rejected,</span>
+<span class="sd">        since wrapping along any axis is enough to break the metric.  A</span>
+<span class="sd">        non-zero cell with no ``pbc`` flags at all is refused as undeclared</span>
+<span class="sd">        rather than assumed non-periodic.</span>
+
+<span class="sd">    Fixed atom correspondence</span>
+<span class="sd">        Atom ``i`` is always compared against atom ``i`` of the reference.</span>
+<span class="sd">        No permutation search is performed, so two structures identical up to</span>
+<span class="sd">        relabelling of equivalent atoms register as distinct.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import torch</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.enhanced_sampling import RMSDMetaDynamicsBias</span>
+<span class="sd">    &gt;&gt;&gt; bias = RMSDMetaDynamicsBias(</span>
+<span class="sd">    ...     k_push=0.02, alpha=0.5, max_references=50,</span>
+<span class="sd">    ...     atom_indices=torch.tensor([0, 1, 2]),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; bias.reference_count.item()</span>
+<span class="sd">    0</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># DepositHistoryMixin: what this bias calls a deposit, and which buffers</span>
+    <span class="c1"># hold the table.  reference_coords comes first, so it supplies the device.</span>
+    <span class="n">_deposit_noun</span> <span class="o">=</span> <span class="s2">&quot;reference&quot;</span>
+    <span class="n">_capacity_option</span> <span class="o">=</span> <span class="s2">&quot;max_references&quot;</span>
+    <span class="n">_full_advice</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;Raise max_references, lengthen frequency, or switch to &quot;</span>
+        <span class="s2">&quot;storage=&#39;fifo&#39;, which is the xTB-compatible policy and discards the &quot;</span>
+        <span class="s2">&quot;oldest reference instead.&quot;</span>
+    <span class="p">)</span>
+    <span class="n">_deposit_buffers</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="s2">&quot;reference_coords&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;reference_owner&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;reference_step&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_written_attr</span> <span class="o">=</span> <span class="s2">&quot;references_written&quot;</span>
+    <span class="n">_owner_attr</span> <span class="o">=</span> <span class="s2">&quot;reference_owner&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">k_push</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;rmsd_metadynamics&quot;</span><span class="p">,</span>
+        <span class="n">atom_indices</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">500</span><span class="p">,</span>
+        <span class="n">storage</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;preallocated&quot;</span><span class="p">,</span> <span class="s2">&quot;grow&quot;</span><span class="p">,</span> <span class="s2">&quot;fifo&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;fifo&quot;</span><span class="p">,</span>
+        <span class="n">max_references</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">history</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;shared&quot;</span><span class="p">,</span> <span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="s2">&quot;walker&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;shared&quot;</span><span class="p">,</span>
+        <span class="n">ramp_depositions</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">references</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">compute_stress</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">compute_stress</span><span class="o">=</span><span class="n">compute_stress</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">validate_history_options</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">history</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">k_push</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: k_push must be positive, got </span><span class="si">{</span><span class="n">k_push</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;A non-positive amplitude would attract the system back to &quot;</span>
+                <span class="s2">&quot;structures it has already visited.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">alpha</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: alpha must be positive, got </span><span class="si">{</span><span class="n">alpha</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: frequency must be at least 1, got </span><span class="si">{</span><span class="n">frequency</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">ramp_depositions</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: ramp_depositions must be non-negative, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">ramp_depositions</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">storage</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;preallocated&quot;</span><span class="p">,</span> <span class="s2">&quot;fifo&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">max_references</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: storage=</span><span class="si">{</span><span class="n">storage</span><span class="si">!r}</span><span class="s2"> needs an explicit &quot;</span>
+                <span class="s2">&quot;max_references — it is the whole point of the policy, either &quot;</span>
+                <span class="s2">&quot;the ceiling that raises or the ring that overwrites.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">capacity</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_references</span><span class="p">)</span> <span class="k">if</span> <span class="n">max_references</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">64</span>
+        <span class="k">if</span> <span class="n">capacity</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: max_references must be at least 1, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">max_references</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">atom_indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">selection</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">selection</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">atom_indices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">selection</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;RMSDMetaDynamicsBias: atom_indices is empty; pass None to &quot;</span>
+                    <span class="s2">&quot;use every atom.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">bool</span><span class="p">((</span><span class="n">selection</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: atom_indices must be non-negative &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;per-graph indices, got </span><span class="si">{</span><span class="n">selection</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">selection</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="n">selection</span><span class="o">.</span><span class="n">numel</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: atom_indices contains duplicates &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">selection</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">). A repeated atom is silently &quot;</span>
+                    <span class="s2">&quot;weighted twice in the RMSD.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">k_push</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">k_push</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">storage</span> <span class="o">=</span> <span class="n">storage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="n">history</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ramp_depositions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ramp_depositions</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span> <span class="o">=</span> <span class="n">capacity</span>
+
+        <span class="k">if</span> <span class="n">selection</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;atom_indices&quot;</span><span class="p">,</span> <span class="n">selection</span><span class="p">)</span>
+
+        <span class="n">n_sites</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">references</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">references</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">selection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">n_sites</span> <span class="o">=</span> <span class="n">selection</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_allocate</span><span class="p">(</span><span class="n">capacity</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">n_sites</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">references</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_seed</span><span class="p">(</span><span class="n">references</span><span class="p">)</span>
+
+        <span class="c1"># The reference set is per-state under &quot;state&quot; history, so an accepted</span>
+        <span class="c1"># swap changes which references a walker feels.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_dependent_for_exchange</span> <span class="o">=</span> <span class="n">history</span> <span class="o">==</span> <span class="s2">&quot;state&quot;</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Storage</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_allocate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">capacity</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_sites</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create or replace the reference buffers.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        capacity:</span>
+<span class="sd">            Number of reference slots.</span>
+<span class="sd">        n_sites:</span>
+<span class="sd">            Number of compared atoms per reference.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">()</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;reference_coords&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;reference_coords&quot;</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">capacity</span><span class="p">,</span> <span class="n">n_sites</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;reference_owner&quot;</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">capacity</span><span class="p">,),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;reference_step&quot;</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">capacity</span><span class="p">,),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="c1"># reference_count saturates at capacity; references_written keeps</span>
+        <span class="c1"># counting, which fixes the FIFO ring position after it has wrapped.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;reference_count&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;references_written&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;deposits&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">references</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Install warm-start references in chronological order.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        references:</span>
+<span class="sd">            Shape ``[R, M, 3]``, oldest first.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the shape is not ``[R, M, 3]``, conflicts with</span>
+<span class="sd">            ``atom_indices``, or exceeds the capacity.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">refs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">references</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">refs</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">3</span> <span class="ow">or</span> <span class="n">refs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: references must have shape [R, M, 3], &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">refs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">refs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="o">.</span><span class="n">numel</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: references have </span><span class="si">{</span><span class="n">refs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> atoms &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;but atom_indices selects </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">refs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias: </span><span class="si">{</span><span class="n">refs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> warm-start references &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;exceed max_references=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">refs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_allocate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">refs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+
+        <span class="n">count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">refs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="c1"># Stored centered: the metric is translation invariant, so removing the</span>
+        <span class="c1"># centroid once at deposition keeps it out of every later comparison.</span>
+        <span class="n">centered</span> <span class="o">=</span> <span class="n">refs</span> <span class="o">-</span> <span class="n">refs</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="p">[:</span><span class="n">count</span><span class="p">]</span> <span class="o">=</span> <span class="n">centered</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reference_owner</span><span class="p">[:</span><span class="n">count</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">==</span> <span class="s2">&quot;shared&quot;</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="c1"># Warm-start references are already fully active; a ramp is only for</span>
+        <span class="c1"># references deposited into a running trajectory.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reference_step</span><span class="p">[:</span><span class="n">count</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">ramp_depositions</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reference_count</span> <span class="o">+=</span> <span class="n">count</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">references_written</span> <span class="o">+=</span> <span class="n">count</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Energy</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_gather_sites</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the compared coordinates per graph, shape ``[B, M, 3]``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        current:</span>
+<span class="sd">            The live batch.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Selected positions, differentiable with respect to</span>
+<span class="sd">            ``current.positions``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">positions</span>
+        <span class="n">batch_ptr</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">batch_ptr</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">batch_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># [B]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Uniform atom counts are checked in evaluate(), so the -1 here</span>
+            <span class="c1"># resolves without a data-dependent int() that would break the graph.</span>
+            <span class="k">return</span> <span class="n">positions</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">offsets</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+        <span class="n">selection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">flat</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">selection</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># [B, M]</span>
+        <span class="k">return</span> <span class="n">positions</span><span class="p">[</span><span class="n">flat</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">offsets</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reference_scale</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return each reference&#39;s ramp factor, shape ``[capacity]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Factors in ``[0, 1]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_depositions</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">age</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">deposits</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">reference_step</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">age</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ramp_depositions</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+<div class="viewcode-block" id="RMSDMetaDynamicsBias.repulsion">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.html#nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.repulsion">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">repulsion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coords</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">owner_key</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the accumulated repulsion, shape ``[B]``.</span>
+
+<span class="sd">        Contains no data-dependent Python branch, so it compiles with</span>
+<span class="sd">        ``fullgraph=True``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coords:</span>
+<span class="sd">            Compared coordinates, shape ``[B, M, 3]``.</span>
+<span class="sd">        owner_key:</span>
+<span class="sd">            History key per graph, shape ``[B]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Bias energy per graph in eV, shape ``[B]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="c1"># A bias built without atom_indices or warm-start references does</span>
+            <span class="c1"># not learn its site count until the first deposition; until then</span>
+            <span class="c1"># the reference set is empty and the bias is identically zero.</span>
+            <span class="c1"># This is a shape guard, not a data-dependent branch.</span>
+            <span class="k">return</span> <span class="n">coords</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="n">slots</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">live</span> <span class="o">=</span> <span class="n">slots</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">reference_count</span>
+
+        <span class="n">msd</span> <span class="o">=</span> <span class="n">_squared_rmsd</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="p">)</span>  <span class="c1"># [B, R]</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">msd</span><span class="p">)</span>
+
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">k_push</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reference_scale</span><span class="p">()</span>  <span class="c1"># [R]</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">live</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">!=</span> <span class="s2">&quot;shared&quot;</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_owner</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="n">owner_key</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">kernel</span> <span class="o">*</span> <span class="n">weights</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="n">mask</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RMSDMetaDynamicsBias.forward">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.html#nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject periodic batches, then derive energy and forces.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        **kwargs:</span>
+<span class="sd">            Forwarded to :meth:`ConservativeBias.forward`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ModelOutputs</span>
+<span class="sd">            As :meth:`ConservativeBias.forward`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the batch is periodic according to ``batch.pbc``, if it</span>
+<span class="sd">            carries a non-zero cell with no ``pbc`` flags, or if graphs in</span>
+<span class="sd">            the batch have differing atom counts while ``atom_indices`` is</span>
+<span class="sd">            ``None``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reject_periodic</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_sites</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reject_periodic</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise if the batch is under periodic boundary conditions.</span>
+
+<span class="sd">        Periodicity is read from ``batch.pbc`` when it is present, matching</span>
+<span class="sd">        :func:`~nvalchemi.enhanced_sampling.pair_distance` and the rest of</span>
+<span class="sd">        the toolkit: a cell is a box, and only the flags say whether atoms</span>
+<span class="sd">        wrap through its faces.  A molecular batch carrying a bounding box</span>
+<span class="sd">        with ``pbc`` all-False is therefore accepted — it is exactly the</span>
+<span class="sd">        non-periodic case this bias is for.</span>
+
+<span class="sd">        Without ``pbc`` there is nothing to read, and a non-zero cell is</span>
+<span class="sd">        refused rather than assumed harmless.  A batch that declares a cell</span>
+<span class="sd">        but no boundary condition has not said which case it is, and the</span>
+<span class="sd">        failure this guard exists to prevent is silent.</span>
+
+<span class="sd">        Runs in ``forward`` rather than ``energy`` so the flag reduction</span>
+<span class="sd">        stays off the compiled path.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        current:</span>
+<span class="sd">            The live batch.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If any graph is periodic along any axis, or if a non-zero cell</span>
+<span class="sd">            is present with no ``pbc`` flags to interpret it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cell</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">current</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">((</span><span class="n">cell</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="k">return</span>
+
+        <span class="n">pbc</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">current</span><span class="p">,</span> <span class="s2">&quot;pbc&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pbc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: the batch carries a &quot;</span>
+                <span class="s2">&quot;non-zero cell but no pbc flags, so whether atoms wrap &quot;</span>
+                <span class="s2">&quot;through its faces is undeclared. Set pbc=False on a &quot;</span>
+                <span class="s2">&quot;molecular system with a bounding box; Cartesian RMSD is &quot;</span>
+                <span class="s2">&quot;only defined for the non-periodic case.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">pbc</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="k">return</span>
+
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: the batch is periodic &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(pbc=</span><span class="si">{</span><span class="n">pbc</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">pbc</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">), and &quot;</span>
+            <span class="s2">&quot;Cartesian RMSD against a stored reference is not defined under &quot;</span>
+            <span class="s2">&quot;periodic boundary conditions — an atom crossing a cell face is &quot;</span>
+            <span class="s2">&quot;physically unmoved but Cartesian-displaced by a lattice vector, &quot;</span>
+            <span class="s2">&quot;which would inject a large spurious force. Use this bias on &quot;</span>
+            <span class="s2">&quot;non-periodic (molecular) systems — a bounding-box cell with &quot;</span>
+            <span class="s2">&quot;pbc=False is fine — or bias a periodic-aware CV with &quot;</span>
+            <span class="s2">&quot;WellTemperedMetaDynamicsBias instead.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_sites</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check that the compared-atom selection is well defined.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        current:</span>
+<span class="sd">            The live batch.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If atom counts differ across graphs without an explicit</span>
+<span class="sd">            selection, or a selected index is out of range for some graph.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">batch_ptr</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">batch_ptr</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">batch_ptr</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">batch_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">bool</span><span class="p">((</span><span class="n">counts</span> <span class="o">!=</span> <span class="n">counts</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: graphs in the batch &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;have differing atom counts </span><span class="si">{</span><span class="n">counts</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">, so there &quot;</span>
+                    <span class="s2">&quot;is no fixed atom correspondence to compare against a &quot;</span>
+                    <span class="s2">&quot;shared reference set. Pass atom_indices to select a &quot;</span>
+                    <span class="s2">&quot;common set of atoms per graph.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">selection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">smallest</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">selection</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">&gt;=</span> <span class="n">smallest</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RMSDMetaDynamicsBias </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: atom_indices requests &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;local index </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">selection</span><span class="o">.</span><span class="n">max</span><span class="p">())</span><span class="si">}</span><span class="s2"> but the smallest graph in &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;the batch has only </span><span class="si">{</span><span class="n">smallest</span><span class="si">}</span><span class="s2"> atoms. atom_indices are &quot;</span>
+                <span class="s2">&quot;per-graph local indices, not global ones.&quot;</span>
+            <span class="p">)</span>
+
+<div class="viewcode-block" id="RMSDMetaDynamicsBias.energy">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.html#nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.energy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the accumulated RMSD bias, shape ``[B, 1]``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        current:</span>
+<span class="sd">            Batch with strained positions supplied by</span>
+<span class="sd">            :meth:`ConservativeBias.evaluate`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Shape ``[B, 1]`` in eV.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gather_sites</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+        <span class="n">owner</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_owner_key</span><span class="p">(</span><span class="n">current</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">repulsion</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">owner</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Deposition</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="RMSDMetaDynamicsBias.update">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.html#nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">BiasContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Append the current geometry to the reference set, one per walker.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx:</span>
+<span class="sd">            The capture.  ``ctx.batch`` is the post-step frame; the bias&#39;s own</span>
+<span class="sd">            preceding contribution is on ``ctx.contribution``.</span>
+<span class="sd">        stage:</span>
+<span class="sd">            The stage being dispatched, always :attr:`stage`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">frames</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gather_sites</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>  <span class="c1"># [B, M, 3]</span>
+            <span class="n">centered</span> <span class="o">=</span> <span class="n">coords</span> <span class="o">-</span> <span class="n">coords</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">owner</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_owner_key</span><span class="p">(</span><span class="n">frames</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+            <span class="n">count</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">centered</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+                <span class="c1"># First deposition of a bias built without atom_indices or</span>
+                <span class="c1"># warm-start references: the site count is only known now.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_allocate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">centered</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+            <span class="n">slots</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_slots</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="p">[</span><span class="n">slots</span><span class="p">]</span> <span class="o">=</span> <span class="n">centered</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reference_owner</span><span class="p">[</span><span class="n">slots</span><span class="p">]</span> <span class="o">=</span> <span class="n">owner</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reference_step</span><span class="p">[</span><span class="n">slots</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">deposits</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">deposits</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">references_written</span> <span class="o">+=</span> <span class="n">count</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reference_count</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">references_written</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bump_state_version</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="RMSDMetaDynamicsBias.config_fingerprint">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.html#nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.config_fingerprint">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">config_fingerprint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the settings the retained references are only valid under.</span>
+
+<span class="sd">        ``k_push`` and ``alpha`` set how hard and how far the stored</span>
+<span class="sd">        structures repel; restoring a reference set under different values</span>
+<span class="sd">        keeps the geometries but changes what they do.  ``atom_indices`` is</span>
+<span class="sd">        held as a buffer and names which atoms the stored coordinates are,</span>
+<span class="sd">        so without this check the caller&#39;s selection would be silently</span>
+<span class="sd">        overwritten by the checkpoint&#39;s.</span>
+
+<span class="sd">        ``max_references`` is absent for the same reason ``max_hills`` is</span>
+<span class="sd">        absent from the well-tempered fingerprint.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            The checked configuration.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;k_push&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">k_push</span><span class="p">,</span>
+            <span class="s2">&quot;alpha&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span>
+            <span class="s2">&quot;storage&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">,</span>
+            <span class="s2">&quot;history&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">,</span>
+            <span class="s2">&quot;ramp_depositions&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_depositions</span><span class="p">,</span>
+            <span class="s2">&quot;atom_indices&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="kc">None</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="p">),</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="RMSDMetaDynamicsBias.load_state_dict">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.html#nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.load_state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore state, resizing the reference buffers to the checkpoint.</span>
+
+<span class="sd">        Both ``storage=&quot;grow&quot;`` and a bias whose site count was fixed at its</span>
+<span class="sd">        first deposition can carry buffer shapes that the constructor did not</span>
+<span class="sd">        produce, which ``nn.Module.load_state_dict`` would reject.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state:</span>
+<span class="sd">            Mapping from :meth:`state_dict`.</span>
+<span class="sd">        *args, **kwargs:</span>
+<span class="sd">            Forwarded up the MRO.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Any</span>
+<span class="sd">            Whatever the next ``load_state_dict`` returns.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">coords</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;reference_coords&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reference_coords</span><span class="o">.</span><span class="n">shape</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_allocate</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a concise description of the bias.&quot;&quot;&quot;</span>
+        <span class="n">sites</span> <span class="o">=</span> <span class="s2">&quot;all&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(name=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;references=</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference_count</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;storage=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="si">!r}</span><span class="s2">, history=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;k_push=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">k_push</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2">, alpha=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2">, atoms=</span><span class="si">{</span><span class="n">sites</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

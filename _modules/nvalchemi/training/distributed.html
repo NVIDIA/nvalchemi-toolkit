@@ -1,0 +1,879 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.distributed &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/distributed';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.distributed</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Structural helpers for distributed training managers.</span>
+
+<span class="sd">This module intentionally does not define a concrete manager class. Phase-2</span>
+<span class="sd">training can accept a manager supplied by another package while retaining a</span>
+<span class="sd">``torch.distributed`` fallback for local tests and ``torchrun`` launches.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributed</span> <span class="k">as</span> <span class="n">dist</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributed.nn.functional</span><span class="w"> </span><span class="kn">import</span> <span class="n">all_gather</span> <span class="k">as</span> <span class="n">_differentiable_all_gather</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">collective_device</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributedManager</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;all_gather_objects&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;all_gather_rows&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;all_reduce&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;all_reduce_flags&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;barrier&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;destroy_distributed&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;distributed_device&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_local_rank&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_rank&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_world_size&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;init_distributed&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;is_distributed_initialized&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_read_attr_or_call</span><span class="p">(</span><span class="n">manager</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">names</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the first manager attribute or zero-arg method result found.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">value</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+                <span class="k">continue</span>
+        <span class="k">return</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_call_manager</span><span class="p">(</span><span class="n">manager</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">names</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Call the first matching manager method and report whether one ran.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">method</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">method</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+            <span class="n">method</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_env_int</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read an integer torchrun environment variable.&quot;&quot;&quot;</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">is_distributed_initialized</span><span class="p">(</span><span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether distributed communication is initialized.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">_read_attr_or_call</span><span class="p">(</span>
+            <span class="n">manager</span><span class="p">,</span>
+            <span class="s2">&quot;is_initialized&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;initialized&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;is_distributed_initialized&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_rank</span><span class="p">(</span><span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the global process rank.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">_read_attr_or_call</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="s2">&quot;global_rank&quot;</span><span class="p">,</span> <span class="s2">&quot;rank&quot;</span><span class="p">,</span> <span class="s2">&quot;get_rank&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">_env_int</span><span class="p">(</span><span class="s2">&quot;RANK&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_world_size</span><span class="p">(</span><span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the distributed world size.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">_read_attr_or_call</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="s2">&quot;world_size&quot;</span><span class="p">,</span> <span class="s2">&quot;get_world_size&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">_env_int</span><span class="p">(</span><span class="s2">&quot;WORLD_SIZE&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_local_rank</span><span class="p">(</span><span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the process-local rank.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">_read_attr_or_call</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="s2">&quot;local_rank&quot;</span><span class="p">,</span> <span class="s2">&quot;get_local_rank&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">get_node_local_rank</span><span class="p">())</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">):</span>
+            <span class="k">pass</span>
+    <span class="k">return</span> <span class="n">_env_int</span><span class="p">(</span><span class="s2">&quot;LOCAL_RANK&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">distributed_device</span><span class="p">(</span>
+    <span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fallback</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">prefer_cuda</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve the device for the current rank.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">_read_attr_or_call</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;get_device&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="n">fallback_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">fallback</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prefer_cuda</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">get_local_rank</span><span class="p">(</span><span class="n">manager</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">fallback_device</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">init_distributed</span><span class="p">(</span>
+    <span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Initialize distributed communication and return whether this call did so.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">is_distributed_initialized</span><span class="p">(</span><span class="n">manager</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="n">manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_call_manager</span><span class="p">(</span>
+            <span class="n">manager</span><span class="p">,</span>
+            <span class="s2">&quot;init_process_group&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;initialize&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;init&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;setup&quot;</span><span class="p">,</span>
+            <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">get_world_size</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="n">resolved_backend</span> <span class="o">=</span> <span class="n">backend</span> <span class="ow">or</span> <span class="p">(</span><span class="s2">&quot;nccl&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;gloo&quot;</span><span class="p">)</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">resolved_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">True</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">destroy_distributed</span><span class="p">(</span><span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Destroy distributed communication if possible.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_call_manager</span><span class="p">(</span>
+            <span class="n">manager</span><span class="p">,</span>
+            <span class="s2">&quot;destroy_process_group&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;destroy&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;cleanup&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;teardown&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">destroy_process_group</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">barrier</span><span class="p">(</span><span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Synchronize all ranks when distributed communication is initialized.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">_call_manager</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="s2">&quot;barrier&quot;</span><span class="p">):</span>
+        <span class="k">return</span>
+    <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">barrier</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">all_reduce</span><span class="p">(</span>
+    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">op</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;All-reduce ``tensor`` in place and return it.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="s2">&quot;all_reduce&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">method</span><span class="p">):</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">method</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">op</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">tensor</span> <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">result</span>
+    <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">op</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">tensor</span>
+
+
+<div class="viewcode-block" id="all_reduce_flags">
+<a class="viewcode-back" href="../../../modules/training/generated/nvalchemi.training.distributed.all_reduce_flags.html#nvalchemi.training.distributed.all_reduce_flags">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">all_reduce_flags</span><span class="p">(</span>
+    <span class="n">flag</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">int</span><span class="p">,</span> <span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return every rank&#39;s *flag* as one tensor, this rank&#39;s at its own index.</span>
+
+<span class="sd">    Each rank raises its own entry of a zero vector and a ``MAX`` all-reduce</span>
+<span class="sd">    collects the vector, so the result reads the same on every rank and names</span>
+<span class="sd">    the ranks whose flag was set. The vector lives on the device</span>
+<span class="sd">    :func:`~nvalchemi.distributed.collective_device` picks for the backend in</span>
+<span class="sd">    use, so callers never choose a device for a collective themselves.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    flag : bool | int</span>
+<span class="sd">        This rank&#39;s verdict. A truthy value raises this rank&#39;s entry.</span>
+<span class="sd">    manager : DistributedManager | None, optional</span>
+<span class="sd">        Manager whose rank, world size, and ``all_reduce`` are used when</span>
+<span class="sd">        given. Default ``None`` reads ``torch.distributed`` or the launcher&#39;s</span>
+<span class="sd">        environment.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        Integer tensor of shape ``(world_size,)`` holding ``1`` where a rank</span>
+<span class="sd">        raised its flag. A single process gets a length-one tensor holding its</span>
+<span class="sd">        own flag, without a collective.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distributed import all_reduce_flags</span>
+<span class="sd">    &gt;&gt;&gt; flags = all_reduce_flags(shard_is_empty, manager)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; if bool(flags.any()):  # doctest: +SKIP</span>
+<span class="sd">    ...     raise ValueError(f&quot;Ranks {flags.nonzero().flatten().tolist()} came up empty.&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">world_size</span> <span class="o">=</span> <span class="n">get_world_size</span><span class="p">(</span><span class="n">manager</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">world_size</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="n">flag</span><span class="p">))],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">flags</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">collective_device</span><span class="p">())</span>
+    <span class="n">flags</span><span class="p">[</span><span class="n">get_rank</span><span class="p">(</span><span class="n">manager</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="n">flag</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">all_reduce</span><span class="p">(</span><span class="n">flags</span><span class="p">,</span> <span class="n">manager</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">MAX</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_require_process_group</span><span class="p">(</span><span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise when *name* would gather *world_size* ranks without a process group.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> gathers across </span><span class="si">{</span><span class="n">world_size</span><span class="si">!r}</span><span class="s2"> ranks, but no process group is &quot;</span>
+            <span class="s2">&quot;initialized. Initialize one before the collective, or run on one &quot;</span>
+            <span class="s2">&quot;process.&quot;</span>
+        <span class="p">)</span>
+
+
+<div class="viewcode-block" id="all_gather_rows">
+<a class="viewcode-back" href="../../../modules/training/generated/nvalchemi.training.distributed.all_gather_rows.html#nvalchemi.training.distributed.all_gather_rows">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">all_gather_rows</span><span class="p">(</span>
+    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">differentiable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">slice</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return every rank&#39;s *tensor* stacked along the leading dim, and this rank&#39;s rows.</span>
+
+<span class="sd">    Shards may differ in their leading size. The sizes are gathered first, on</span>
+<span class="sd">    the device :func:`~nvalchemi.distributed.collective_device` picks for the</span>
+<span class="sd">    backend, then every shard is padded to the largest, gathered, and trimmed</span>
+<span class="sd">    back, so the result holds each rank&#39;s rows in rank order and nothing</span>
+<span class="sd">    else. With *differentiable*, the gather goes through</span>
+<span class="sd">    :func:`torch.distributed.nn.functional.all_gather`, so a gradient reaching</span>
+<span class="sd">    the gathered tensor flows back to each rank&#39;s own rows, summed over the</span>
+<span class="sd">    ranks that used them. A single process gets its tensor back unchanged,</span>
+<span class="sd">    with a slice over all of it, without a collective.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    tensor : torch.Tensor</span>
+<span class="sd">        This rank&#39;s rows, of shape ``(n, ...)``. The trailing shape and the</span>
+<span class="sd">        dtype must agree across ranks.</span>
+<span class="sd">    manager : DistributedManager | None, optional</span>
+<span class="sd">        Manager whose rank and world size are read when given. Default</span>
+<span class="sd">        ``None`` reads ``torch.distributed`` or the launcher&#39;s environment.</span>
+<span class="sd">    differentiable : bool, optional</span>
+<span class="sd">        Whether the gathered tensor carries an autograd graph back to</span>
+<span class="sd">        *tensor*. Default ``True``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[torch.Tensor, slice]</span>
+<span class="sd">        The world tensor, of shape ``(sum of every rank&#39;s n, ...)``, and the</span>
+<span class="sd">        slice of its rows that came from this rank.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If more than one rank is reported but no process group is initialized.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distributed import all_gather_rows</span>
+<span class="sd">    &gt;&gt;&gt; world, rows = all_gather_rows(energies)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; torch.equal(world[rows], energies)  # doctest: +SKIP</span>
+<span class="sd">    True</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">world_size</span> <span class="o">=</span> <span class="n">get_world_size</span><span class="p">(</span><span class="n">manager</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">world_size</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">tensor</span><span class="p">,</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">_require_process_group</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="s2">&quot;all_gather_rows&quot;</span><span class="p">)</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">collective_device</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">count</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">)]</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">all_gather</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">size</span><span class="p">)</span> <span class="k">for</span> <span class="n">size</span> <span class="ow">in</span> <span class="n">counts</span><span class="p">]</span>
+    <span class="n">padding</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">sizes</span><span class="p">)</span> <span class="o">-</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+    <span class="n">padded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">padding</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">differentiable</span><span class="p">:</span>
+        <span class="n">gathered</span> <span class="o">=</span> <span class="n">_differentiable_all_gather</span><span class="p">(</span><span class="n">padded</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">gathered</span> <span class="o">=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">padded</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">)]</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">all_gather</span><span class="p">(</span><span class="n">gathered</span><span class="p">,</span> <span class="n">padded</span><span class="p">)</span>
+    <span class="n">world</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">shard</span><span class="p">[:</span><span class="n">size</span><span class="p">]</span> <span class="k">for</span> <span class="n">shard</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">gathered</span><span class="p">,</span> <span class="n">sizes</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span>
+    <span class="p">)</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">sizes</span><span class="p">[:</span> <span class="n">get_rank</span><span class="p">(</span><span class="n">manager</span><span class="p">)])</span>
+    <span class="k">return</span> <span class="n">world</span><span class="p">,</span> <span class="nb">slice</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">start</span> <span class="o">+</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="all_gather_objects">
+<a class="viewcode-back" href="../../../modules/training/generated/nvalchemi.training.distributed.all_gather_objects.html#nvalchemi.training.distributed.all_gather_objects">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">all_gather_objects</span><span class="p">(</span>
+    <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">manager</span><span class="p">:</span> <span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return every rank&#39;s *obj*, in rank order.</span>
+
+<span class="sd">    A single process gets ``[obj]`` without a collective. Under a process</span>
+<span class="sd">    group the objects travel through :func:`torch.distributed.all_gather_object`,</span>
+<span class="sd">    which pickles them, so the call suits small verdicts and summaries;</span>
+<span class="sd">    :func:`all_gather_rows` carries tensors.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obj : Any</span>
+<span class="sd">        This rank&#39;s picklable object.</span>
+<span class="sd">    manager : DistributedManager | None, optional</span>
+<span class="sd">        Manager whose world size is read when given. Default ``None`` reads</span>
+<span class="sd">        ``torch.distributed`` or the launcher&#39;s environment.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list[Any]</span>
+<span class="sd">        One entry per rank, this rank&#39;s at its own index.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If more than one rank is reported but no process group is initialized.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">world_size</span> <span class="o">=</span> <span class="n">get_world_size</span><span class="p">(</span><span class="n">manager</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">world_size</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">obj</span><span class="p">]</span>
+    <span class="n">_require_process_group</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="s2">&quot;all_gather_objects&quot;</span><span class="p">)</span>
+    <span class="n">gathered</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">world_size</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">all_gather_object</span><span class="p">(</span><span class="n">gathered</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">gathered</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

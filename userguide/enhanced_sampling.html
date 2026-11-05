@@ -1,0 +1,1941 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Enhanced Sampling &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/enhanced_sampling';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Generative Models" href="generative.html" />
+    <link rel="prev" title="Data Sinks" href="dynamics_sinks.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Enhanced Sampling</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="enhanced-sampling">
+<h1>Enhanced Sampling<a class="headerlink" href="#enhanced-sampling" title="Link to this heading">#</a></h1>
+<p>Molecular dynamics follows the natural motion of atoms, which means it spends
+almost all of its time in free-energy minima. Barrier crossings — diffusion
+events, reactions, nucleation, conformational change — are rare on MD
+timescales. Enhanced sampling adds a bias potential that pushes the system
+into regions it would not visit on its own, so that a fixed budget of model
+evaluations buys more of the physics you actually care about.</p>
+<p><code class="docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code> provides the bias abstractions, a set of
+built-in biases, and the <code class="docutils literal notranslate"><span class="pre">EnhancedSampling</span></code> strategy that configures a
+<code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> engine to run them.</p>
+<nav class="contents local" id="contents">
+<ul class="simple">
+<li><p><a class="reference internal" href="#quick-start" id="id3">Quick start</a></p></li>
+<li><p><a class="reference internal" href="#collective-variables" id="id4">Collective variables</a></p></li>
+<li><p><a class="reference internal" href="#built-in-biases" id="id5">Built-in biases</a></p>
+<ul>
+<li><p><a class="reference internal" href="#per-window-parameters" id="id6">Per-window parameters</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#metadynamics" id="id7">Metadynamics</a></p>
+<ul>
+<li><p><a class="reference internal" href="#well-tempered-metadynamics" id="id8">Well-tempered metadynamics</a></p></li>
+<li><p><a class="reference internal" href="#storage-policies" id="id9">Storage policies</a></p></li>
+<li><p><a class="reference internal" href="#multi-walker-history" id="id10">Multi-walker history</a></p></li>
+<li><p><a class="reference internal" href="#xtb-style-rmsd-metadynamics" id="id11">xTB-style RMSD metadynamics</a></p></li>
+<li><p><a class="reference internal" href="#deposition-timing" id="id12">Deposition timing</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#adaptive-biasing-force" id="id13">Adaptive biasing force</a></p>
+<ul>
+<li><p><a class="reference internal" href="#the-metric-correction" id="id14">The metric correction</a></p></li>
+<li><p><a class="reference internal" href="#sample-threshold-and-ramp" id="id15">Sample threshold and ramp</a></p></li>
+<li><p><a class="reference internal" href="#observation-ordering" id="id16">Observation ordering</a></p></li>
+<li><p><a class="reference internal" href="#no-energy-and-therefore-no-replica-exchange" id="id17">No energy, and therefore no replica exchange</a></p></li>
+<li><p><a class="reference internal" href="#reading-the-profile" id="id18">Reading the profile</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#writing-your-own-bias" id="id19">Writing your own bias</a></p>
+<ul>
+<li><p><a class="reference internal" href="#a-bias-is-an-additive-potential" id="id20">A bias is an additive potential</a></p></li>
+<li><p><a class="reference internal" href="#the-batteries-mixins" id="id21">The batteries: mixins</a></p></li>
+<li><p><a class="reference internal" href="#conservativebias" id="id22"><code class="docutils literal notranslate"><span class="pre">ConservativeBias</span></code></a></p></li>
+<li><p><a class="reference internal" href="#adaptive-biases" id="id23">Adaptive biases</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#the-strategy" id="id24">The strategy</a></p>
+<ul>
+<li><p><a class="reference internal" href="#the-hooks-it-installs" id="id25">The hooks it installs</a></p></li>
+<li><p><a class="reference internal" href="#what-it-guarantees" id="id26">What it guarantees</a></p></li>
+<li><p><a class="reference internal" href="#diagnostics" id="id27">Diagnostics</a></p></li>
+<li><p><a class="reference internal" href="#batch-requirements" id="id28">Batch requirements</a></p></li>
+<li><p><a class="reference internal" href="#walker-identity" id="id29">Walker identity</a></p></li>
+<li><p><a class="reference internal" href="#identity-across-a-refill" id="id30">Identity across a refill</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#checkpoint-and-restore" id="id31">Checkpoint and restore</a></p>
+<ul>
+<li><p><a class="reference internal" href="#only-at-an-epoch-boundary" id="id32">Only at an epoch boundary</a></p></li>
+<li><p><a class="reference internal" href="#transactional-by-construction" id="id33">Transactional by construction</a></p></li>
+<li><p><a class="reference internal" href="#bias-configuration-is-validated-not-just-bias-class" id="id34">Bias configuration is validated, not just bias class</a></p></li>
+<li><p><a class="reference internal" href="#model-weights-are-not-restored" id="id35">Model weights are not restored</a></p></li>
+<li><p><a class="reference internal" href="#warm-start-vs-restore" id="id36"><code class="docutils literal notranslate"><span class="pre">warm_start</span></code> vs <code class="docutils literal notranslate"><span class="pre">restore</span></code></a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#replica-exchange" id="id37">Replica exchange</a></p>
+<ul>
+<li><p><a class="reference internal" href="#one-walker-per-rung" id="id38">One walker per rung</a></p></li>
+<li><p><a class="reference internal" href="#the-ladder-binds-the-thermostat" id="id39">The ladder binds the thermostat</a></p></li>
+<li><p><a class="reference internal" href="#labels-move-coordinates-do-not" id="id40">Labels move, coordinates do not</a></p></li>
+<li><p><a class="reference internal" href="#acceptance" id="id41">Acceptance</a></p></li>
+<li><p><a class="reference internal" href="#pair-schedule" id="id42">Pair schedule</a></p></li>
+<li><p><a class="reference internal" href="#tuning-the-ladder" id="id43">Tuning the ladder</a></p></li>
+<li><p><a class="reference internal" href="#restoring-an-exchange-run" id="id44">Restoring an exchange run</a></p></li>
+<li><p><a class="reference internal" href="#reproducibility" id="id45">Reproducibility</a></p></li>
+<li><p><a class="reference internal" href="#not-supported" id="id46">Not supported</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#relationship-to-biasedpotentialhook" id="id47">Relationship to <code class="docutils literal notranslate"><span class="pre">BiasedPotentialHook</span></code></a></p></li>
+<li><p><a class="reference internal" href="#not-yet-implemented" id="id48">Not yet implemented</a></p></li>
+<li><p><a class="reference internal" href="#see-also" id="id49">See also</a></p></li>
+</ul>
+</nav>
+<section id="quick-start">
+<h2><a class="toc-backref" href="#id3" role="doc-backlink">Quick start</a><a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVTLangevin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">EnhancedSampling</span><span class="p">,</span> <span class="n">HarmonicUmbrellaBias</span><span class="p">,</span> <span class="n">pair_distance</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+
+<span class="n">pair</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+<span class="n">umbrella</span> <span class="o">=</span> <span class="n">HarmonicUmbrellaBias</span><span class="p">(</span>
+    <span class="n">cv</span><span class="o">=</span><span class="k">lambda</span> <span class="n">batch</span><span class="p">:</span> <span class="n">pair_distance</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">pair</span><span class="p">),</span>
+    <span class="n">centers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">2.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">2.5</span><span class="p">],</span> <span class="p">[</span><span class="mf">3.0</span><span class="p">]]),</span>   <span class="c1"># three windows</span>
+    <span class="n">stiffness</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>                                 <span class="c1"># eV/A^2</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;umbrella&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">sampling</span> <span class="o">=</span> <span class="n">EnhancedSampling</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>                                    <span class="c1"># any BaseModelMixin</span>
+    <span class="n">engine</span><span class="o">=</span><span class="n">NVTLangevin</span><span class="p">,</span>                             <span class="c1"># the class, not an instance</span>
+    <span class="n">engine_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">300.0</span><span class="p">,</span> <span class="s2">&quot;friction&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">},</span>
+    <span class="n">biases</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;umbrella&quot;</span><span class="p">:</span> <span class="n">umbrella</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="c1"># One window per graph. batch already carries forces/energy buffers — see</span>
+<span class="c1"># &quot;Batch requirements&quot; below.</span>
+<span class="n">batch</span><span class="p">[</span><span class="s2">&quot;thermodynamic_state_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">sampling</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">10_000</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Every window is a row of one batch, so all three are advanced by a single
+batched force evaluation per step rather than three separate simulations.</p>
+<p><code class="docutils literal notranslate"><span class="pre">EnhancedSampling</span></code> is a <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DynamicsStrategy.html#nvalchemi.dynamics.DynamicsStrategy" title="nvalchemi.dynamics.DynamicsStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStrategy</span></code></a>: it holds
+a <em>recipe</em> for the engine — the class and its constructor arguments — rather
+than a live engine, and <code class="docutils literal notranslate"><span class="pre">run()</span></code> builds one on first use and drives it.
+<code class="docutils literal notranslate"><span class="pre">sampling.dynamics()</span></code> returns that engine if you need it directly; it is
+cached, so consecutive <code class="docutils literal notranslate"><span class="pre">run()</span></code> calls continue one trajectory. Unlike the base
+class, <code class="docutils literal notranslate"><span class="pre">cache_engine</span></code> is always <code class="docutils literal notranslate"><span class="pre">True</span></code> here: the strategy’s hooks hold the
+run’s bookkeeping and belong to one engine.</p>
+</section>
+<section id="collective-variables">
+<h2><a class="toc-backref" href="#id4" role="doc-backlink">Collective variables</a><a class="headerlink" href="#collective-variables" title="Link to this heading">#</a></h2>
+<p>A CV is <strong>any differentiable callable</strong> <code class="docutils literal notranslate"><span class="pre">cv(batch)</span> <span class="pre">-&gt;</span> <span class="pre">Tensor[B,</span> <span class="pre">D]</span></code>. There is
+no base class, no registration, and nothing to subclass:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pair</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">bond</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">pair_distance</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">pair</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">atom_indices</span></code> is moved to the batch’s device for you, so a CV closure built
+before the batch reaches the GPU still works — but hoisting the tensor out of
+the closure and placing it explicitly avoids reallocating it on every call.
+The same applies to a bias: <code class="docutils literal notranslate"><span class="pre">ConservativeBias</span></code> moves its buffers to the
+batch’s device on first evaluation, so <code class="docutils literal notranslate"><span class="pre">HarmonicUmbrellaBias(...)</span></code> built on
+CPU evaluates correctly against a CUDA batch without an explicit <code class="docutils literal notranslate"><span class="pre">.to()</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">pair_distance</span></code> is the built-in geometric CV. It handles non-periodic systems
+and the minimum-image convention for <strong>Minkowski-reduced</strong> cells.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code class="docutils literal notranslate"><span class="pre">pair_distance</span></code> is not a general triclinic MIC. The 27-image search it uses is
+correct only for reduced cells; it raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> in eager mode when the
+cell violates the reduction condition. Under <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> that check is
+skipped and supplying a reduced cell is the caller’s responsibility — pre-reduce
+with <code class="docutils literal notranslate"><span class="pre">atoms.get_cell().niggli_reduce()</span></code> or equivalent.</p>
+</div>
+<p>For a CV that lives on a circle (a dihedral, say), use <code class="docutils literal notranslate"><span class="pre">periodic_difference</span></code>
+so a restraint at <code class="docutils literal notranslate"><span class="pre">+3.0</span> <span class="pre">rad</span></code> does not pull a configuration at <code class="docutils literal notranslate"><span class="pre">-3.0</span> <span class="pre">rad</span></code> the
+long way round:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling</span><span class="w"> </span><span class="kn">import</span> <span class="n">periodic_difference</span>
+
+<span class="n">delta</span> <span class="o">=</span> <span class="n">periodic_difference</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">centers</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">]))</span>
+</pre></div>
+</div>
+</section>
+<section id="built-in-biases">
+<h2><a class="toc-backref" href="#id5" role="doc-backlink">Built-in biases</a><a class="headerlink" href="#built-in-biases" title="Link to this heading">#</a></h2>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Bias</p></th>
+<th class="head"><p>Energy</p></th>
+<th class="head"><p>Use for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">HarmonicUmbrellaBias</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.5</span> <span class="pre">*</span> <span class="pre">delta^T</span> <span class="pre">K</span> <span class="pre">delta</span></code></p></td>
+<td><p>Umbrella sampling, restrained MD</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">UpperWall</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(k/p)</span> <span class="pre">*</span> <span class="pre">max(s</span> <span class="pre">-</span> <span class="pre">s0,</span> <span class="pre">0)^p</span></code></p></td>
+<td><p>Stop a CV rising past a bound</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">LowerWall</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(k/p)</span> <span class="pre">*</span> <span class="pre">max(s0</span> <span class="pre">-</span> <span class="pre">s,</span> <span class="pre">0)^p</span></code></p></td>
+<td><p>Stop a CV falling below a bound</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FlatBottomRestraint</span></code></p></td>
+<td><p>both of the above</p></td>
+<td><p>Confine a CV to an interval</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">WellTemperedMetaDynamicsBias</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sum_i</span> <span class="pre">h_i</span> <span class="pre">exp(-(s</span> <span class="pre">-</span> <span class="pre">c_i)^2</span> <span class="pre">/</span> <span class="pre">2</span> <span class="pre">sigma^2)</span></code></p></td>
+<td><p>Free energy along a CV you chose</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RMSDMetaDynamicsBias</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sum_r</span> <span class="pre">k_push</span> <span class="pre">exp(-alpha</span> <span class="pre">RMSD(x,</span> <span class="pre">x_r)^2)</span></code></p></td>
+<td><p>Structure search with no CV at all</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AdaptiveBiasingForce</span></code></p></td>
+<td><p><em>(no energy — force only)</em></p></td>
+<td><p>Free-energy profile along a pair distance</p></td>
+</tr>
+</tbody>
+</table>
+<p>The first four are static: their energy depends only on the current
+configuration. The last three are <strong>history-dependent</strong> — they accumulate
+state as sampling proceeds, and so mix in <code class="docutils literal notranslate"><span class="pre">AdaptivePotentialMixin</span></code>.
+<code class="docutils literal notranslate"><span class="pre">AdaptiveBiasingForce</span></code> is further the only one that is <strong>non-conservative</strong>:
+it applies a measured force that is not the gradient of anything it holds.</p>
+<p>Walls contribute <strong>exactly zero</strong> energy and force inside the allowed region,
+and their default quadratic form has zero force at the boundary, so switching
+one on does not deliver an impulse.</p>
+<section id="per-window-parameters">
+<h3><a class="toc-backref" href="#id6" role="doc-backlink">Per-window parameters</a><a class="headerlink" href="#per-window-parameters" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">HarmonicUmbrellaBias</span></code> accepts <code class="docutils literal notranslate"><span class="pre">centers</span></code> of shape <code class="docutils literal notranslate"><span class="pre">[D]</span></code> (shared) or <code class="docutils literal notranslate"><span class="pre">[S,</span> <span class="pre">D]</span></code>
+(one row per thermodynamic state). Each graph selects its row via
+<code class="docutils literal notranslate"><span class="pre">batch.thermodynamic_state_id</span></code>; without that field every graph uses state <code class="docutils literal notranslate"><span class="pre">0</span></code>.
+<code class="docutils literal notranslate"><span class="pre">stiffness</span></code> accepts a scalar, <code class="docutils literal notranslate"><span class="pre">[D]</span></code>, <code class="docutils literal notranslate"><span class="pre">[D,</span> <span class="pre">D]</span></code>, or <code class="docutils literal notranslate"><span class="pre">[S,</span> <span class="pre">D,</span> <span class="pre">D]</span></code>, and is validated
+to be symmetric positive-semidefinite — a negative eigenvalue would turn the
+restraint into an unbounded repulsion.</p>
+</section>
+</section>
+<section id="metadynamics">
+<h2><a class="toc-backref" href="#id7" role="doc-backlink">Metadynamics</a><a class="headerlink" href="#metadynamics" title="Link to this heading">#</a></h2>
+<p>Umbrella sampling needs you to name the windows in advance. Metadynamics does
+not: it deposits a Gaussian hill wherever the system currently is, so the
+accumulated bias pushes it towards wherever it has not yet been.</p>
+<section id="well-tempered-metadynamics">
+<h3><a class="toc-backref" href="#id8" role="doc-backlink">Well-tempered metadynamics</a><a class="headerlink" href="#well-tempered-metadynamics" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">WellTemperedMetaDynamicsBias</span></code> deposits one hill per walker at its current CV
+value, every <code class="docutils literal notranslate"><span class="pre">frequency</span></code> steps. In the well-tempered scheme each hill
+is damped by the bias already standing at that point,</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>h_t = h_0 * exp(-V(s_t) / (k_B T (gamma - 1)))
+</pre></div>
+</div>
+<p>so the sum converges rather than filling forever, and the converged bias is a
+free-energy estimate:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling</span><span class="w"> </span><span class="kn">import</span> <span class="n">WellTemperedMetaDynamicsBias</span>
+
+<span class="n">metad</span> <span class="o">=</span> <span class="n">WellTemperedMetaDynamicsBias</span><span class="p">(</span>
+    <span class="n">cv</span><span class="o">=</span><span class="n">bond_distance</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mf">0.005</span><span class="p">,</span>          <span class="c1"># h_0, eV</span>
+    <span class="n">sigma</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>            <span class="c1"># hill width, CV units</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
+    <span class="n">bias_factor</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>       <span class="c1"># gamma; None gives standard metadynamics</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">storage</span><span class="o">=</span><span class="s2">&quot;preallocated&quot;</span><span class="p">,</span>
+    <span class="n">max_hills</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;metad&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="o">...</span>
+<span class="n">profile</span> <span class="o">=</span> <span class="n">metad</span><span class="o">.</span><span class="n">free_energy</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span>   <span class="c1"># -(gamma / (gamma - 1)) * V(s)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">bias_factor=None</span></code> is the <code class="docutils literal notranslate"><span class="pre">gamma</span> <span class="pre">-&gt;</span> <span class="pre">infinity</span></code> limit: every hill keeps height
+<code class="docutils literal notranslate"><span class="pre">h_0</span></code> and <code class="docutils literal notranslate"><span class="pre">F(s)</span> <span class="pre">=</span> <span class="pre">-V(s)</span></code>. That is standard metadynamics, which does not
+converge — the bias keeps growing and oscillates about the true profile.</p>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">periods</span></code> for a CV that lives on a circle. A hill at <code class="docutils literal notranslate"><span class="pre">+3.10</span> <span class="pre">rad</span></code> must
+repel a configuration at <code class="docutils literal notranslate"><span class="pre">-3.10</span> <span class="pre">rad</span></code>, which is <code class="docutils literal notranslate"><span class="pre">0.083</span> <span class="pre">rad</span></code> away the short way
+and <code class="docutils literal notranslate"><span class="pre">6.20</span> <span class="pre">rad</span></code> the long way; without a period the bias sees the second number
+and does nothing.</p>
+</section>
+<section id="storage-policies">
+<h3><a class="toc-backref" href="#id9" role="doc-backlink">Storage policies</a><a class="headerlink" href="#storage-policies" title="Link to this heading">#</a></h3>
+<p>The hill table has to be bounded somehow, and the three ways of bounding it
+are not interchangeable.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">storage</span></code></p></th>
+<th class="head"><p>On reaching <code class="docutils literal notranslate"><span class="pre">max_hills</span></code></p></th>
+<th class="head"><p>Compile</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">free_energy()</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">preallocated</span></code></p></td>
+<td><p><strong>raises</strong></p></td>
+<td><p>Shapes fixed for the whole run</p></td>
+<td><p>Valid</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">grow</span></code></p></td>
+<td><p>Allocates another chunk</p></td>
+<td><p>Recompiles on each resize</p></td>
+<td><p>Valid</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fifo</span></code></p></td>
+<td><p>Overwrites the oldest hill</p></td>
+<td><p>Shapes fixed</p></td>
+<td><p><strong>Raises</strong></p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">preallocated</span></code> raises rather than evicting because silently dropping hills
+would change the physics of a converging run with nothing to show for it. The
+error names the ways out.</p>
+<p><code class="docutils literal notranslate"><span class="pre">grow</span></code> carries a limit that is easy to miss. Under torch’s default of static
+parameter shapes, each resize changes the hill-tensor shape and a compiled
+<code class="docutils literal notranslate"><span class="pre">energy()</span></code> retraces — and Dynamo caps retraces per code object at
+<code class="docutils literal notranslate"><span class="pre">torch._dynamo.config.recompile_limit</span></code>, 8 by default. The next growth
+therefore <strong>hard-fails mid-run</strong>, once the trajectory is already underway.</p>
+<p>Three ways out, in rough order of preference:</p>
+<ol class="arabic simple">
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">preallocated</span></code>, which holds a single trace for the whole run.</p></li>
+<li><p>Size <code class="docutils literal notranslate"><span class="pre">max_hills</span></code> so the number of growths stays under the limit.</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">force_parameter_static_shapes</span> <span class="pre">=</span> <span class="pre">False</span></code> on <code class="docutils literal notranslate"><span class="pre">torch._dynamo.config</span></code>,
+which makes Dynamo trace the hill-table dimension symbolically so growth
+stops triggering a retrace at all.</p></li>
+</ol>
+<p>Both settings are process-global, and other code in this toolkit changes them:
+<code class="docutils literal notranslate"><span class="pre">DistributedModel</span></code> raises the limit to 64 <em>and</em> disables static parameter
+shapes, so a domain-decomposed run will not see this failure. Read the live
+config rather than assuming the defaults.</p>
+<p><code class="docutils literal notranslate"><span class="pre">fifo</span></code> is not merely a cache policy: once hills are
+discarded the accumulated bias is no longer the integral of everything
+deposited, the well-tempered convergence argument no longer applies, and
+<code class="docutils literal notranslate"><span class="pre">free_energy()</span></code> refuses rather than returning a number that looks fine.</p>
+<p><code class="docutils literal notranslate"><span class="pre">max_hills</span></code> must be at least the walker count under <code class="docutils literal notranslate"><span class="pre">fifo</span></code>. One deposition
+writes one hill per walker, so a smaller ring would wrap <em>inside</em> a single
+deposition and the later walkers would overwrite the earlier ones — hills of
+the same age, not the oldest, which is the one thing the policy promises to
+discard. That is refused rather than silently applied.</p>
+</section>
+<section id="multi-walker-history">
+<h3><a class="toc-backref" href="#id10" role="doc-backlink">Multi-walker history</a><a class="headerlink" href="#multi-walker-history" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">history</span></code> decides which hills a given walker feels.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;shared&quot;</span></code> (default) — every walker feels every hill. This is the
+multiple-walker scheme: <code class="docutils literal notranslate"><span class="pre">B</span></code> walkers fill a basin roughly <code class="docutils literal notranslate"><span class="pre">B</span></code> times faster,
+at the cost of one batched force evaluation per step rather than <code class="docutils literal notranslate"><span class="pre">B</span></code>
+separate runs.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;walker&quot;</span></code> — each walker feels only its own hills, so one batch runs <code class="docutils literal notranslate"><span class="pre">B</span></code>
+genuinely independent metadynamics simulations.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;state&quot;</span></code> — hills belong to the <code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code> that deposited
+them, which is what a replica-exchange ladder needs.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;state&quot;</span></code> sets <code class="docutils literal notranslate"><span class="pre">state_dependent_for_exchange</span> <span class="pre">=</span> <span class="pre">True</span></code>, so combining it with a
+temperature ladder is rejected rather than run under an acceptance rule that
+does not cover it; see <a class="reference internal" href="#acceptance">Acceptance</a>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;state&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;walker&quot;</span></code> read <code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code> and <code class="docutils literal notranslate"><span class="pre">walker_id</span></code> off the
+batch, and <strong>raise</strong> if the field is absent or the wrong length. The
+identity hook
+stamps both on every step, so this only affects a bias you evaluate directly.
+The alternative — defaulting a missing field to zero — would file every hill
+under one key and silently collapse the per-owner histories into a single
+shared one, which is the opposite of what was asked for and produces energies
+numerically identical to <code class="docutils literal notranslate"><span class="pre">history=&quot;shared&quot;</span></code>.</p>
+</section>
+<section id="xtb-style-rmsd-metadynamics">
+<h3><a class="toc-backref" href="#id11" role="doc-backlink">xTB-style RMSD metadynamics</a><a class="headerlink" href="#xtb-style-rmsd-metadynamics" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">RMSDMetaDynamicsBias</span></code> drops the collective variable entirely. Its history is
+a set of retained <em>structures</em>, and it pushes away from all of them at once:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>V(x, t) = sum_r f_r(t) * k_push * exp(-alpha * RMSD(x, x_r)^2)
+</pre></div>
+</div>
+<p>RMSD is measured after optimal translation and rotation, so the bias is
+invariant to rigid motion and its forces sum to exactly zero. This is the
+scheme xTB/CREST uses for conformer and isomer searching, and it is the right
+tool when you cannot say in advance which coordinate matters.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling</span><span class="w"> </span><span class="kn">import</span> <span class="n">RMSDMetaDynamicsBias</span>
+
+<span class="n">explorer</span> <span class="o">=</span> <span class="n">RMSDMetaDynamicsBias</span><span class="p">(</span>
+    <span class="n">k_push</span><span class="o">=</span><span class="mf">0.08</span><span class="p">,</span>                        <span class="c1"># eV</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>                         <span class="c1"># A^-2</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">max_references</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>                  <span class="c1"># FIFO by default</span>
+    <span class="n">atom_indices</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>   <span class="c1"># heavy atoms only</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;explorer&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Choosing <code class="docutils literal notranslate"><span class="pre">alpha</span></code> is the main decision, and it must match the RMSD scale the
+system actually explores: the kernel only has usable gradient where
+<code class="docutils literal notranslate"><span class="pre">alpha</span> <span class="pre">*</span> <span class="pre">RMSD^2</span></code> is of order one. Set it far too small and
+<code class="docutils literal notranslate"><span class="pre">exp(-alpha</span> <span class="pre">*</span> <span class="pre">RMSD^2)</span></code> sits at ~1 for every structure, leaving the bias nearly
+constant and nearly forceless. A rigid cluster moving 0.3 A wants <code class="docutils literal notranslate"><span class="pre">alpha</span></code>
+around 10; a floppy molecule sampling 1 A wants <code class="docutils literal notranslate"><span class="pre">alpha</span></code> around 1.</p>
+<p>Three constraints are worth knowing before reaching for it:</p>
+<ul>
+<li><p><strong>Non-periodic systems only.</strong> Cartesian RMSD against a stored reference is
+not defined under periodic boundary conditions — an atom crossing a cell face
+is physically unmoved but Cartesian-displaced by a lattice vector, which would
+inject a large spurious force. Bias a periodic-aware CV with
+<code class="docutils literal notranslate"><span class="pre">WellTemperedMetaDynamicsBias</span></code> instead.</p>
+<p>Periodicity is read from <code class="docutils literal notranslate"><span class="pre">batch.pbc</span></code>, not from the presence of a cell. A cell
+is a box; only the flags say whether atoms wrap through its faces. So a
+molecular batch carrying a <strong>bounding box</strong> with <code class="docutils literal notranslate"><span class="pre">pbc</span></code> all-False is accepted
+— the common case for a boxed or solvated molecule — while a slab
+(<code class="docutils literal notranslate"><span class="pre">pbc=[True,</span> <span class="pre">True,</span> <span class="pre">False]</span></code>) is rejected, since wrapping along any one axis is
+enough to break the metric. A non-zero cell with no <code class="docutils literal notranslate"><span class="pre">pbc</span></code> flags at all is
+refused as undeclared rather than assumed harmless.</p>
+</li>
+<li><p><strong>Fixed atom correspondence.</strong> Atom <code class="docutils literal notranslate"><span class="pre">i</span></code> is always compared with atom <code class="docutils literal notranslate"><span class="pre">i</span></code> of
+the reference; there is no permutation search, so two structures identical
+up to relabelling of equivalent atoms count as distinct.</p></li>
+<li><p><strong>No free energy.</strong> This is a structure generator, not an estimator, and
+there is deliberately no <code class="docutils literal notranslate"><span class="pre">free_energy()</span></code> method. What it produces is a set
+of structures worth optimising or re-scoring at a higher level of theory.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">atom_indices</span></code> are <strong>per-graph local</strong> indices. Restricting to heavy atoms is
+the usual choice: methyl hydrogens spinning freely generate RMSD that says
+nothing about the conformer.</p>
+</section>
+<section id="deposition-timing">
+<h3><a class="toc-backref" href="#id12" role="doc-backlink">Deposition timing</a><a class="headerlink" href="#deposition-timing" title="Link to this heading">#</a></h3>
+<p>Both biases deposit at <code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code>, so a hill marks the configuration the
+walker actually reached rather than the one it started from. A deposition
+bumps the bias state version, and the bias hook re-primes forces in response, so
+a new hill is felt on the very next step rather than one step late.</p>
+<p>Neither deposits during <code class="docutils literal notranslate"><span class="pre">prime_forces()</span></code>: priming evaluates forces, it does
+not advance the trajectory, and depositing there would double-count the
+starting configuration.</p>
+</section>
+</section>
+<section id="adaptive-biasing-force">
+<h2><a class="toc-backref" href="#id13" role="doc-backlink">Adaptive biasing force</a><a class="headerlink" href="#adaptive-biasing-force" title="Link to this heading">#</a></h2>
+<p>Umbrella sampling restrains, metadynamics fills. ABF does neither: it
+<em>measures</em> the mean force along the CV in each bin and applies its negative,
+so once a bin is well sampled the residual force along the CV averages to
+zero and the walker diffuses across the coordinate.</p>
+<p>The accumulated quantity already <strong>is</strong> the free-energy gradient, so there is
+nothing to deconvolve or reweight at the end — <code class="docutils literal notranslate"><span class="pre">free_energy()</span></code> integrates it.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdaptiveBiasingForce</span>
+
+<span class="n">abf</span> <span class="o">=</span> <span class="n">AdaptiveBiasingForce</span><span class="p">(</span>
+    <span class="n">atom_indices</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>          <span class="c1"># must match the thermostat</span>
+    <span class="n">cv_range</span><span class="o">=</span><span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">),</span>        <span class="c1"># angstrom</span>
+    <span class="n">n_bins</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span>
+    <span class="n">min_samples</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">full_samples</span><span class="o">=</span><span class="mi">400</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;abf&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="o">...</span>
+<span class="n">profile</span> <span class="o">=</span> <span class="n">abf</span><span class="o">.</span><span class="n">free_energy</span><span class="p">()</span>      <span class="c1"># PMF at bin_centers, in eV</span>
+</pre></div>
+</div>
+<section id="the-metric-correction">
+<h3><a class="toc-backref" href="#id14" role="doc-backlink">The metric correction</a><a class="headerlink" href="#the-metric-correction" title="Link to this heading">#</a></h3>
+<p>For a pair distance the estimator is</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>dA/dr = &lt; -(F_j - F_i).u / 2  -  2 kB T / r &gt;
+</pre></div>
+</div>
+<p>That second term is not a refinement. Projecting Cartesian forces onto the CV
+gradient and averaging gives the mean force in the <em>constrained</em> ensemble; the
+free energy of the unconstrained one differs by the Jacobian of the coordinate
+change. For a distance in three dimensions the number of configurations at
+separation <code class="docutils literal notranslate"><span class="pre">r</span></code> grows as the sphere surface <code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">pi</span> <span class="pre">r^2</span></code>, contributing
+<code class="docutils literal notranslate"><span class="pre">-2</span> <span class="pre">kB</span> <span class="pre">T</span> <span class="pre">/</span> <span class="pre">r</span></code>.</p>
+<p>Omitting it does not add noise — it produces a smoothly wrong answer. Two
+non-interacting particles have zero Cartesian force, so a naive projection
+reports a <strong>flat</strong> PMF when the true one is <code class="docutils literal notranslate"><span class="pre">-2</span> <span class="pre">kB</span> <span class="pre">T</span> <span class="pre">ln</span> <span class="pre">r</span></code>, a purely entropic
+profile that drives the pair apart.</p>
+<p>This is why <code class="docutils literal notranslate"><span class="pre">AdaptiveBiasingForce</span></code> takes an atom <strong>pair</strong> rather than a
+general <code class="docutils literal notranslate"><span class="pre">cv</span></code> callable, unlike every other bias here. The correction is
+specific to this coordinate, and accepting an arbitrary CV would mean applying
+a distance-shaped correction to something that is not a distance. Other CVs
+need their own correction and are P1.</p>
+</section>
+<section id="sample-threshold-and-ramp">
+<h3><a class="toc-backref" href="#id15" role="doc-backlink">Sample threshold and ramp</a><a class="headerlink" href="#sample-threshold-and-ramp" title="Link to this heading">#</a></h3>
+<p>A mean force estimated from a handful of samples is noise, and applying it
+would drive the walker on the strength of that noise. At or below
+<code class="docutils literal notranslate"><span class="pre">min_samples</span></code> a bin applies nothing; between <code class="docutils literal notranslate"><span class="pre">min_samples</span></code> and <code class="docutils literal notranslate"><span class="pre">full_samples</span></code>
+the applied fraction ramps linearly to one, so no bin switches on with a jump.</p>
+<p>Setting <code class="docutils literal notranslate"><span class="pre">full_samples</span> <span class="pre">==</span> <span class="pre">min_samples</span></code> asks for a step instead — nothing until
+the threshold, full force at it. That is the classic hard-threshold form, and
+it is what <code class="docutils literal notranslate"><span class="pre">min_samples=0</span></code> gives by default, so it is supported rather than
+rejected. A bin with no samples reports a ramp of zero whatever the thresholds
+are, since it has no estimate to apply.</p>
+<p><code class="docutils literal notranslate"><span class="pre">max_force</span></code> optionally caps <code class="docutils literal notranslate"><span class="pre">|dA/dr|</span></code>, bounding what a bin visited once at an
+awkward geometry can do while its average settles.</p>
+</section>
+<section id="observation-ordering">
+<h3><a class="toc-backref" href="#id16" role="doc-backlink">Observation ordering</a><a class="headerlink" href="#observation-ordering" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">stage</span></code> is <code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code>, where <code class="docutils literal notranslate"><span class="pre">batch.forces</span></code> still holds the
+<strong>unbiased</strong> physical force. This is load-bearing: an estimator shown its own
+output converges to whatever it had already decided, and the resulting profile
+looks perfectly smooth. The bias hook captures the frame before applying any bias
+contribution, so this holds even with several biases registered.</p>
+<p>For the same reason, an <code class="docutils literal notranslate"><span class="pre">update()</span></code> that only lands in a bin still below its
+threshold does <strong>not</strong> bump the state version — the applied force has not
+changed, so re-priming would be pure cost.</p>
+</section>
+<section id="no-energy-and-therefore-no-replica-exchange">
+<h3><a class="toc-backref" href="#id17" role="doc-backlink">No energy, and therefore no replica exchange</a><a class="headerlink" href="#no-energy-and-therefore-no-replica-exchange" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">forward()</span></code> returns <code class="docutils literal notranslate"><span class="pre">forces</span></code> and no <code class="docutils literal notranslate"><span class="pre">energy</span></code>. There is genuinely no
+potential to report, which is what makes ABF non-conservative. The Metropolis
+acceptance rule needs each bias’s energy evaluated under both states being
+swapped, so <code class="docutils literal notranslate"><span class="pre">supplies_exchange_energy</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code> and <code class="docutils literal notranslate"><span class="pre">ReplicaExchange</span></code>
+refuses the combination at construction rather than dropping the bias from the
+exponent and breaking detailed balance silently.</p>
+</section>
+<section id="reading-the-profile">
+<h3><a class="toc-backref" href="#id18" role="doc-backlink">Reading the profile</a><a class="headerlink" href="#reading-the-profile" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">mean_force()</span></code> returns the per-bin estimate and <code class="docutils literal notranslate"><span class="pre">free_energy()</span></code> its integral.
+The per-step diagnostic is named <code class="docutils literal notranslate"><span class="pre">bias/&lt;name&gt;/applied_gradient</span></code> rather than
+<code class="docutils literal notranslate"><span class="pre">mean_force</span></code>, because it is the ramped and capped value actually used — a
+threshold-suppressed zero there is not a measured zero mean force.</p>
+<p>The per-step diagnostics are <code class="docutils literal notranslate"><span class="pre">cv</span></code>, <code class="docutils literal notranslate"><span class="pre">bin</span></code>, <code class="docutils literal notranslate"><span class="pre">applied_gradient</span></code>, <code class="docutils literal notranslate"><span class="pre">samples</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ramp</span></code>, and <code class="docutils literal notranslate"><span class="pre">in_range</span></code>. A walker outside <code class="docutils literal notranslate"><span class="pre">cv_range</span></code> reports <code class="docutils literal notranslate"><span class="pre">bin</span> <span class="pre">=</span> <span class="pre">-1</span></code> and
+zero for every per-bin quantity, matching the zero force it receives. Only
+<code class="docutils literal notranslate"><span class="pre">cv</span></code> is still reported, since the coordinate is genuinely measured wherever
+the walker is.
+Bins never visited come back as <code class="docutils literal notranslate"><span class="pre">nan</span></code> rather than zero — a bin with no samples
+has no estimate, and zero is a perfectly plausible value that would hide that.
+<code class="docutils literal notranslate"><span class="pre">free_energy()</span></code> <strong>raises</strong> on an interior gap: integration carries the profile
+across a hole, so every value beyond it would be wrong by an unknown constant.</p>
+</section>
+</section>
+<section id="writing-your-own-bias">
+<h2><a class="toc-backref" href="#id19" role="doc-backlink">Writing your own bias</a><a class="headerlink" href="#writing-your-own-bias" title="Link to this heading">#</a></h2>
+<section id="a-bias-is-an-additive-potential">
+<h3><a class="toc-backref" href="#id20" role="doc-backlink">A bias is an additive potential</a><a class="headerlink" href="#a-bias-is-an-additive-potential" title="Link to this heading">#</a></h3>
+<p>There is no bias protocol and no bias result type. A bias is a
+<code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code> that maps a <code class="docutils literal notranslate"><span class="pre">Batch</span></code> to <code class="docutils literal notranslate"><span class="pre">ModelOutputs</span></code> — the same shape as
+<code class="docutils literal notranslate"><span class="pre">DFTD3ModelWrapper</span></code> and <code class="docutils literal notranslate"><span class="pre">LennardJonesModelWrapper</span></code>, which are also pure
+additive potentials with no learned parameters:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyBias</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;my_bias&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">active_outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">},</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">energy</span><span class="o">=...</span><span class="p">,</span> <span class="n">forces</span><span class="o">=...</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In practice you subclass <code class="docutils literal notranslate"><span class="pre">ConservativeBias</span></code>, which is that plus the autograd
+derivation — but nothing forces you to.</p>
+<section id="diagnostics-and-state-versions">
+<h4>Diagnostics and state versions<a class="headerlink" href="#diagnostics-and-state-versions" title="Link to this heading">#</a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">ModelOutputs</span></code> is an open mapping, and two general conventions ride in it:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">diagnostics/&lt;key&gt;</span></code></strong> — arbitrary reported tensors, no shape contract,
+never summed and never applied. The bias hook surfaces them as
+<code class="docutils literal notranslate"><span class="pre">bias/&lt;name&gt;/&lt;key&gt;</span></code>. A per-atom energy decomposition belongs here: it is a
+diagnostic, not a contribution to <code class="docutils literal notranslate"><span class="pre">batch.energy</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">state_version</span></code></strong> — integer revision IDs, shape <code class="docutils literal notranslate"><span class="pre">[B]</span></code>, saying which
+revision of the producer’s state generated the rest of the mapping.
+<code class="docutils literal notranslate"><span class="pre">AdaptivePotentialMixin</span></code> stamps it for you.</p></li>
+</ul>
+<p>Neither is enhanced-sampling-specific; both are documented on <code class="docutils literal notranslate"><span class="pre">ModelOutputs</span></code>
+and checked by <code class="docutils literal notranslate"><span class="pre">validate_contribution</span></code>.</p>
+</section>
+<section id="what-the-bias-hook-will-actually-apply">
+<h4>What the bias hook will actually apply<a class="headerlink" href="#what-the-bias-hook-will-actually-apply" title="Link to this heading">#</a></h4>
+<p>Only <code class="docutils literal notranslate"><span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">forces</span></code>, and <code class="docutils literal notranslate"><span class="pre">stress</span></code> are added into the batch. For each one
+the bias hook has to know the destination buffer, whether it is per-graph or
+per-atom, and how it combines across biases. An unrecognised <em>applied</em> key has
+none of that, so it is refused — in two places, for two different failures:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Failure</p></th>
+<th class="head"><p>Raised by</p></th>
+<th class="head"><p>When</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>The key is not one the framework can apply (<code class="docutils literal notranslate"><span class="pre">hessian</span></code>, <code class="docutils literal notranslate"><span class="pre">dipole</span></code>, anything novel)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">validate_contribution</span></code>, and <code class="docutils literal notranslate"><span class="pre">aggregate_contributions</span></code> independently</p></td>
+<td><p>at the producer, and again before summing</p></td>
+</tr>
+<tr class="row-odd"><td><p>The shape is right but the extent is not — <code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">3]</span></code> forces for a 4-atom batch</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">validate_contribution</span></code></p></td>
+<td><p>at the producer, with the batch’s counts</p></td>
+</tr>
+<tr class="row-even"><td><p>The key is applicable but the batch has no buffer for it</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">_check_destinations</span></code></p></td>
+<td><p>after aggregation, before applying</p></td>
+</tr>
+</tbody>
+</table>
+<p>The second is why <code class="docutils literal notranslate"><span class="pre">validate_contribution</span></code> takes <code class="docutils literal notranslate"><span class="pre">num_atoms</span></code> and <code class="docutils literal notranslate"><span class="pre">num_graphs</span></code>:
+a <code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">3]</span></code> force satisfies every rule that can be checked without a batch, and
+then <em>broadcasts</em> onto every atom when added. It has to be caught per
+contribution, because summing absorbs it — <code class="docutils literal notranslate"><span class="pre">[4,</span> <span class="pre">3]</span> <span class="pre">+</span> <span class="pre">[1,</span> <span class="pre">3]</span></code> is <code class="docutils literal notranslate"><span class="pre">[4,</span> <span class="pre">3]</span></code>, so a
+bad bias beside a correct one yields a correctly shaped total carrying forces
+nothing computed.</p>
+<p>The first matters because aggregation keeps only the applied keys, so an
+unrecognised physical output would otherwise vanish between the bias and the
+buffer with the run carrying on as though it had been applied. It is checked
+in both places on purpose: <code class="docutils literal notranslate"><span class="pre">aggregate_contributions</span></code> is public and promises
+that nothing is dropped silently, so it cannot rely on its caller having
+validated first. <code class="docutils literal notranslate"><span class="pre">APPLIED_OUTPUT_KEYS</span></code> is the single definition of the set and
+both checks read it, so they cannot disagree about what they refuse.</p>
+<p><code class="docutils literal notranslate"><span class="pre">sum_outputs</span></code>, the generic composition helper, is deliberately <em>not</em> affected:
+a full model forward pass may legitimately report <code class="docutils literal notranslate"><span class="pre">hessian</span></code> or <code class="docutils literal notranslate"><span class="pre">dipole</span></code>, and
+composing two models keeps them. A contribution is narrower than a forward
+pass precisely because it gets added into a buffer.</p>
+<p>The cost is real: a method producing a genuinely new applied output cannot
+express it without editing the framework. That is accepted, because the
+alternative is a contribution the bias hook silently drops. Anything you only
+want to <em>see</em> goes under <code class="docutils literal notranslate"><span class="pre">diagnostics/</span></code>, which is unconstrained — and
+<code class="docutils literal notranslate"><span class="pre">diagnostics/hessian_trace</span></code> is fine where <code class="docutils literal notranslate"><span class="pre">hessian</span></code> is not.</p>
+</section>
+</section>
+<section id="the-batteries-mixins">
+<h3><a class="toc-backref" href="#id21" role="doc-backlink">The batteries: mixins</a><a class="headerlink" href="#the-batteries-mixins" title="Link to this heading">#</a></h3>
+<p>Capability is opt-in per bias, supplied as composable mixins:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyRestraint</span><span class="p">(</span><span class="n">ConservativeBias</span><span class="p">):</span> <span class="o">...</span>                     <span class="c1"># energy -&gt; forces + stress</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MyMetaD</span><span class="p">(</span><span class="n">AdaptivePotentialMixin</span><span class="p">,</span> <span class="n">ConservativeBias</span><span class="p">):</span> <span class="o">...</span> <span class="c1"># ...and evolving state</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MyABF</span><span class="p">(</span><span class="n">AdaptivePotentialMixin</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span> <span class="o">...</span>  <span class="c1"># adaptive, no energy</span>
+</pre></div>
+</div>
+<p>A non-conservative bias has no energy to differentiate, so it does not inherit
+<code class="docutils literal notranslate"><span class="pre">ConservativeBias</span></code> — but it is still a <code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code>. <code class="docutils literal notranslate"><span class="pre">AdaptiveBiasingForce</span></code>
+declares <code class="docutils literal notranslate"><span class="pre">outputs={&quot;forces&quot;}</span></code> and returns no <code class="docutils literal notranslate"><span class="pre">&quot;energy&quot;</span></code> key. <em>Non-conservative
+does not mean non-model</em>, and that is what lets the bias hook type-check, apply,
+and distribute every bias the same way.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p><code class="docutils literal notranslate"><span class="pre">AdaptivePotentialMixin</span></code> must come <strong>first</strong> in the base list. <code class="docutils literal notranslate"><span class="pre">ConservativeBias</span></code>
+inherits <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>, whose <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> would otherwise shadow the mixin’s and
+silently drop the bias history from every checkpoint. Getting the order wrong
+raises <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> at class-creation time.</p>
+</div>
+</section>
+<section id="conservativebias">
+<h3><a class="toc-backref" href="#id22" role="doc-backlink"><code class="docutils literal notranslate"><span class="pre">ConservativeBias</span></code></a><a class="headerlink" href="#conservativebias" title="Link to this heading">#</a></h3>
+<p>Override <code class="docutils literal notranslate"><span class="pre">energy()</span></code> and get forces and stress by autograd:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyRestraint</span><span class="p">(</span><span class="n">ConservativeBias</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;my_restraint&quot;</span><span class="p">)</span>   <span class="c1"># required</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="o">=</span> <span class="n">k</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="o">*</span> <span class="n">my_cv</span><span class="p">(</span><span class="n">current</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>      <span class="c1"># [B, 1]</span>
+</pre></div>
+</div>
+<p>Notes:</p>
+<ul class="simple">
+<li><p><strong>Stress, not virial.</strong> <code class="docutils literal notranslate"><span class="pre">ConservativeBias</span></code> emits tensile-positive Cauchy
+stress, matching every model wrapper in the toolkit, so bias output sums
+directly with model output. A <code class="docutils literal notranslate"><span class="pre">&quot;virial&quot;</span></code> key exists for hand-written biases
+that produce a virial directly, but the bias hook will reject it — convert with
+<code class="docutils literal notranslate"><span class="pre">sigma</span> <span class="pre">=</span> <span class="pre">-W/V</span></code> first.</p></li>
+<li><p><strong>Partial dependence is fine.</strong> An energy that depends only on the cell (a
+volume restraint) yields zero forces and real stress; one that returns a
+constant on some branch yields zeros for both. Neither is an error.</p></li>
+<li><p><strong>The isolation is shared, not private.</strong> <code class="docutils literal notranslate"><span class="pre">forward()</span></code> delegates to
+<code class="docutils literal notranslate"><span class="pre">nvalchemi.models._utils.isolated_energy_derivatives</span></code>, which evaluates an
+energy function against a detached view of a live <code class="docutils literal notranslate"><span class="pre">Batch</span></code>, restores every
+field it touched in a <code class="docutils literal notranslate"><span class="pre">finally</span></code> block, and returns derivatives with no grad
+graph attached. Anything that differentiates against a batch it does not own
+— an NEB spring term, a hand-written wall — can call it directly without
+depending on this package.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> boundary is <code class="docutils literal notranslate"><span class="pre">energy()</span></code>, not <code class="docutils literal notranslate"><span class="pre">forward()</span></code>.</strong>
+<code class="docutils literal notranslate"><span class="pre">forward()</span></code> reaches <code class="docutils literal notranslate"><span class="pre">requires_grad_()</span></code>, which <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> cannot trace.
+<code class="docutils literal notranslate"><span class="pre">EnhancedSampling(compile_biases=True)</span></code> compiles each bias’s <code class="docutils literal notranslate"><span class="pre">energy()</span></code>.</p></li>
+</ul>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Because <code class="docutils literal notranslate"><span class="pre">compile_biases=True</span></code> hands <code class="docutils literal notranslate"><span class="pre">energy()</span></code> to <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>, <strong>keep
+data-dependent Python branches out of it</strong>. A <code class="docutils literal notranslate"><span class="pre">bool(tensor.any())</span></code> there —
+a bounds check, a “did anything violate this” guard — breaks <code class="docutils literal notranslate"><span class="pre">fullgraph=True</span></code>
+outright with a “Could not guard on data-dependent expression” error.</p>
+<p>Put such validation in an override of <code class="docutils literal notranslate"><span class="pre">forward()</span></code> instead, which is eager by
+construction, then call <code class="docutils literal notranslate"><span class="pre">super().forward(data)</span></code>. <code class="docutils literal notranslate"><span class="pre">HarmonicUmbrellaBias</span></code>
+validates <code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code> this way. That placement is strictly better
+than an eager-only <code class="docutils literal notranslate"><span class="pre">torch.compiler.is_compiling()</span></code> guard: the check still runs
+when <code class="docutils literal notranslate"><span class="pre">energy()</span></code> is compiled, rather than being skipped exactly when a mistake
+is hardest to diagnose.</p>
+</div>
+</section>
+<section id="adaptive-biases">
+<h3><a class="toc-backref" href="#id23" role="doc-backlink">Adaptive biases</a><a class="headerlink" href="#adaptive-biases" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">AdaptivePotentialMixin</span></code> separates read-only evaluation from state mutation.
+It is the shared <code class="docutils literal notranslate"><span class="pre">StatefulHook</span></code> lifecycle from <code class="docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code>, filled in —
+<code class="docutils literal notranslate"><span class="pre">frequency</span></code>, <code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">read_only</span></code>, and <code class="docutils literal notranslate"><span class="pre">commit</span></code> mean here exactly what they
+mean for any other hook:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyMetaD</span><span class="p">(</span><span class="n">AdaptivePotentialMixin</span><span class="p">,</span> <span class="n">ConservativeBias</span><span class="p">):</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">100</span>                          <span class="c1"># Hook: every N steps</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>         <span class="c1"># Hook: where in the step</span>
+    <span class="n">read_only</span> <span class="o">=</span> <span class="kc">False</span>                        <span class="c1"># StatefulHook: update() mutates</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">):</span> <span class="o">...</span>           <span class="c1"># read-only, compile-friendly</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">):</span>            <span class="c1"># called once per due step</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deposit_hill</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bump_state_version</span><span class="p">()</span>            <span class="c1"># forces are now stale</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">commit</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>                        <span class="c1"># StatefulHook sync boundary</span>
+        <span class="o">...</span>                                  <span class="c1"># publish shared history, if any</span>
+</pre></div>
+</div>
+<p>“Read-only while forces are computed, mutate after the step, synchronise
+occasionally” is not specific to sampling — NEB’s climbing-image promotion, an
+adaptive thermostat, and an adaptive neighbour skin have the same shape — so
+the vocabulary lives in <code class="docutils literal notranslate"><span class="pre">nvalchemi.hooks.StatefulHook</span></code> and this mixin only
+fills it in. <code class="docutils literal notranslate"><span class="pre">StatefulHook</span></code> itself composes <code class="docutils literal notranslate"><span class="pre">Hook</span></code> (<code class="docutils literal notranslate"><span class="pre">frequency</span></code>, <code class="docutils literal notranslate"><span class="pre">stage</span></code>) and
+<code class="docutils literal notranslate"><span class="pre">CheckpointableHook</span></code> (<code class="docutils literal notranslate"><span class="pre">state_dict</span></code>, <code class="docutils literal notranslate"><span class="pre">load_state_dict</span></code>), adding only <code class="docutils literal notranslate"><span class="pre">read_only</span></code>
+and <code class="docutils literal notranslate"><span class="pre">commit</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">stage</span></code> decides which frame <code class="docutils literal notranslate"><span class="pre">update</span></code> receives:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code> — post-step coordinates. What metadynamics wants.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code> — captured while <code class="docutils literal notranslate"><span class="pre">batch.forces</span></code> still holds the <strong>unbiased</strong>
+physical forces. What ABF requires; an estimator fed its own output diverges.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">ctx</span></code> is a <code class="docutils literal notranslate"><span class="pre">BiasContext</span></code> — a <code class="docutils literal notranslate"><span class="pre">DynamicsContext</span></code> with one extra field,
+<code class="docutils literal notranslate"><span class="pre">ctx.contribution</span></code>, holding what this bias returned during the force
+evaluation that preceded the capture. It lives in <code class="docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code> beside
+<code class="docutils literal notranslate"><span class="pre">DynamicsContext</span></code> and <code class="docutils literal notranslate"><span class="pre">TrainContext</span></code>, not in this subpackage, for the same
+reason the lifecycle does.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">update</span></code> is not spelled <code class="docutils literal notranslate"><span class="pre">__call__</span></code> even though a <code class="docutils literal notranslate"><span class="pre">Hook</span></code> is dispatched that way.
+A bias is also an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>, whose <code class="docutils literal notranslate"><span class="pre">__call__</span></code> is the model forward that
+<code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> and <code class="docutils literal notranslate"><span class="pre">PipelineModelWrapper</span></code> both invoke; one name cannot be both.
+This is the resolution <code class="docutils literal notranslate"><span class="pre">TrainingUpdateHook</span></code> already uses — a domain hook family
+keeps the signature its semantics need, and an orchestrator owns protocol
+compliance on its behalf. Here that orchestrator is the <code class="docutils literal notranslate"><span class="pre">BiasHook</span></code>
+<code class="docutils literal notranslate"><span class="pre">EnhancedSampling</span></code> installs, which reads <code class="docutils literal notranslate"><span class="pre">frequency</span></code> and <code class="docutils literal notranslate"><span class="pre">stage</span></code> and dispatches
+<code class="docutils literal notranslate"><span class="pre">update</span></code> and <code class="docutils literal notranslate"><span class="pre">commit</span></code>.</p>
+</div>
+</section>
+</section>
+<section id="the-strategy">
+<h2><a class="toc-backref" href="#id24" role="doc-backlink">The strategy</a><a class="headerlink" href="#the-strategy" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">EnhancedSampling</span></code> contributes hooks to the engine it builds and otherwise
+leaves it alone — the model, integrator, thermostat, and every caller-supplied
+hook behave exactly as they would unbiased. <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> owns the stepping
+loop; there is no second one.</p>
+<section id="the-hooks-it-installs">
+<h3><a class="toc-backref" href="#id25" role="doc-backlink">The hooks it installs</a><a class="headerlink" href="#the-hooks-it-installs" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">build_hooks()</span></code> returns four, in this order, ahead of any <code class="docutils literal notranslate"><span class="pre">extra_hooks</span></code> you
+pass:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Hook</p></th>
+<th class="head"><p>Stage</p></th>
+<th class="head"><p>Cadence</p></th>
+<th class="head"><p>Does</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">WalkerIdentityHook</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code></p></td>
+<td><p>every step</p></td>
+<td><p>stamps the five identity fields</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BiasHook</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code>, <code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code></p></td>
+<td><p>every step</p></td>
+<td><p>evaluates and applies biases, delivers <code class="docutils literal notranslate"><span class="pre">update()</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">PairSwapHook</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">attempt_interval</span></code></p></td>
+<td><p>attempts the completed segment’s swaps</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">EpochCommitHook</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">steps_per_epoch</span></code></p></td>
+<td><p>fires <code class="docutils literal notranslate"><span class="pre">commit()</span></code> on the completed epoch</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">PairSwapHook</span></code> is not an enhanced-sampling class. Propose pairs, evaluate an
+acceptance rule, permute per-system parameters for the pairs that pass — that
+is also basin hopping with swaps, population search, and any annealing ladder,
+so it lives in <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code> and
+<code class="docutils literal notranslate"><span class="pre">ReplicaExchange.swap_hook()</span></code> supplies the two pieces that are physics: the
+Sugita-Okamoto acceptance rule and the temperature table.</p>
+<p>The last two carry their cadence as <code class="docutils literal notranslate"><span class="pre">Hook.frequency</span></code>, so the hook registry
+gates them: dispatched at step <em>kN</em>, each acts on boundary <code class="docutils literal notranslate"><span class="pre">step</span> <span class="pre">//</span> <span class="pre">N</span> <span class="pre">-</span> <span class="pre">1</span></code>,
+the one that has just completed. Exchange precedes commit because a commit
+publishes shared history and doing it before the swap would publish under
+labels that are about to change.</p>
+<p>All the biases share <strong>one</strong> <code class="docutils literal notranslate"><span class="pre">BiasHook</span></code> rather than one hook each. Registered
+separately, the second bias would evaluate against a batch already carrying
+the first one’s forces, and hook registration order is user-owned, so the
+total would depend on it.</p>
+</section>
+<section id="what-it-guarantees">
+<h3><a class="toc-backref" href="#id26" role="doc-backlink">What it guarantees</a><a class="headerlink" href="#what-it-guarantees" title="Link to this heading">#</a></h3>
+<ol class="arabic simple">
+<li><p><strong>Every bias sees the same unmodified physical output.</strong> Contributions are
+summed once and applied together, so no bias can observe another’s forces
+and the total does not depend on registration order.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">update()</span></code> is delivered exactly once per due step</strong>, after integration.</p></li>
+<li><p><strong>Diagnostics are namespaced</strong> <code class="docutils literal notranslate"><span class="pre">bias/&lt;name&gt;/&lt;key&gt;</span></code>, so two biases of the
+same type cannot collide.</p></li>
+<li><p><strong>Forces are primed</strong> before the first step. A velocity-Verlet-style
+integrator reads <code class="docutils literal notranslate"><span class="pre">batch.forces</span></code> in its first half-step, before any model
+call; without priming, step 0 would be the one step that ignores the bias.</p></li>
+</ol>
+<p>The strategy’s hooks come <strong>before</strong> <code class="docutils literal notranslate"><span class="pre">extra_hooks</span></code>, so a safety hook such as
+<code class="docutils literal notranslate"><span class="pre">MaxForceClampHook</span></code> passed as an extra clamps the <em>total</em> force rather than
+the model force alone.</p>
+</section>
+<section id="diagnostics">
+<h3><a class="toc-backref" href="#id27" role="doc-backlink">Diagnostics</a><a class="headerlink" href="#diagnostics" title="Link to this heading">#</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sampling</span><span class="o">.</span><span class="n">last_outputs</span><span class="p">[</span><span class="s2">&quot;physical/forces&quot;</span><span class="p">]</span>       <span class="c1"># model only, before any bias</span>
+<span class="n">sampling</span><span class="o">.</span><span class="n">last_outputs</span><span class="p">[</span><span class="s2">&quot;bias/umbrella/energy&quot;</span><span class="p">]</span>  <span class="c1"># one bias&#39;s contribution</span>
+<span class="n">sampling</span><span class="o">.</span><span class="n">last_outputs</span><span class="p">[</span><span class="s2">&quot;bias_total/forces&quot;</span><span class="p">]</span>     <span class="c1"># sum across all biases</span>
+<span class="n">sampling</span><span class="o">.</span><span class="n">last_outputs</span><span class="p">[</span><span class="s2">&quot;total/forces&quot;</span><span class="p">]</span>          <span class="c1"># physical + bias</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">total/*</span></code> is read back from the batch after the bias is applied, so
+<code class="docutils literal notranslate"><span class="pre">total</span> <span class="pre">==</span> <span class="pre">physical</span> <span class="pre">+</span> <span class="pre">bias_total</span></code>. Note that this is the state as the <em>bias
+hook</em> leaves it, not necessarily what the integrator consumed: that hook runs
+ahead of any <code class="docutils literal notranslate"><span class="pre">extra_hooks</span></code> at <code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code> (so a force clamp acts on the
+total rather than the model force alone), which means a later hook can still
+modify <code class="docutils literal notranslate"><span class="pre">batch.forces</span></code>.
+Read the batch directly if you need the exact value the integrator used.</p>
+<p>For WHAM or MBAR you want <code class="docutils literal notranslate"><span class="pre">physical/energy</span></code> and the per-bias energies
+separately, not <code class="docutils literal notranslate"><span class="pre">total/energy</span></code> — the reweighting needs the unbiased potential.
+Free-energy reconstruction is deliberately not built in; use <code class="docutils literal notranslate"><span class="pre">pymbar</span></code> or an
+equivalent.</p>
+</section>
+<section id="batch-requirements">
+<h3><a class="toc-backref" href="#id28" role="doc-backlink">Batch requirements</a><a class="headerlink" href="#batch-requirements" title="Link to this heading">#</a></h3>
+<p>Dynamics writes model outputs back <strong>in place</strong>, so the buffers must exist:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">AtomicData</span><span class="p">(</span>
+    <span class="n">positions</span><span class="o">=...</span><span class="p">,</span> <span class="n">atomic_numbers</span><span class="o">=...</span><span class="p">,</span> <span class="n">atomic_masses</span><span class="o">=...</span><span class="p">,</span>
+    <span class="n">forces</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="n">energy</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="n">stress</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>   <span class="c1"># required whenever a bias produces stress</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">energy</span></code> is required by a <strong>bias-free</strong> temperature ladder too, not only by a
+biased run: the acceptance rule reads it. Priming checks only <code class="docutils literal notranslate"><span class="pre">forces</span></code>, so a
+batch without <code class="docutils literal notranslate"><span class="pre">energy</span></code> is otherwise runnable — and an absent potential energy
+is refused rather than treated as zero, which would make every exponent zero
+and accept every swap.</p>
+<p>The bias hook raises a named <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> naming the field, the biases that
+produced it, and how to allocate the buffer — rather than skipping the field
+and letting the contribution vanish. Because <code class="docutils literal notranslate"><span class="pre">run()</span></code> primes before the first
+step, this surfaces at setup, not part-way through a trajectory.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code class="docutils literal notranslate"><span class="pre">stress</span></code> is the one that matters most. <code class="docutils literal notranslate"><span class="pre">ConservativeBias</span></code> produces stress
+whenever the batch has a cell and at least one periodic dimension, so a
+periodic run needs the buffer even under NVT. A stress contribution dropped on
+the floor is invisible to an NPT/NPH barostat — the cell evolves as if the
+bias were absent, with nothing to indicate it. If a run genuinely has no use
+for a cell response, pass <code class="docutils literal notranslate"><span class="pre">compute_stress=False</span></code> to the bias, which drops
+<code class="docutils literal notranslate"><span class="pre">&quot;stress&quot;</span></code> from its <code class="docutils literal notranslate"><span class="pre">active_outputs</span></code> and skips the strain leaf entirely. That
+is a deliberate choice; a missing buffer is not.</p>
+</div>
+</section>
+<section id="walker-identity">
+<h3><a class="toc-backref" href="#id29" role="doc-backlink">Walker identity</a><a class="headerlink" href="#walker-identity" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">WalkerIdentityHook</span></code> stamps five graph-level fields each step. Batch <em>position</em> is not
+an identity — selection and refill can move a walker to a different row — so
+anything that must follow a physical configuration is carried as data:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">walker_id</span></code></p></td>
+<td><p>Immutable identity, allocated once per walker</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code></p></td>
+<td><p>Window / temperature / energy-function state</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sampling_step</span></code></p></td>
+<td><p>Dynamics force-evaluation step</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">exchange_segment</span></code></p></td>
+<td><p>Exchange segment, <code class="docutils literal notranslate"><span class="pre">step</span> <span class="pre">//</span> <span class="pre">attempt_interval</span></code> (see <a class="reference internal" href="#replica-exchange">Replica exchange</a>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sampling_epoch</span></code></p></td>
+<td><p>Consistency epoch, <code class="docutils literal notranslate"><span class="pre">step</span> <span class="pre">//</span> <span class="pre">steps_per_epoch</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>A <code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code> you set yourself is preserved, never overwritten.
+Without replica exchange, <code class="docutils literal notranslate"><span class="pre">exchange_segment</span></code> falls back to the epoch length,
+since there are no exchange segments to count.</p>
+</section>
+<section id="identity-across-a-refill">
+<h3><a class="toc-backref" href="#id30" role="doc-backlink">Identity across a refill</a><a class="headerlink" href="#identity-across-a-refill" title="Link to this heading">#</a></h3>
+<p>With a sampler attached, <code class="docutils literal notranslate"><span class="pre">refill_check</span></code> drops graduated graphs and appends
+replacements. All five fields are registered as <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> bookkeeping
+keys so survivors keep theirs across that change of batch membership — but
+<code class="docutils literal notranslate"><span class="pre">walker_id</span></code> is <em>allocated</em>, not defaulted, and the distinction matters.</p>
+<p>The registry rebuilds the column with a <code class="docutils literal notranslate"><span class="pre">-1</span></code> sentinel for rows it has no
+value for, exactly as <code class="docutils literal notranslate"><span class="pre">system_id</span></code> does. Those rows are the replacements, and
+the next stamp gives each a <strong>fresh</strong> identity, continuing the counter.</p>
+<p>That is not cosmetic. A default-valued factory hands each replacement the id
+of whichever walker just graduated out of the slot, so with
+<code class="docutils literal notranslate"><span class="pre">history=&quot;walker&quot;</span></code> a brand-new configuration inherits the hills the departed
+walker deposited — silently, and on every refill. Identities are never
+reused.</p>
+<p><code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code> works the same way and for a sharper reason: a
+graduating walker <strong>vacates its rung</strong> of the ladder. Its replacement takes
+that rung, which is the only assignment that keeps the walker↔state bijection
+replica exchange pairs on. Defaulting replacements to state 0 would put two
+walkers on one rung and leave the vacated ones held by nobody. If a refill
+would add more walkers than the ladder has rungs, that is refused by name —
+a ladder of <em>S</em> states hosts exactly <em>S</em> walkers.</p>
+<p>The replacement is of course not equilibrated at the temperature it inherits,
+which is true of any freshly seeded walker; acceptance reads current energies,
+so subsequent swaps are unaffected.</p>
+</section>
+</section>
+<section id="checkpoint-and-restore">
+<h2><a class="toc-backref" href="#id31" role="doc-backlink">Checkpoint and restore</a><a class="headerlink" href="#checkpoint-and-restore" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sampling</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">(</span><span class="s2">&quot;run.zarr&quot;</span><span class="p">)</span>          <span class="c1"># only at an epoch boundary</span>
+
+<span class="c1"># ... later, in a fresh process ...</span>
+<span class="n">sampling2</span> <span class="o">=</span> <span class="n">EnhancedSampling</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">engine</span><span class="o">=</span><span class="n">NVTLangevin</span><span class="p">,</span>
+    <span class="n">engine_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">300.0</span><span class="p">,</span> <span class="s2">&quot;friction&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">},</span>
+    <span class="n">biases</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;umbrella&quot;</span><span class="p">:</span> <span class="n">umbrella</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">sampling2</span><span class="o">.</span><span class="n">restore</span><span class="p">(</span><span class="s2">&quot;run.zarr&quot;</span><span class="p">)</span>   <span class="c1"># returns a force-primed batch</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">sampling2</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span> <span class="n">prime</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Resuming reproduces the <strong>identical trajectory</strong>. <code class="docutils literal notranslate"><span class="pre">NVTLangevin</span></code> derives its
+noise from <code class="docutils literal notranslate"><span class="pre">random_seed</span> <span class="pre">+</span> <span class="pre">step_count</span></code> rather than a stateful generator, so
+restoring those two integers restores the noise sequence exactly — there is no
+RNG object to serialise.</p>
+<section id="only-at-an-epoch-boundary">
+<h3><a class="toc-backref" href="#id32" role="doc-backlink">Only at an epoch boundary</a><a class="headerlink" href="#only-at-an-epoch-boundary" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">checkpoint()</span></code> raises unless <code class="docutils literal notranslate"><span class="pre">step_count</span> <span class="pre">%</span> <span class="pre">steps_per_epoch</span> <span class="pre">==</span> <span class="pre">0</span></code>, and the error
+names the next valid step. This is not bookkeeping fussiness: an epoch boundary
+is the only point with no pending <code class="docutils literal notranslate"><span class="pre">update()</span></code> and no in-flight epoch commit, so
+anywhere else risks capturing a bias mid-mutation.</p>
+<p>Being <em>at</em> a boundary is not the same as being quiescent, though. Both the
+epoch commit and the replica exchange fire <strong>lazily</strong> — the first step of the
+next epoch or segment is what notices the boundary was crossed — so
+immediately after <code class="docutils literal notranslate"><span class="pre">run(...,</span> <span class="pre">n_steps=N)</span></code> neither has happened.</p>
+<p><code class="docutils literal notranslate"><span class="pre">checkpoint()</span></code> therefore drains both itself before collecting any state, in
+the same order the runtime uses: <strong>exchange first, then commit</strong>, because the
+commit publishes shared history and doing it before the swap would publish
+under labels that are about to change. A shared-history bias is recorded with
+its deposits merged rather than still pending, and the labels are post-swap.</p>
+<p>Both drains are idempotent — tracked per epoch index and per segment index —
+so the lazy path on the next step sees them as already done and cannot
+double-count.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">checkpoint()</span></code> is therefore <strong>not a passive snapshot</strong>: it can advance the
+exchange assignment as part of reaching a quiescent point. Read
+<code class="docutils literal notranslate"><span class="pre">batch.thermodynamic_state_id</span></code> <em>after</em> checkpointing if you want the value
+that was saved.</p>
+</div>
+</section>
+<section id="transactional-by-construction">
+<h3><a class="toc-backref" href="#id33" role="doc-backlink">Transactional by construction</a><a class="headerlink" href="#transactional-by-construction" title="Link to this heading">#</a></h3>
+<p>Writing state transactionally and refusing a torn store is not specific to
+enhanced sampling, so it lives in the shared checkpoint layer
+(<code class="docutils literal notranslate"><span class="pre">nvalchemi._checkpoint</span></code>) rather than here: <code class="docutils literal notranslate"><span class="pre">save_checkpoint</span></code> and
+<code class="docutils literal notranslate"><span class="pre">load_checkpoint</span></code> take a mapping of name to anything with
+<code class="docutils literal notranslate"><span class="pre">state_dict</span></code>/<code class="docutils literal notranslate"><span class="pre">load_state_dict</span></code>, which is what hooks, integrators, biases and
+the ladder already are. This section describes what an enhanced-sampling run
+puts in it.</p>
+<p>The store is written batch → components → <strong>manifest last</strong>. The manifest is
+the commit marker:</p>
+<ul class="simple">
+<li><p>No manifest ⇒ the write was interrupted ⇒ <code class="docutils literal notranslate"><span class="pre">load_checkpoint</span></code> refuses it.</p></li>
+<li><p>The store is built beside the destination and moved into place only once it
+is complete, so saving over an existing checkpoint cannot damage it: an
+interrupted save leaves the previous one intact and loadable. Checkpointing
+every epoch to one path is safe.</p></li>
+<li><p>Moving into place takes two renames, because a directory cannot be renamed
+onto a populated one, and between them nothing is at the path. A process
+killed in that window leaves the previous checkpoint under
+<code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.superseded-&lt;pid&gt;</span></code>; <code class="docutils literal notranslate"><span class="pre">load_checkpoint</span></code> finds it, moves it back, and
+warns that it is the generation before the interrupted save. Nothing is
+promoted without a committed manifest, and nothing is touched when the path
+already holds a checkpoint.</p></li>
+<li><p><strong>Everything</strong> is checksummed (SHA-256) and verified on read, so damage
+<em>after</em> the manifest landed is caught too: each component individually,
+plus a <code class="docutils literal notranslate"><span class="pre">batch_checksum</span></code> covering <code class="docutils literal notranslate"><span class="pre">meta/</span></code>, <code class="docutils literal notranslate"><span class="pre">core/</span></code>, and <code class="docutils literal notranslate"><span class="pre">custom/</span></code>. Cover is
+mandatory, not best-effort — a manifest that declares a component without a
+checksum, carries a checksum for no component, or omits the batch checksum
+is rejected as invalid — otherwise deleting one key from the manifest would
+be enough to leave that component free to modify.</p></li>
+<li><p>The batch checksum is the one most easily forgotten: the batch is written by
+<code class="docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code>, outside the component path, so covering only the
+component state would attest to the bias and integrator while restoring
+corrupted positions or a scrambled walker identity in silence.</p></li>
+<li><p><strong>No pickle payloads.</strong> State is Zarr arrays and JSON attributes, so a
+checkpoint is readable by anything that reads Zarr and loading one cannot
+execute code. An unsupported value type raises rather than falling back.</p></li>
+</ul>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>run.zarr/
+  meta/, core/, custom/    walker batch (custom/ carries walker identity)
+  checkpoint/
+    manifest               written last — the commit; holds every checksum
+    dynamics/              step counter, RNG seed, per-system integrator state
+    biases/&lt;name&gt;/         each bias&#39;s state_dict()
+    hooks/identity/        walker-id allocation
+    hooks/bias/            per-bias update() delivery record
+    hooks/epoch/           last committed epoch
+    hooks/exchange/        last attempted segment
+    exchange/              ladder counters and acceptance-RNG position
+</pre></div>
+</div>
+<p>Each of those groups is one object’s <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code>, so a checkpoint can be
+inspected piece by piece rather than as one blob. The manifest also carries a
+free-form <code class="docutils literal notranslate"><span class="pre">compatibility</span></code> fingerprint — model, dynamics and bias classes, and
+the ladder — which <code class="docutils literal notranslate"><span class="pre">restore()</span></code> checks before applying anything.</p>
+</section>
+<section id="bias-configuration-is-validated-not-just-bias-class">
+<h3><a class="toc-backref" href="#id34" role="doc-backlink">Bias configuration is validated, not just bias class</a><a class="headerlink" href="#bias-configuration-is-validated-not-just-bias-class" title="Link to this heading">#</a></h3>
+<p>The manifest records each bias’s <em>class</em>, but a class name says nothing about
+the settings its saved state depends on. An ABF histogram is state; the
+<code class="docutils literal notranslate"><span class="pre">cv_range</span></code> that decides what its bins mean is configuration. Restoring the
+first without the second leaves the counts shape-compatible and silently
+relabels every bin — bin 5 stops meaning <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">1.55</span></code> and starts meaning
+<code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">3.1</span></code>, carrying its accumulated mean force with it.</p>
+<p>Every adaptive bias therefore records a <code class="docutils literal notranslate"><span class="pre">config_fingerprint()</span></code> inside its own
+<code class="docutils literal notranslate"><span class="pre">state_dict()</span></code>, checked on load:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Bias</p></th>
+<th class="head"><p>Checked</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AdaptiveBiasingForce</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">atom_indices</span></code>, <code class="docutils literal notranslate"><span class="pre">cv_range</span></code>, <code class="docutils literal notranslate"><span class="pre">n_bins</span></code>, <code class="docutils literal notranslate"><span class="pre">temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">min_samples</span></code>, <code class="docutils literal notranslate"><span class="pre">full_samples</span></code>, <code class="docutils literal notranslate"><span class="pre">max_force</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">WellTemperedMetaDynamicsBias</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">height</span></code>, <code class="docutils literal notranslate"><span class="pre">sigma</span></code>, <code class="docutils literal notranslate"><span class="pre">temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">bias_factor</span></code>, <code class="docutils literal notranslate"><span class="pre">storage</span></code>, <code class="docutils literal notranslate"><span class="pre">history</span></code>, <code class="docutils literal notranslate"><span class="pre">ramp_depositions</span></code>, <code class="docutils literal notranslate"><span class="pre">periods</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RMSDMetaDynamicsBias</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">k_push</span></code>, <code class="docutils literal notranslate"><span class="pre">alpha</span></code>, <code class="docutils literal notranslate"><span class="pre">storage</span></code>, <code class="docutils literal notranslate"><span class="pre">history</span></code>, <code class="docutils literal notranslate"><span class="pre">ramp_depositions</span></code>, <code class="docutils literal notranslate"><span class="pre">atom_indices</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Because the check lives in <code class="docutils literal notranslate"><span class="pre">load_state_dict</span></code> rather than in the manifest, it
+covers a bias restored directly as well as one restored through the strategy.</p>
+<p>Capacity (<code class="docutils literal notranslate"><span class="pre">max_hills</span></code>, <code class="docutils literal notranslate"><span class="pre">max_references</span></code>) is deliberately <strong>not</strong> checked:
+<code class="docutils literal notranslate"><span class="pre">storage=&quot;grow&quot;</span></code> legitimately reaches a size the constructor never had, and
+<code class="docutils literal notranslate"><span class="pre">load_state_dict</span></code> already resizes to match.</p>
+<p>The check runs <em>before</em> delegating to <code class="docutils literal notranslate"><span class="pre">nn.Module.load_state_dict</span></code>, which
+matters for configuration held as a buffer — <code class="docutils literal notranslate"><span class="pre">sigma</span></code>, <code class="docutils literal notranslate"><span class="pre">atom_indices</span></code>. Loading
+overwrites buffers, so a check afterwards would come too late to stop the
+caller’s value being replaced by the checkpoint’s, which is the opposite of
+what asking for it meant.</p>
+</section>
+<section id="model-weights-are-not-restored">
+<h3><a class="toc-backref" href="#id35" role="doc-backlink">Model weights are not restored</a><a class="headerlink" href="#model-weights-are-not-restored" title="Link to this heading">#</a></h3>
+<p>Reconstruct the model — including loading its weights through its own API —
+before calling <code class="docutils literal notranslate"><span class="pre">restore()</span></code>. The manifest records the model class, dynamics
+class, and bias set, and <code class="docutils literal notranslate"><span class="pre">restore()</span></code> refuses a mismatch; but that proves the
+<em>architecture</em> agrees, not the weights.</p>
+</section>
+<section id="warm-start-vs-restore">
+<h3><a class="toc-backref" href="#id36" role="doc-backlink"><code class="docutils literal notranslate"><span class="pre">warm_start</span></code> vs <code class="docutils literal notranslate"><span class="pre">restore</span></code></a><a class="headerlink" href="#warm-start-vs-restore" title="Link to this heading">#</a></h3>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">warm_start(frames)</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">restore(path)</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Bias history</p></td>
+<td><p>replayed, approximately</p></td>
+<td><p>exact</p></td>
+</tr>
+<tr class="row-odd"><td><p>Velocities, RNG, integrator state</p></td>
+<td><p>not restored</p></td>
+<td><p>exact</p></td>
+</tr>
+<tr class="row-even"><td><p>Use when</p></td>
+<td><p>continuing from a trajectory snapshot</p></td>
+<td><p>resuming a run exactly</p></td>
+</tr>
+</tbody>
+</table>
+<p>They are mutually exclusive: <code class="docutils literal notranslate"><span class="pre">warm_start()</span></code> after <code class="docutils literal notranslate"><span class="pre">restore()</span></code> raises, because
+replaying history the restored state already contains would corrupt it.</p>
+</section>
+</section>
+<section id="replica-exchange">
+<span id="id1"></span><h2><a class="toc-backref" href="#id37" role="doc-backlink">Replica exchange</a><a class="headerlink" href="#replica-exchange" title="Link to this heading">#</a></h2>
+<p>A ladder of thermodynamic states, all advanced as one batch, with periodic
+swaps of which walker sits on which rung:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplicaExchange</span><span class="p">,</span> <span class="n">ThermodynamicState</span>
+
+<span class="n">states</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">ThermodynamicState</span><span class="p">(</span><span class="n">state_id</span><span class="o">=</span><span class="n">i</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span> <span class="o">*</span> <span class="mf">1.15</span> <span class="o">**</span> <span class="n">i</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="p">]</span>
+<span class="n">exchange</span> <span class="o">=</span> <span class="n">ReplicaExchange</span><span class="p">(</span>
+    <span class="n">states</span><span class="o">=</span><span class="n">states</span><span class="p">,</span>
+    <span class="n">initial_state_ids</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span>   <span class="c1"># must be a permutation</span>
+    <span class="n">attempt_interval</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>                <span class="c1"># steps per exchange segment</span>
+    <span class="n">random_seed</span><span class="o">=</span><span class="mi">2024</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">sampling</span> <span class="o">=</span> <span class="n">EnhancedSampling</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">engine</span><span class="o">=</span><span class="n">NVTLangevin</span><span class="p">,</span>
+    <span class="n">engine_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">300.0</span><span class="p">,</span> <span class="s2">&quot;friction&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">},</span>
+    <span class="n">biases</span><span class="o">=</span><span class="p">{},</span>
+    <span class="n">replica_exchange</span><span class="o">=</span><span class="n">exchange</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">sampling</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">100_000</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="one-walker-per-rung">
+<h3><a class="toc-backref" href="#id38" role="doc-backlink">One walker per rung</a><a class="headerlink" href="#one-walker-per-rung" title="Link to this heading">#</a></h3>
+<p>Exchange presumes a bijection: every walker holds exactly one state and every
+state exactly one walker, because pairing looks up “which walker holds state
+<em>k</em>”. <code class="docutils literal notranslate"><span class="pre">WalkerIdentityHook</span></code> validates that on the first stamp, whether the
+assignment came from <code class="docutils literal notranslate"><span class="pre">initial_state_ids</span></code> or was already on the batch:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>ReplicaExchange: the ladder has 4 state(s) but the batch has 2 walker(s).
+ReplicaExchange: batch.thermodynamic_state_id must be a permutation of 0..3,
+                 got [0, 0, 1, 2].
+</pre></div>
+</div>
+<p>Both are configuration errors that would otherwise surface much later and much
+less clearly — a size mismatch as <code class="docutils literal notranslate"><span class="pre">Length</span> <span class="pre">mismatch:</span> <span class="pre">4</span> <span class="pre">vs</span> <span class="pre">2</span></code> from inside the
+batch storage, a duplicate as a bare <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> from the pair lookup.</p>
+</section>
+<section id="the-ladder-binds-the-thermostat">
+<h3><a class="toc-backref" href="#id39" role="doc-backlink">The ladder binds the thermostat</a><a class="headerlink" href="#the-ladder-binds-the-thermostat" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">engine_kwargs</span></code> names one temperature; the ladder names the rest. The
+assignment is pushed onto the integrator whenever it changes — at the first
+stamp, after a refill, and on an accepted swap — so a walker’s thermostat
+always targets the rung its label claims. You do not need to pass a per-walker
+temperature tensor to the engine, and passing one is overwritten by the
+ladder.</p>
+</section>
+<section id="labels-move-coordinates-do-not">
+<h3><a class="toc-backref" href="#id40" role="doc-backlink">Labels move, coordinates do not</a><a class="headerlink" href="#labels-move-coordinates-do-not" title="Link to this heading">#</a></h3>
+<p>An accepted swap permutes <code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code>. The walker keeps its row,
+its velocities, and its integrator arrays; the temperature assigned to it
+changes. Nothing is copied between rows, which is what makes the move viable
+inside a batched GPU step.</p>
+<p>The swap is <strong>indivisible</strong>: the label, the integrator’s target temperature,
+the velocity rescaling, and the forces all move together. A walker labelled
+one rung while its thermostat targets another samples the wrong ensemble with
+no symptom, so the strategy refuses at construction any engine class that
+cannot rebind:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>TypeError: replica exchange needs NVE to implement
+apply_per_system_params(), so an accepted swap can rebind temperature,
+velocities, and thermostat state together.
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">apply_per_system_params(params,</span> <span class="pre">batch)</span></code> is the generic adapter — the batch is
+a parameter rather than a follow-up call precisely so the velocity rescale
+cannot be forgotten. An integrator that rebinds a parameter it does not
+understand raises rather than ignoring it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">NVTLangevin</span></code> rescales velocities by <code class="docutils literal notranslate"><span class="pre">sqrt(T_new</span> <span class="pre">/</span> <span class="pre">T_old)</span></code>. <code class="docutils literal notranslate"><span class="pre">NVTNoseHoover</span></code>
+additionally transforms its chain: <code class="docutils literal notranslate"><span class="pre">Q</span></code> scales with <code class="docutils literal notranslate"><span class="pre">kT</span></code> and <code class="docutils literal notranslate"><span class="pre">eta_dot</span></code> with
+<code class="docutils literal notranslate"><span class="pre">1/sqrt(kT)</span></code>, which leaves the chain kinetic energy invariant — injecting
+thermostat energy on a swap is exactly what breaks detailed balance.</p>
+</section>
+<section id="acceptance">
+<span id="id2"></span><h3><a class="toc-backref" href="#id41" role="doc-backlink">Acceptance</a><a class="headerlink" href="#acceptance" title="Link to this heading">#</a></h3>
+<p>The rule is <strong>inferred from the ladder</strong>, never declared, because a declared
+rule that disagreed with the ladder would be silent and wrong acceptance
+breaks detailed balance without any symptom a run would show.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Ladder</p></th>
+<th class="head"><p>Rule</p></th>
+<th class="head"><p>Formula</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Temperatures differ</p></td>
+<td><p>temperature</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">log</span> <span class="pre">a</span> <span class="pre">=</span> <span class="pre">min(0,</span> <span class="pre">(β_i</span> <span class="pre">−</span> <span class="pre">β_j)(U_i</span> <span class="pre">−</span> <span class="pre">U_j))</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Temperatures equal</p></td>
+<td><p>umbrella</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">log</span> <span class="pre">a</span> <span class="pre">=</span> <span class="pre">min(0,</span> <span class="pre">u_i(x_i)</span> <span class="pre">+</span> <span class="pre">u_j(x_j)</span> <span class="pre">−</span> <span class="pre">u_i(x_j)</span> <span class="pre">−</span> <span class="pre">u_j(x_i))</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Umbrella acceptance needs the bias evaluated under swapped labels, which
+costs one extra bias evaluation per attempt.</p>
+<p>A ladder that varies temperature <em>and</em> bias window at once needs a combined
+rule that is not implemented. The temperature rule alone omits the cross-state
+bias terms, so running it anyway breaks detailed balance with no symptom —
+it is therefore <strong>rejected</strong>, twice over:</p>
+<ul class="simple">
+<li><p>A bias that sets <code class="docutils literal notranslate"><span class="pre">state_dependent_for_exchange</span></code> is refused at construction.
+<code class="docutils literal notranslate"><span class="pre">HarmonicUmbrellaBias</span></code> sets it whenever it has more than one window.</p></li>
+<li><p>At prime time the strategy <strong>probes</strong> every bias empirically: it evaluates
+each one under the current assignment and under a rotated one, at identical
+coordinates. A bias whose energy is independent of the assignment returns
+the same number twice; one that reads <code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code> does not.
+That catches a user-written bias which declares nothing.</p></li>
+</ul>
+<p>Vary one or the other. A <strong>single-window</strong> <code class="docutils literal notranslate"><span class="pre">HarmonicUmbrellaBias</span></code> is fine
+alongside a temperature ladder — it ignores <code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code> rather
+than treating it as a window index, so the ids are free to address the
+ladder.</p>
+</section>
+<section id="pair-schedule">
+<h3><a class="toc-backref" href="#id42" role="doc-backlink">Pair schedule</a><a class="headerlink" href="#pair-schedule" title="Link to this heading">#</a></h3>
+<p>Segments alternate even and odd offsets: <code class="docutils literal notranslate"><span class="pre">(0,1),(2,3)</span></code> then <code class="docutils literal notranslate"><span class="pre">(1,2),(3,4)</span></code>.
+No state appears twice in one segment, which is what lets every pair be
+decided simultaneously; two segments cover every neighbouring pair.</p>
+<p>A segment’s pairs are attempted when it <strong>completes</strong> — entering segment <em>s</em>
+decides segment <em>s−1</em>, the same way entering epoch <em>e</em> commits epoch <em>e−1</em>.
+So the first swap lands at <code class="docutils literal notranslate"><span class="pre">attempt_interval</span></code>, using segment 0’s pairs.</p>
+</section>
+<section id="tuning-the-ladder">
+<h3><a class="toc-backref" href="#id43" role="doc-backlink">Tuning the ladder</a><a class="headerlink" href="#tuning-the-ladder" title="Link to this heading">#</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">exchange</span><span class="o">.</span><span class="n">acceptance_rate</span>            <span class="c1"># overall</span>
+<span class="n">exchange</span><span class="o">.</span><span class="n">pair_acceptance_rates</span><span class="p">()</span>    <span class="c1"># per neighbouring pair</span>
+</pre></div>
+</div>
+<p>Per-pair rates are what a ladder is tuned on. A pair far below the others is
+a gap the walkers cannot cross and needs another rung; uniformly high rates
+mean the rungs are closer than they need to be.</p>
+</section>
+<section id="restoring-an-exchange-run">
+<h3><a class="toc-backref" href="#id44" role="doc-backlink">Restoring an exchange run</a><a class="headerlink" href="#restoring-an-exchange-run" title="Link to this heading">#</a></h3>
+<p>The manifest records the ladder — mode, acceptance rule, <code class="docutils literal notranslate"><span class="pre">attempt_interval</span></code>,
+and temperatures — and <code class="docutils literal notranslate"><span class="pre">restore()</span></code> refuses a mismatch. That includes both
+directions of exchange-versus-none:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>EnhancedSampling.restore: the checkpoint was written by a different configuration:
+  exchange temperatures: checkpoint has [300.0, 350.0, 400.0],
+                         this strategy has [100.0, 200.0, 900.0]
+</pre></div>
+</div>
+<p>This is not pedantry. The ladder decides what a swap <em>means</em>: restoring into
+different temperatures would keep the walker assignment and the acceptance
+counters while silently changing the exponent every future swap is decided
+on. <code class="docutils literal notranslate"><span class="pre">initial_state_ids</span></code> is deliberately <em>not</em> checked — it seeds the
+assignment only when the batch does not already carry one, and a restored
+batch always does.</p>
+</section>
+<section id="reproducibility">
+<h3><a class="toc-backref" href="#id45" role="doc-backlink">Reproducibility</a><a class="headerlink" href="#reproducibility" title="Link to this heading">#</a></h3>
+<p>Acceptance draws come from <code class="docutils literal notranslate"><span class="pre">random_seed</span> <span class="pre">+</span> <span class="pre">exchange_id</span></code> rather than a
+long-lived generator — the same counter-based scheme <code class="docutils literal notranslate"><span class="pre">NVTLangevin</span></code> uses for
+its noise. A checkpoint therefore stores two integers instead of an RNG blob,
+and a restored run reproduces the same accept/reject decisions. Exchange
+state lives under <code class="docutils literal notranslate"><span class="pre">sampling/exchange/</span></code>.</p>
+</section>
+<section id="not-supported">
+<h3><a class="toc-backref" href="#id46" role="doc-backlink">Not supported</a><a class="headerlink" href="#not-supported" title="Link to this heading">#</a></h3>
+<p>Asynchronous exchange (pair-local rendezvous, non-blocking workers) is not
+implemented; <code class="docutils literal notranslate"><span class="pre">mode=&quot;asynchronous&quot;</span></code> raises. A force-only bias such as adaptive
+biasing force cannot participate — the acceptance rule needs a cross-state
+bias energy — and is rejected rather than silently excluded.</p>
+</section>
+</section>
+<section id="relationship-to-biasedpotentialhook">
+<h2><a class="toc-backref" href="#id47" role="doc-backlink">Relationship to <code class="docutils literal notranslate"><span class="pre">BiasedPotentialHook</span></code></a><a class="headerlink" href="#relationship-to-biasedpotentialhook" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.hooks.BiasedPotentialHook.html#nvalchemi.hooks.BiasedPotentialHook" title="nvalchemi.hooks.BiasedPotentialHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">BiasedPotentialHook</span></code></a> covers similar ground and is
+<strong>deprecated</strong>. Its <code class="docutils literal notranslate"><span class="pre">bias_fn(batch)</span> <span class="pre">-&gt;</span> <span class="pre">(energy,</span> <span class="pre">forces)</span></code> contract has no slot
+for a cell response, so a bias applied through it contributes no stress and is
+invisible to an NPT/NPH barostat — the cell evolves as if the bias were absent,
+with no error raised. It also cannot check that the returned forces are
+<code class="docutils literal notranslate"><span class="pre">-dE/dr</span></code>, and composes several biases by sequential in-place mutation.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">EnhancedSampling</span></code> now available, the migration path is complete —
+anything the hook does, this subpackage does. Existing hook-based code is
+correct under NVE and NVT, where nothing reads the stress, so it can be
+migrated when convenient rather than urgently. The hook remains functional and
+no removal date is set.</p>
+<p>No adapter is provided: bridging a bias onto <code class="docutils literal notranslate"><span class="pre">bias_fn</span></code> would have
+to discard its <code class="docutils literal notranslate"><span class="pre">stress</span></code>, reintroducing the exact failure the new API
+removes.</p>
+</section>
+<section id="not-yet-implemented">
+<h2><a class="toc-backref" href="#id48" role="doc-backlink">Not yet implemented</a><a class="headerlink" href="#not-yet-implemented" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Adaptive biasing force over any CV other than a pair distance; each
+coordinate needs its own metric correction.</p></li>
+<li><p>Asynchronous replica exchange (pair-local rendezvous, non-blocking
+workers). <code class="docutils literal notranslate"><span class="pre">mode=&quot;asynchronous&quot;</span></code> raises; synchronous exchange is available.</p></li>
+<li><p>The combined temperature-plus-window acceptance rule; see
+<a class="reference internal" href="#acceptance">Acceptance</a> for what is rejected and why.</p></li>
+<li><p>General triclinic MIC for unreduced cells.</p></li>
+<li><p>Domain decomposition. <code class="docutils literal notranslate"><span class="pre">ConservativeBias.distribution_spec()</span></code> returns <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+which makes <code class="docutils literal notranslate"><span class="pre">DistributedModel</span></code> raise rather than shard a bias whose
+cross-rank semantics are undefined. A bias that genuinely is local can
+override it; a CV like <code class="docutils literal notranslate"><span class="pre">pair_distance</span></code> across the cell is not.</p></li>
+</ul>
+</section>
+<section id="see-also">
+<h2><a class="toc-backref" href="#id49" role="doc-backlink">See also</a><a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="about/conventions.html"><span class="doc">Conventions</span></a> — virial, stress, and pressure signs.</p></li>
+<li><p><a class="reference internal" href="hooks.html"><span class="doc">Hooks</span></a> — the hook protocol the strategy builds on.</p></li>
+<li><p><a class="reference internal" href="dynamics.html"><span class="doc">Dynamics</span></a> — integrators and the step sequence.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="dynamics_sinks.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Data Sinks</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="generative.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Generative Models</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-start">Quick start</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#collective-variables">Collective variables</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-biases">Built-in biases</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#per-window-parameters">Per-window parameters</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#metadynamics">Metadynamics</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#well-tempered-metadynamics">Well-tempered metadynamics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#storage-policies">Storage policies</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-walker-history">Multi-walker history</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#xtb-style-rmsd-metadynamics">xTB-style RMSD metadynamics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#deposition-timing">Deposition timing</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adaptive-biasing-force">Adaptive biasing force</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-metric-correction">The metric correction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-threshold-and-ramp">Sample threshold and ramp</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#observation-ordering">Observation ordering</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#no-energy-and-therefore-no-replica-exchange">No energy, and therefore no replica exchange</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#reading-the-profile">Reading the profile</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-your-own-bias">Writing your own bias</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#a-bias-is-an-additive-potential">A bias is an additive potential</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-and-state-versions">Diagnostics and state versions</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-bias-hook-will-actually-apply">What the bias hook will actually apply</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-batteries-mixins">The batteries: mixins</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#conservativebias"><code class="docutils literal notranslate"><span class="pre">ConservativeBias</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adaptive-biases">Adaptive biases</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-strategy">The strategy</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-hooks-it-installs">The hooks it installs</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-it-guarantees">What it guarantees</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics">Diagnostics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#batch-requirements">Batch requirements</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#walker-identity">Walker identity</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#identity-across-a-refill">Identity across a refill</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checkpoint-and-restore">Checkpoint and restore</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#only-at-an-epoch-boundary">Only at an epoch boundary</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#transactional-by-construction">Transactional by construction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#bias-configuration-is-validated-not-just-bias-class">Bias configuration is validated, not just bias class</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-weights-are-not-restored">Model weights are not restored</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-start-vs-restore"><code class="docutils literal notranslate"><span class="pre">warm_start</span></code> vs <code class="docutils literal notranslate"><span class="pre">restore</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#replica-exchange">Replica exchange</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#one-walker-per-rung">One walker per rung</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-ladder-binds-the-thermostat">The ladder binds the thermostat</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#labels-move-coordinates-do-not">Labels move, coordinates do not</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#acceptance">Acceptance</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pair-schedule">Pair schedule</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tuning-the-ladder">Tuning the ladder</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#restoring-an-exchange-run">Restoring an exchange run</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#reproducibility">Reproducibility</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#not-supported">Not supported</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relationship-to-biasedpotentialhook">Relationship to <code class="docutils literal notranslate"><span class="pre">BiasedPotentialHook</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#not-yet-implemented">Not yet implemented</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/enhanced_sampling.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+﻿nvalchemi.enhanced\_sampling.pair\_distance
+===========================================
+
+.. currentmodule:: nvalchemi.enhanced_sampling
+
+.. autofunction:: pair_distance

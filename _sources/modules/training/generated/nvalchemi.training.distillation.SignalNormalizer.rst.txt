@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.SignalNormalizer
+================================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autodata:: SignalNormalizer

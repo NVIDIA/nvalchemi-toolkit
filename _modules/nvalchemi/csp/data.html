@@ -1,0 +1,1736 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.csp.data &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/csp/data';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.csp.data</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.csp.data</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Owned formula-unit state and rigid-molecule ASU packing results.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numbers</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">secrets</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">MappingProxyType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+
+<span class="n">_FORMULA_DTYPES</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;conformer_positions&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="s2">&quot;conformer_ptr&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="s2">&quot;molecule_conformer_ptr&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="s2">&quot;molecule_atom_ptr&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+    <span class="s2">&quot;contact_distances&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="s2">&quot;component_index&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="s2">&quot;component_charge&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_FORMULA_STATE_KEYS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;version&quot;</span><span class="p">,</span>
+    <span class="o">*</span><span class="n">_FORMULA_DTYPES</span><span class="p">,</span>
+    <span class="s2">&quot;formula_unit_volume&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;metadata&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">_COMPACT_DTYPES</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;structure_molecule_ptr&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="s2">&quot;conformer_indices&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="s2">&quot;rotations&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="s2">&quot;fractional_centers&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="s2">&quot;cells&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="s2">&quot;space_groups&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="s2">&quot;z&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="s2">&quot;z_prime&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="s2">&quot;structure_ids&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_ATOM_SOURCE_FIELDS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;csp_source_asu_atom_index&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;csp_source_molecule_index&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;csp_source_component_index&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;csp_source_conformer_index&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;csp_source_symmetry_operation_index&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_SYSTEM_SOURCE_FIELDS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;csp_source_space_group&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;csp_source_z&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;csp_source_z_prime&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;csp_source_structure_id&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_freeze_json</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;metadata&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Copy JSON values into recursively immutable containers.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="nb">int</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="n">value</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> contains a non-finite number&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">value</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="n">copied</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> keys must be strings&quot;</span><span class="p">)</span>
+            <span class="n">copied</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_freeze_json</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">MappingProxyType</span><span class="p">(</span><span class="n">copied</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">_freeze_json</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">[</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> must contain only JSON-compatible values&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_thaw_json</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return an independent mutable JSON copy of a frozen value.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">_thaw_json</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">_thaw_json</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">value</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">value</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_copy_formula_tensor</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate a formula tensor and return an owned contiguous CPU copy.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be a torch.Tensor&quot;</span><span class="p">)</span>
+    <span class="n">expected_dtype</span> <span class="o">=</span> <span class="n">_FORMULA_DTYPES</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">expected_dtype</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must have dtype </span><span class="si">{</span><span class="n">expected_dtype</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+        <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">memory_format</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">contiguous_format</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_pointer</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">pointer</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">end</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate a zero-based nondecreasing pointer ending at ``end``.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">pointer</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">pointer</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be a one-dimensional pointer with at least two entries&quot;</span>
+        <span class="p">)</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">pointer</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must start at zero&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">end</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must end at </span><span class="si">{</span><span class="n">end</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">values</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">right</span> <span class="o">&lt;</span> <span class="n">left</span> <span class="k">for</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">values</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be nondecreasing&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">values</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_prepare_formula_input</span><span class="p">(</span>
+    <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">center_conformers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate formula-unit fields and prepare their owned tensor state.</span>
+
+<span class="sd">    Conformer coordinates are centered per conformer when ``center_conformers``</span>
+<span class="sd">    is true. Tensor fields are copied to CPU by the formula-tensor copier.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">required</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">_FORMULA_DTYPES</span><span class="p">)</span> <span class="o">|</span> <span class="p">{</span><span class="s2">&quot;formula_unit_volume&quot;</span><span class="p">}</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="n">required</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing MolecularPackingInput fields: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">tensors</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">name</span><span class="p">:</span> <span class="n">_copy_formula_tensor</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">values</span><span class="p">[</span><span class="n">name</span><span class="p">])</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_FORMULA_DTYPES</span>
+    <span class="p">}</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;conformer_positions&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">positions</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;conformer_positions must have shape [C_atoms, 3]&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;conformer_positions must contain only finite values&quot;</span><span class="p">)</span>
+
+    <span class="n">atomic_numbers</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">atomic_numbers</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">atomic_numbers</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;atomic_numbers must be a nonempty one-dimensional tensor&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">atomic_numbers</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">atomic_numbers</span> <span class="o">&gt;</span> <span class="mi">118</span><span class="p">))</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;atomic_numbers must be in the range [1, 118]&quot;</span><span class="p">)</span>
+    <span class="n">num_atoms</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">atomic_numbers</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+
+    <span class="n">atom_ptr</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;molecule_atom_ptr&quot;</span><span class="p">]</span>
+    <span class="n">atom_ptr_values</span> <span class="o">=</span> <span class="n">_validate_pointer</span><span class="p">(</span><span class="s2">&quot;molecule_atom_ptr&quot;</span><span class="p">,</span> <span class="n">atom_ptr</span><span class="p">,</span> <span class="n">num_atoms</span><span class="p">)</span>
+    <span class="n">num_molecules</span> <span class="o">=</span> <span class="n">atom_ptr</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="n">num_molecules</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;A formula unit must contain at least one molecule&quot;</span><span class="p">)</span>
+    <span class="n">molecule_atom_counts</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">right</span> <span class="o">-</span> <span class="n">left</span>
+        <span class="k">for</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">atom_ptr_values</span><span class="p">,</span> <span class="n">atom_ptr_values</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">count</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">molecule_atom_counts</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Every formula-unit molecule must contain at least one atom&quot;</span><span class="p">)</span>
+
+    <span class="n">conformer_ptr</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;conformer_ptr&quot;</span><span class="p">]</span>
+    <span class="n">conformer_ptr_values</span> <span class="o">=</span> <span class="n">_validate_pointer</span><span class="p">(</span>
+        <span class="s2">&quot;conformer_ptr&quot;</span><span class="p">,</span> <span class="n">conformer_ptr</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="p">)</span>
+    <span class="n">num_conformers</span> <span class="o">=</span> <span class="n">conformer_ptr</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="n">num_conformers</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Each formula-unit molecule must have at least one conformer&quot;</span><span class="p">)</span>
+    <span class="n">conformer_atom_counts</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">right</span> <span class="o">-</span> <span class="n">left</span>
+        <span class="k">for</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+            <span class="n">conformer_ptr_values</span><span class="p">,</span> <span class="n">conformer_ptr_values</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">count</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">conformer_atom_counts</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Every conformer must contain at least one atom&quot;</span><span class="p">)</span>
+
+    <span class="n">molecule_conformer_ptr</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;molecule_conformer_ptr&quot;</span><span class="p">]</span>
+    <span class="n">molecule_conformer_values</span> <span class="o">=</span> <span class="n">_validate_pointer</span><span class="p">(</span>
+        <span class="s2">&quot;molecule_conformer_ptr&quot;</span><span class="p">,</span> <span class="n">molecule_conformer_ptr</span><span class="p">,</span> <span class="n">num_conformers</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">molecule_conformer_ptr</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="n">num_molecules</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;molecule_conformer_ptr must have the same number of entries as &quot;</span>
+            <span class="s2">&quot;molecule_atom_ptr&quot;</span>
+        <span class="p">)</span>
+    <span class="k">for</span> <span class="n">molecule_index</span><span class="p">,</span> <span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+        <span class="nb">zip</span><span class="p">(</span><span class="n">molecule_conformer_values</span><span class="p">,</span> <span class="n">molecule_conformer_values</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">first</span> <span class="o">==</span> <span class="n">stop</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Molecule </span><span class="si">{</span><span class="n">molecule_index</span><span class="si">}</span><span class="s2"> must have at least one conformer&quot;</span>
+            <span class="p">)</span>
+        <span class="n">expected_atoms</span> <span class="o">=</span> <span class="n">molecule_atom_counts</span><span class="p">[</span><span class="n">molecule_index</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">count</span> <span class="o">!=</span> <span class="n">expected_atoms</span> <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">conformer_atom_counts</span><span class="p">[</span><span class="n">first</span><span class="p">:</span><span class="n">stop</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Conformers in molecule </span><span class="si">{</span><span class="n">molecule_index</span><span class="si">}</span><span class="s2">&#39;s pool must each contain &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">expected_atoms</span><span class="si">}</span><span class="s2"> atoms&quot;</span>
+            <span class="p">)</span>
+
+    <span class="n">contact_distances</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;contact_distances&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">contact_distances</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">num_atoms</span><span class="p">,</span> <span class="n">num_atoms</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;contact_distances must have shape [</span><span class="si">{</span><span class="n">num_atoms</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">num_atoms</span><span class="si">}</span><span class="s2">]&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">contact_distances</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="ow">or</span> <span class="p">(</span><span class="n">contact_distances</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;contact_distances must contain finite positive values&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span>
+        <span class="n">contact_distances</span><span class="p">,</span> <span class="n">contact_distances</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1.0e-6</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1.0e-5</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;contact_distances must be symmetric&quot;</span><span class="p">)</span>
+
+    <span class="n">component_index</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;component_index&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">component_index</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">num_molecules</span><span class="p">,):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;component_index must have shape [</span><span class="si">{</span><span class="n">num_molecules</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">component_index</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;component_index values must be nonnegative&quot;</span><span class="p">)</span>
+    <span class="n">component_values</span> <span class="o">=</span> <span class="n">component_index</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">component_ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">component_values</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">component_ids</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">component_values</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;component_index IDs must be contiguous from zero&quot;</span><span class="p">)</span>
+
+    <span class="n">component_charge</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;component_charge&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">component_charge</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">component_ids</span><span class="p">),):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;component_charge must have shape &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">component_ids</span><span class="p">)</span><span class="si">}</span><span class="s2">] (one value per component)&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">raw_volume</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;formula_unit_volume&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw_volume</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw_volume</span><span class="p">,</span> <span class="n">numbers</span><span class="o">.</span><span class="n">Real</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;formula_unit_volume must be a real number&quot;</span><span class="p">)</span>
+    <span class="n">volume</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">raw_volume</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">volume</span><span class="p">)</span> <span class="ow">or</span> <span class="n">volume</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;formula_unit_volume must be finite and positive&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">center_conformers</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">first</span><span class="p">,</span> <span class="n">stop</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+            <span class="n">conformer_ptr_values</span><span class="p">,</span> <span class="n">conformer_ptr_values</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">):</span>
+            <span class="n">positions</span><span class="p">[</span><span class="n">first</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span> <span class="o">-=</span> <span class="n">positions</span><span class="p">[</span><span class="n">first</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">raw_metadata</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">raw_metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw_metadata</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;metadata must be a mapping or None&quot;</span><span class="p">)</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">raw_metadata</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_freeze_json</span><span class="p">(</span><span class="n">raw_metadata</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="o">**</span><span class="n">tensors</span><span class="p">,</span>
+        <span class="s2">&quot;formula_unit_volume&quot;</span><span class="p">:</span> <span class="n">volume</span><span class="p">,</span>
+        <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
+    <span class="p">}</span>
+
+
+<div class="viewcode-block" id="MolecularPackingInput">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.MolecularPackingInput.html#nvalchemi.csp.MolecularPackingInput">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MolecularPackingInput</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Input data for one ordered molecular formula unit.</span>
+
+<span class="sd">    Constructor tensors are copied to contiguous CPU storage. Each conformer is</span>
+<span class="sd">    centered by its unweighted Cartesian mean. Contact matrix entries are</span>
+<span class="sd">    intermolecular contact cutoffs used to measure overlap; the</span>
+<span class="sd">    ``OverlapReliefPacker``</span>
+<span class="sd">    may accept residual overlap up to ``OverlapReliefConfig.overlap_tolerance``.</span>
+<span class="sd">    ``formula_unit_volume`` is a positive volume estimate in cubic angstroms.</span>
+
+<span class="sd">    Direct in-place mutation of exposed tensors is unsupported. Use</span>
+<span class="sd">    :meth:`state_dict` for independent CPU copies or :meth:`to` for owned tensor</span>
+<span class="sd">    storage on another device.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    conformer_positions : torch.Tensor, float32 ``[K, 3]``</span>
+<span class="sd">        Concatenated Cartesian atom coordinates in angstroms. Conformers are</span>
+<span class="sd">        stored in the order described by ``conformer_ptr`` and centered</span>
+<span class="sd">        independently by their unweighted Cartesian means at construction.</span>
+<span class="sd">    conformer_ptr : torch.Tensor, int32 ``[C + 1]``</span>
+<span class="sd">        Start and end positions of each conformer&#39;s atoms in</span>
+<span class="sd">        ``conformer_positions``. The pointer starts at zero, ends at ``K``, and</span>
+<span class="sd">        delimits nonempty conformers.</span>
+<span class="sd">    molecule_conformer_ptr : torch.Tensor, int32 ``[M + 1]``</span>
+<span class="sd">        Start and end conformer indices for each formula-unit molecule&#39;s</span>
+<span class="sd">        nonempty conformer pool.</span>
+<span class="sd">    molecule_atom_ptr : torch.Tensor, int32 ``[M + 1]``</span>
+<span class="sd">        Start and end positions of each molecule&#39;s atoms in ``atomic_numbers``.</span>
+<span class="sd">        Each molecule is nonempty, and every conformer in its pool has the same</span>
+<span class="sd">        atom count.</span>
+<span class="sd">    atomic_numbers : torch.Tensor, int64 ``[A]``</span>
+<span class="sd">        Atomic numbers from 1 through 118 in formula-unit molecule order.</span>
+<span class="sd">    contact_distances : torch.Tensor, float32 ``[A, A]``</span>
+<span class="sd">        Symmetric, finite, positive intermolecular contact cutoffs in angstroms</span>
+<span class="sd">        used to measure overlap between atoms in different molecular copies.</span>
+<span class="sd">    component_index : torch.Tensor, int32 ``[M]``</span>
+<span class="sd">        Contiguous nonnegative component IDs, one per formula-unit molecule.</span>
+<span class="sd">    component_charge : torch.Tensor, int32 ``[num_components]``</span>
+<span class="sd">        Formal charge in elementary charge units for each component ID.</span>
+<span class="sd">    formula_unit_volume : float</span>
+<span class="sd">        Positive formula-unit volume estimate in cubic angstroms.</span>
+<span class="sd">    metadata : Mapping[str, object], optional</span>
+<span class="sd">        JSON-compatible provenance copied into recursively immutable containers.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    All constructor tensors are detached, copied to contiguous CPU storage, and</span>
+<span class="sd">    validated once. Pointer tensors describe distinct levels: atom ranges in</span>
+<span class="sd">    ``molecule_atom_ptr``, conformer ranges in ``molecule_conformer_ptr``, and</span>
+<span class="sd">    coordinate ranges in ``conformer_ptr``. The formula input owns the</span>
+<span class="sd">    canonical CPU state; :meth:`to` makes an independent full tensor copy.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    This synthetic two-carbon pair illustrates array layout and centering; it</span>
+<span class="sd">    is not a chemically prepared molecule.</span>
+
+<span class="sd">    &gt;&gt;&gt; import torch</span>
+<span class="sd">    &gt;&gt;&gt; packing_input = MolecularPackingInput(</span>
+<span class="sd">    ...     conformer_positions=torch.tensor([[0., 0., 0.], [2., 0., 0.]]),</span>
+<span class="sd">    ...     conformer_ptr=torch.tensor([0, 2], dtype=torch.int32),</span>
+<span class="sd">    ...     molecule_conformer_ptr=torch.tensor([0, 1], dtype=torch.int32),</span>
+<span class="sd">    ...     molecule_atom_ptr=torch.tensor([0, 2], dtype=torch.int32),</span>
+<span class="sd">    ...     atomic_numbers=torch.tensor([6, 6], dtype=torch.int64),</span>
+<span class="sd">    ...     contact_distances=torch.ones((2, 2)),</span>
+<span class="sd">    ...     component_index=torch.tensor([0], dtype=torch.int32),</span>
+<span class="sd">    ...     component_charge=torch.tensor([0], dtype=torch.int32),</span>
+<span class="sd">    ...     formula_unit_volume=25.0,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; packing_input.conformer_positions.mean(dim=0)</span>
+<span class="sd">    tensor([0., 0., 0.])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span>
+        <span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">,</span>
+        <span class="n">revalidate_instances</span><span class="o">=</span><span class="s2">&quot;never&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">conformer_positions</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">conformer_ptr</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">molecule_conformer_ptr</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">molecule_atom_ptr</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">atomic_numbers</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">contact_distances</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">component_index</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">component_charge</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">formula_unit_volume</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_and_own</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate formula input mappings and copy existing instances.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="bp">cls</span><span class="p">):</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_FORMULA_STATE_KEYS</span> <span class="o">-</span> <span class="p">{</span><span class="s2">&quot;version&quot;</span><span class="p">}</span>
+            <span class="p">}</span>
+            <span class="k">return</span> <span class="n">_prepare_formula_input</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">center_conformers</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;MolecularPackingInput requires a mapping of tensor fields&quot;</span><span class="p">)</span>
+        <span class="n">prepared</span> <span class="o">=</span> <span class="n">_prepare_formula_input</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">formula_charge</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span>
+            <span class="n">prepared</span><span class="p">[</span><span class="s2">&quot;component_charge&quot;</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">prepared</span><span class="p">[</span><span class="s2">&quot;component_index&quot;</span><span class="p">])</span>
+            <span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">formula_charge</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Formula unit has nonzero formal charge Qformula=</span><span class="si">{</span><span class="n">formula_charge</span><span class="si">}</span><span class="s2"> e. &quot;</span>
+                <span class="s2">&quot;Full-cell charge follows Qcell = Z * Qformula; check counterions &quot;</span>
+                <span class="s2">&quot;and stoichiometry.&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">prepared</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">num_atoms</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Number of atoms in the ordered formula unit.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">num_molecules</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Number of molecules in the ordered formula unit.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">molecule_atom_ptr</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">num_conformers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Number of conformers in all molecule pools.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conformer_ptr</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">num_components</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Number of contiguous component IDs represented in the formula unit.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">component_index</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">molecule_charge</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Formal charge for each formula-unit molecule.</span>
+
+<span class="sd">        The returned tensor follows formula-unit molecule order, including</span>
+<span class="sd">        repeated component IDs that represent stoichiometric copies.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">component_charge</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">component_index</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">formula_unit_charge</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sum molecule formal charges in the formula unit.&quot;&quot;&quot;</span>
+        <span class="n">molecule_charge</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">molecule_charge</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">molecule_charge</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sha256</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the SHA-256 identity of the exact formula-input representation.</span>
+
+<span class="sd">        The established encoding hashes the ordered tensor field names, dtypes,</span>
+<span class="sd">        shapes, and contiguous bytes, followed by recursively JSON-compatible</span>
+<span class="sd">        metadata and ``repr(float(formula_unit_volume))``. This identifies the</span>
+<span class="sd">        exact input representation rather than chemical equivalence. The digest</span>
+<span class="sd">        is recomputed on every access and is not part of :meth:`state_dict`.</span>
+
+<span class="sd">        Reading device-resident tensors copies them to CPU and may synchronize</span>
+<span class="sd">        the device, so use this property for input identity or startup checks,</span>
+<span class="sd">        not inside a packing loop. Direct in-place tensor mutation remains</span>
+<span class="sd">        unsupported.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            Lowercase 64-character SHA-256 hexadecimal digest.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span>
+            <span class="s2">&quot;conformer_positions&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;conformer_ptr&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;molecule_conformer_ptr&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;molecule_atom_ptr&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;contact_distances&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;component_index&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;component_charge&quot;</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">tensor</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">name</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">_thaw_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">)</span>
+        <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">,</span> <span class="s2">&quot;:&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">formula_unit_volume</span><span class="p">))</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+<div class="viewcode-block" id="MolecularPackingInput.state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.MolecularPackingInput.html#nvalchemi.csp.MolecularPackingInput.state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return version-1 canonical CPU tensors and an independent JSON copy.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, object]</span>
+<span class="sd">            A new mapping containing cloned CPU tensors and mutable JSON metadata.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="o">**</span><span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_FORMULA_DTYPES</span>
+            <span class="p">},</span>
+            <span class="s2">&quot;formula_unit_volume&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">formula_unit_volume</span><span class="p">,</span>
+            <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_thaw_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">),</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="MolecularPackingInput.from_state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.MolecularPackingInput.html#nvalchemi.csp.MolecularPackingInput.from_state_dict">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_state_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">MolecularPackingInput</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct from an independently owned version-1 state mapping.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state : Mapping[str, object]</span>
+<span class="sd">            Mapping returned by :meth:`state_dict`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        MolecularPackingInput</span>
+<span class="sd">            A validated and independently owned formula-unit input.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the version, keys, or tensor invariants are invalid.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;state must be a mapping&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">!=</span> <span class="n">_FORMULA_STATE_KEYS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;state must contain exactly the version-1 MolecularPackingInput keys&quot;</span>
+            <span class="p">)</span>
+        <span class="n">version</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;version&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">version</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">int</span> <span class="ow">or</span> <span class="n">version</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unsupported MolecularPackingInput state version: </span><span class="si">{</span><span class="n">version</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">validated</span> <span class="o">=</span> <span class="n">_prepare_formula_input</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="o">!=</span> <span class="s2">&quot;version&quot;</span><span class="p">},</span>
+            <span class="n">center_conformers</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_from_validated</span><span class="p">(</span><span class="o">**</span><span class="n">validated</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MolecularPackingInput.to">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.MolecularPackingInput.html#nvalchemi.csp.MolecularPackingInput.to">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MolecularPackingInput</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return newly owned tensor storage on ``device`` without revalidation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        device : torch.device or str</span>
+<span class="sd">            Target device for formula tensors.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        MolecularPackingInput</span>
+<span class="sd">            An independent copy of every input tensor on the requested device,</span>
+<span class="sd">            including the contact matrix.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">tensors</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">target</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_FORMULA_DTYPES</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_validated</span><span class="p">(</span>
+            <span class="o">**</span><span class="n">tensors</span><span class="p">,</span>
+            <span class="n">formula_unit_volume</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">formula_unit_volume</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_validated</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">conformer_positions</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">conformer_ptr</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">molecule_conformer_ptr</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">molecule_atom_ptr</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">atomic_numbers</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">contact_distances</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">component_index</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">component_charge</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">formula_unit_volume</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MolecularPackingInput</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct from trusted, already validated canonical state.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_construct</span><span class="p">(</span>
+            <span class="n">_fields_set</span><span class="o">=</span><span class="nb">set</span><span class="p">(</span><span class="n">_FORMULA_STATE_KEYS</span> <span class="o">-</span> <span class="p">{</span><span class="s2">&quot;version&quot;</span><span class="p">}),</span>
+            <span class="n">conformer_positions</span><span class="o">=</span><span class="n">conformer_positions</span><span class="p">,</span>
+            <span class="n">conformer_ptr</span><span class="o">=</span><span class="n">conformer_ptr</span><span class="p">,</span>
+            <span class="n">molecule_conformer_ptr</span><span class="o">=</span><span class="n">molecule_conformer_ptr</span><span class="p">,</span>
+            <span class="n">molecule_atom_ptr</span><span class="o">=</span><span class="n">molecule_atom_ptr</span><span class="p">,</span>
+            <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">atomic_numbers</span><span class="p">,</span>
+            <span class="n">contact_distances</span><span class="o">=</span><span class="n">contact_distances</span><span class="p">,</span>
+            <span class="n">component_index</span><span class="o">=</span><span class="n">component_index</span><span class="p">,</span>
+            <span class="n">component_charge</span><span class="o">=</span><span class="n">component_charge</span><span class="p">,</span>
+            <span class="n">formula_unit_volume</span><span class="o">=</span><span class="n">formula_unit_volume</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_reserved_batch_fields</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return Toolkit standard and CSP-emitted names forbidden to properties.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.atomic_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.level_storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_ATTRIBUTE_MAP</span>
+
+    <span class="n">reserved</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+        <span class="n">_ATOM_SOURCE_FIELDS</span> <span class="o">|</span> <span class="n">_SYSTEM_SOURCE_FIELDS</span> <span class="o">|</span> <span class="p">{</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="s2">&quot;batch_ptr&quot;</span><span class="p">}</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">names</span> <span class="ow">in</span> <span class="n">DEFAULT_ATTRIBUTE_MAP</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">reserved</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">names</span><span class="p">)</span>
+    <span class="n">reserved</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">_default_node_keys</span><span class="p">)</span>
+    <span class="n">reserved</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">_default_edge_keys</span><span class="p">)</span>
+    <span class="n">reserved</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">_default_system_keys</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">reserved</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_copy_compact_tensor</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate one stored tensor and return an owned contiguous copy.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be a torch.Tensor&quot;</span><span class="p">)</span>
+    <span class="n">expected_dtype</span> <span class="o">=</span> <span class="n">_COMPACT_DTYPES</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">expected_dtype</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must have dtype </span><span class="si">{</span><span class="n">expected_dtype</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">value</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">memory_format</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">contiguous_format</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_prepare_compact</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate ASU-batch fields and prepare owned tensor state.&quot;&quot;&quot;</span>
+    <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;packing_input&quot;</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">_COMPACT_DTYPES</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">-</span> <span class="p">{</span><span class="s2">&quot;structure_ids&quot;</span><span class="p">})}</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="n">required</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing RigidMoleculeASUBatch fields: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">packing_input</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;packing_input&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">packing_input</span><span class="p">,</span> <span class="n">MolecularPackingInput</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;packing_input must be a MolecularPackingInput&quot;</span><span class="p">)</span>
+
+    <span class="n">tensors</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">name</span><span class="p">:</span> <span class="n">_copy_compact_tensor</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">values</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_COMPACT_DTYPES</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="o">!=</span> <span class="s2">&quot;structure_ids&quot;</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">values</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;cells&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">3</span> <span class="ow">or</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;cells&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cells must have shape [P, 3, 3]&quot;</span><span class="p">)</span>
+    <span class="n">num_structures</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;cells&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">if</span> <span class="s2">&quot;structure_ids&quot;</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+        <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;structure_ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_copy_compact_tensor</span><span class="p">(</span>
+            <span class="s2">&quot;structure_ids&quot;</span><span class="p">,</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;structure_ids&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">run_id</span> <span class="o">=</span> <span class="n">secrets</span><span class="o">.</span><span class="n">randbits</span><span class="p">(</span><span class="mi">63</span><span class="p">)</span>
+        <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;structure_ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                    <span class="p">(</span><span class="n">num_structures</span><span class="p">,),</span>
+                    <span class="n">run_id</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;cells&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                    <span class="n">num_structures</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;cells&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">),</span>
+            <span class="p">),</span>
+            <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;structure_ids&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">num_structures</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;structure_ids must have shape [P, 2]&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;structure_molecule_ptr&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">num_structures</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;structure_molecule_ptr must have shape [P + 1]&quot;</span><span class="p">)</span>
+    <span class="n">conformer_indices</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;conformer_indices&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">conformer_indices</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;conformer_indices must have shape [Q]&quot;</span><span class="p">)</span>
+    <span class="n">num_molecules</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">conformer_indices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">expected_shapes</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;structure_molecule_ptr&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">num_structures</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,),</span>
+        <span class="s2">&quot;conformer_indices&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">num_molecules</span><span class="p">,),</span>
+        <span class="s2">&quot;rotations&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">num_molecules</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="s2">&quot;fractional_centers&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">num_molecules</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="s2">&quot;space_groups&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">num_structures</span><span class="p">,),</span>
+        <span class="s2">&quot;z&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">num_structures</span><span class="p">,),</span>
+        <span class="s2">&quot;z_prime&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">num_structures</span><span class="p">,),</span>
+    <span class="p">}</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">shape</span> <span class="ow">in</span> <span class="n">expected_shapes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">tensors</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must have shape </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">device</span> <span class="o">=</span> <span class="n">tensors</span><span class="p">[</span><span class="s2">&quot;cells&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">tensors</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is on </span><span class="si">{</span><span class="n">tensor</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">; all compact tensors must share </span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="n">raw_properties</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;properties&quot;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw_properties</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;properties must be a mapping from names to tensors&quot;</span><span class="p">)</span>
+    <span class="n">reserved</span> <span class="o">=</span> <span class="n">_reserved_batch_fields</span><span class="p">()</span>
+    <span class="n">properties</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">raw_properties</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">name</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;property names must be nonempty strings&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">reserved</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;property name </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> collides with a Toolkit or CSP field&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;property </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must be a torch.Tensor&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">num_structures</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;property </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must have leading dimension </span><span class="si">{</span><span class="n">num_structures</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;property </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is on </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">; expected </span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">properties</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">memory_format</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">contiguous_format</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;packing_input&quot;</span><span class="p">:</span> <span class="n">packing_input</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">tensors</span><span class="p">,</span>
+        <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">(</span><span class="n">properties</span><span class="p">),</span>
+    <span class="p">}</span>
+
+
+<div class="viewcode-block" id="RigidMoleculeASUBatch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.RigidMoleculeASUBatch.html#nvalchemi.csp.RigidMoleculeASUBatch">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RigidMoleculeASUBatch</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Rigid-molecule ASU representations sharing one molecular formula input.</span>
+
+<span class="sd">    Each structure stores independent molecular placements with its cell and</span>
+<span class="sd">    symmetry metadata, rather than full-cell atom coordinates. Different</span>
+<span class="sd">    structures may hold different numbers of independent placements.</span>
+
+<span class="sd">    ``P`` is the number of structures, ``Z`` is the number of formula units in</span>
+<span class="sd">    the full cell, and ``Z-prime`` is the number independently placed in the</span>
+<span class="sd">    asymmetric unit (ASU).</span>
+
+<span class="sd">    ASU representation tensors and property values are copied into contiguous</span>
+<span class="sd">    storage on one device. Direct in-place mutation of exposed tensors is</span>
+<span class="sd">    unsupported.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    packing_input : MolecularPackingInput</span>
+<span class="sd">        Shared ordered formula-unit state. Public construction retains this</span>
+<span class="sd">        already validated object by identity.</span>
+<span class="sd">    structure_molecule_ptr : torch.Tensor, int32 ``[P + 1]``</span>
+<span class="sd">        Start and end positions of each structure&#39;s independent molecules in</span>
+<span class="sd">        the ASU representation arrays.</span>
+<span class="sd">    conformer_indices : torch.Tensor, int32 ``[Q]``</span>
+<span class="sd">        Global conformer-pool indices for each ASU molecule.</span>
+<span class="sd">    rotations : torch.Tensor, float32 ``[Q, 3, 3]``</span>
+<span class="sd">        Cartesian molecular rotations.</span>
+<span class="sd">    fractional_centers : torch.Tensor, float32 ``[Q, 3]``</span>
+<span class="sd">        Fractional molecular centers.</span>
+<span class="sd">    cells : torch.Tensor, float32 ``[P, 3, 3]``</span>
+<span class="sd">        Row-vector lattice cells in angstroms.</span>
+<span class="sd">    space_groups, z, z_prime : torch.Tensor, int32 ``[P]``</span>
+<span class="sd">        International space-group numbers, full-cell formula-unit counts</span>
+<span class="sd">        (``Z``), and independently placed ASU formula-unit counts</span>
+<span class="sd">        (``Z-prime``), respectively.</span>
+<span class="sd">    properties : Mapping[str, torch.Tensor], optional</span>
+<span class="sd">        One value per crystal structure, with leading dimension ``P``, on the</span>
+<span class="sd">        shared tensor device; trailing dimensions may vary by property. Names</span>
+<span class="sd">        cannot collide with Toolkit or CSP output fields.</span>
+<span class="sd">    structure_ids : torch.Tensor, int64 ``[P, 2]``, optional</span>
+<span class="sd">        ``[run_id, structure_ordinal]`` identifiers. When omitted, a random</span>
+<span class="sd">        nonnegative run ID and sequential ordinals are generated. Storage</span>
+<span class="sd">        requires nonnegative identifiers.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Each structure contains ``z_prime`` independent copies of the formula</span>
+<span class="sd">    unit in ``packing_input``. Molecules follow the same order as that input</span>
+<span class="sd">    and select conformers from their respective pools. :meth:`to_batch`</span>
+<span class="sd">    applies the space-group symmetry to generate the full crystal.</span>
+
+<span class="sd">    The unit cell must be compatible with the selected space group, whose</span>
+<span class="sd">    number of symmetry operations must equal ``z / z_prime``. Fractional</span>
+<span class="sd">    molecular centers may lie outside ``[0, 1)``; expansion wraps them</span>
+<span class="sd">    periodically.</span>
+
+<span class="sd">    For externally prepared data, call :meth:`check_integrity` before</span>
+<span class="sd">    expansion to check molecule assignments and symmetry multiplicities.</span>
+<span class="sd">    This check does not validate molecular orientations or cell geometry.</span>
+
+<span class="sd">    ``select`` shares ``packing_input`` and preserves repeated row indices.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span>
+        <span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">,</span>
+        <span class="n">revalidate_instances</span><span class="o">=</span><span class="s2">&quot;never&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">packing_input</span><span class="p">:</span> <span class="n">MolecularPackingInput</span>
+    <span class="n">structure_molecule_ptr</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">conformer_indices</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">rotations</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">fractional_centers</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">cells</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">space_groups</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">z</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">z_prime</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">structure_ids</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">properties</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_and_own</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate ASU-batch mappings and extract fields from existing batches.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="bp">cls</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">{</span>
+                    <span class="s2">&quot;packing_input&quot;</span><span class="p">,</span>
+                    <span class="o">*</span><span class="n">_COMPACT_DTYPES</span><span class="p">,</span>
+                    <span class="s2">&quot;properties&quot;</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;RigidMoleculeASUBatch requires a mapping of compact fields&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_prepare_compact</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_validated</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">packing_input</span><span class="p">:</span> <span class="n">MolecularPackingInput</span><span class="p">,</span>
+        <span class="n">structure_molecule_ptr</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">conformer_indices</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">rotations</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">fractional_centers</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">cells</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">space_groups</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">z</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">z_prime</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">structure_ids</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">properties</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RigidMoleculeASUBatch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct from trusted, already validated ASU tensors.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_construct</span><span class="p">(</span>
+            <span class="n">_fields_set</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;packing_input&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;structure_molecule_ptr&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;conformer_indices&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;rotations&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;fractional_centers&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;cells&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;space_groups&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;z&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;z_prime&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;structure_ids&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">packing_input</span><span class="o">=</span><span class="n">packing_input</span><span class="p">,</span>
+            <span class="n">structure_molecule_ptr</span><span class="o">=</span><span class="n">structure_molecule_ptr</span><span class="p">,</span>
+            <span class="n">conformer_indices</span><span class="o">=</span><span class="n">conformer_indices</span><span class="p">,</span>
+            <span class="n">rotations</span><span class="o">=</span><span class="n">rotations</span><span class="p">,</span>
+            <span class="n">fractional_centers</span><span class="o">=</span><span class="n">fractional_centers</span><span class="p">,</span>
+            <span class="n">cells</span><span class="o">=</span><span class="n">cells</span><span class="p">,</span>
+            <span class="n">space_groups</span><span class="o">=</span><span class="n">space_groups</span><span class="p">,</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">z</span><span class="p">,</span>
+            <span class="n">z_prime</span><span class="o">=</span><span class="n">z_prime</span><span class="p">,</span>
+            <span class="n">structure_ids</span><span class="o">=</span><span class="n">structure_ids</span><span class="p">,</span>
+            <span class="n">properties</span><span class="o">=</span><span class="n">properties</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">num_structures</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Number of ASU structures, including zero for an empty batch.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+<div class="viewcode-block" id="RigidMoleculeASUBatch.check_integrity">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.RigidMoleculeASUBatch.html#nvalchemi.csp.RigidMoleculeASUBatch.check_integrity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_integrity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check compact ASU pointer, multiplicity, symmetry, and pool indices.</span>
+
+<span class="sd">        This explicit check copies only the integer metadata needed for these</span>
+<span class="sd">        relationships to CPU. Calling it for device-resident data may</span>
+<span class="sd">        synchronize the device. It does not inspect rotations, fractional</span>
+<span class="sd">        centers, cells, or other geometry; finite coordinates, proper</span>
+<span class="sd">        rotations, nonsingular positive-volume cells, and cell/symmetry</span>
+<span class="sd">        compatibility remain caller preconditions. Success therefore does not</span>
+<span class="sd">        certify scientific geometry.</span>
+
+<span class="sd">        The check does not mutate this batch, consume RNG state, or cache a</span>
+<span class="sd">        validated flag. Constructors, readers, selection, concatenation,</span>
+<span class="sd">        expansion, and packing do not call it automatically.</span>
+
+<span class="sd">        The operation performs O(P + Q) integer-metadata work plus a transfer</span>
+<span class="sd">        of formula-molecule pool metadata. Its cost is unmeasured.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the structure pointer, multiplicity, operation count, or</span>
+<span class="sd">            conformer-pool membership relationship is invalid.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.symmetry</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_space_group_operation_count</span>
+
+        <span class="n">structure_ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_molecule_ptr</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">conformer_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conformer_indices</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">space_groups</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">space_groups</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">z_values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">z_prime_values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">z_prime</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">molecule_conformer_ptr</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">packing_input</span><span class="o">.</span><span class="n">molecule_conformer_ptr</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="p">)</span>
+
+        <span class="n">num_structures</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">num_asu_molecules</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conformer_indices</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+        <span class="n">num_formula_molecules</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">packing_input</span><span class="o">.</span><span class="n">num_molecules</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">structure_ptr</span> <span class="ow">or</span> <span class="n">structure_ptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;structure_molecule_ptr must start at zero&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">structure_index</span><span class="p">,</span> <span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="n">structure_ptr</span><span class="p">,</span> <span class="n">structure_ptr</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="n">right</span> <span class="o">&lt;</span> <span class="n">left</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;structure_molecule_ptr must be nondecreasing at &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;structure </span><span class="si">{</span><span class="n">structure_index</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">left</span><span class="si">}</span><span class="s2"> &gt; </span><span class="si">{</span><span class="n">right</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="n">structure_ptr</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">num_asu_molecules</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;structure_molecule_ptr must end at the conformer_indices length&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">structure_index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_structures</span><span class="p">):</span>
+            <span class="n">z</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">z_values</span><span class="p">[</span><span class="n">structure_index</span><span class="p">])</span>
+            <span class="n">z_prime</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">z_prime_values</span><span class="p">[</span><span class="n">structure_index</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">z</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;z must be positive for structure </span><span class="si">{</span><span class="n">structure_index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">z_prime</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;z_prime must be positive for structure </span><span class="si">{</span><span class="n">structure_index</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">z</span> <span class="o">%</span> <span class="n">z_prime</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;z_prime must divide z for structure </span><span class="si">{</span><span class="n">structure_index</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">structure_ptr</span><span class="p">[</span><span class="n">structure_index</span><span class="p">])</span>
+            <span class="n">stop</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">structure_ptr</span><span class="p">[</span><span class="n">structure_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="n">expected_count</span> <span class="o">=</span> <span class="n">num_formula_molecules</span> <span class="o">*</span> <span class="n">z_prime</span>
+            <span class="k">if</span> <span class="n">stop</span> <span class="o">-</span> <span class="n">start</span> <span class="o">!=</span> <span class="n">expected_count</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;structure </span><span class="si">{</span><span class="n">structure_index</span><span class="si">}</span><span class="s2"> span has </span><span class="si">{</span><span class="n">stop</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start</span><span class="si">}</span><span class="s2"> ASU &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;molecules; expected </span><span class="si">{</span><span class="n">expected_count</span><span class="si">}</span><span class="s2"> from formula molecules &quot;</span>
+                    <span class="s2">&quot;and z_prime&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">space_group</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">space_groups</span><span class="p">[</span><span class="n">structure_index</span><span class="p">])</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">space_group</span> <span class="o">&lt;=</span> <span class="mi">230</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;space_groups[</span><span class="si">{</span><span class="n">structure_index</span><span class="si">}</span><span class="s2">] must be in [1, 230]&quot;</span><span class="p">)</span>
+            <span class="n">operation_count</span> <span class="o">=</span> <span class="n">get_space_group_operation_count</span><span class="p">(</span><span class="n">space_group</span><span class="p">)</span>
+            <span class="n">expected_operation_count</span> <span class="o">=</span> <span class="n">z</span> <span class="o">//</span> <span class="n">z_prime</span>
+            <span class="k">if</span> <span class="n">operation_count</span> <span class="o">!=</span> <span class="n">expected_operation_count</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;space group </span><span class="si">{</span><span class="n">space_group</span><span class="si">}</span><span class="s2"> for structure </span><span class="si">{</span><span class="n">structure_index</span><span class="si">}</span><span class="s2"> has &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">operation_count</span><span class="si">}</span><span class="s2"> operations; expected </span><span class="si">{</span><span class="n">expected_operation_count</span><span class="si">}</span><span class="s2"> &quot;</span>
+                    <span class="s2">&quot;from z / z_prime&quot;</span>
+                <span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">):</span>
+                <span class="n">molecule_index</span> <span class="o">=</span> <span class="p">(</span><span class="n">row</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span> <span class="o">%</span> <span class="n">num_formula_molecules</span>
+                <span class="n">pool_start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">molecule_conformer_ptr</span><span class="p">[</span><span class="n">molecule_index</span><span class="p">])</span>
+                <span class="n">pool_stop</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">molecule_conformer_ptr</span><span class="p">[</span><span class="n">molecule_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+                <span class="n">conformer_index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">conformer_indices</span><span class="p">[</span><span class="n">row</span><span class="p">])</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">pool_start</span> <span class="o">&lt;=</span> <span class="n">conformer_index</span> <span class="o">&lt;</span> <span class="n">pool_stop</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;conformer index </span><span class="si">{</span><span class="n">conformer_index</span><span class="si">}</span><span class="s2"> at ASU row </span><span class="si">{</span><span class="n">row</span><span class="si">}</span><span class="s2"> is &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;outside formula molecule </span><span class="si">{</span><span class="n">molecule_index</span><span class="si">}</span><span class="s2"> pool &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="n">pool_start</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">pool_stop</span><span class="si">}</span><span class="s2">)&quot;</span>
+                    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RigidMoleculeASUBatch.select">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.RigidMoleculeASUBatch.html#nvalchemi.csp.RigidMoleculeASUBatch.select">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">select</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RigidMoleculeASUBatch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Select ASU rows in requested order, preserving repeated indices.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : torch.Tensor, int32 or int64 ``[S]``</span>
+<span class="sd">            CPU indices or indices on this ASU batch&#39;s device.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        RigidMoleculeASUBatch</span>
+<span class="sd">            A new ASU batch sharing the same formula-unit input object.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``indices`` is not a one-dimensional int32/int64 tensor.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If indices are on an unrelated device.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        ``[2, 0, 2]`` returns rows in that order, including the repeated last row.</span>
+<span class="sd">        An empty integer tensor returns a valid zero-structure ASU batch.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="ow">or</span> <span class="n">indices</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;indices must be a one-dimensional torch.Tensor&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;indices must have dtype torch.int32 or torch.int64&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span> <span class="ow">and</span> <span class="n">indices</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;indices must be on CPU or on the compact batch device&quot;</span><span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">indices</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">old_starts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_molecule_ptr</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+        <span class="n">old_stops</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_molecule_ptr</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">molecule_counts</span> <span class="o">=</span> <span class="n">old_stops</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span> <span class="o">-</span> <span class="n">old_starts</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">selected_count</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">molecule_counts</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span> <span class="k">if</span> <span class="n">molecule_counts</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="n">new_ptr64</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+                <span class="n">molecule_counts</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">selected_count</span><span class="p">:</span>
+            <span class="n">selected_rows</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                    <span class="n">index</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+                <span class="p">),</span>
+                <span class="n">molecule_counts</span><span class="p">,</span>
+                <span class="n">output_size</span><span class="o">=</span><span class="n">selected_count</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">local_molecule</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                <span class="n">selected_count</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+            <span class="p">)</span> <span class="o">-</span> <span class="n">new_ptr64</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">selected_rows</span><span class="p">)</span>
+            <span class="n">molecule_index</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">old_starts</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">selected_rows</span><span class="p">)</span>
+                <span class="o">+</span> <span class="n">local_molecule</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">molecule_index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_validated</span><span class="p">(</span>
+            <span class="n">packing_input</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">packing_input</span><span class="p">,</span>
+            <span class="n">structure_molecule_ptr</span><span class="o">=</span><span class="n">new_ptr64</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">conformer_indices</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">conformer_indices</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">molecule_index</span><span class="p">),</span>
+            <span class="n">rotations</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rotations</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">molecule_index</span><span class="p">),</span>
+            <span class="n">fractional_centers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fractional_centers</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">molecule_index</span><span class="p">),</span>
+            <span class="n">cells</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span>
+            <span class="n">space_groups</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">space_groups</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span>
+            <span class="n">z</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span>
+            <span class="n">z_prime</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">z_prime</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span>
+            <span class="n">structure_ids</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">structure_ids</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span>
+            <span class="n">properties</span><span class="o">=</span><span class="n">MappingProxyType</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="n">name</span><span class="p">:</span> <span class="n">value</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">properties</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="p">}</span>
+            <span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RigidMoleculeASUBatch.concatenate">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.RigidMoleculeASUBatch.html#nvalchemi.csp.RigidMoleculeASUBatch.concatenate">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">concatenate</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">batches</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">RigidMoleculeASUBatch</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RigidMoleculeASUBatch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Concatenate ASU batches with equivalent packing inputs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batches : Sequence[RigidMoleculeASUBatch]</span>
+<span class="sd">            Batches to append in sequence order.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        RigidMoleculeASUBatch</span>
+<span class="sd">            A new ASU batch. Mixed ``z`` and ``z_prime`` values are</span>
+<span class="sd">            supported.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the sequence is empty, formula inputs differ, devices differ, or</span>
+<span class="sd">            property schemas do not match.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">batches</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;at least one compact batch is required&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">cls</span><span class="p">)</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;all entries must be RigidMoleculeASUBatch instances&quot;</span><span class="p">)</span>
+        <span class="n">first</span> <span class="o">=</span> <span class="n">batches</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">same_input</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">packing_input</span> <span class="ow">is</span> <span class="n">first</span><span class="o">.</span><span class="n">packing_input</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">same_input</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="ow">not</span> <span class="n">_formula_inputs_equal</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">packing_input</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">packing_input</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;all compact batches must have equal packing_input values&quot;</span><span class="p">)</span>
+        <span class="n">property_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">properties</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">cls</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;all entries must be RigidMoleculeASUBatch instances&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">batch</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">first</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;all compact batches must share one device&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">properties</span><span class="p">)</span> <span class="o">!=</span> <span class="n">property_names</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;all compact batches must have identical property keys&quot;</span>
+                <span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">property_names</span><span class="p">:</span>
+                <span class="n">left</span><span class="p">,</span> <span class="n">right</span> <span class="o">=</span> <span class="n">first</span><span class="o">.</span><span class="n">properties</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">batch</span><span class="o">.</span><span class="n">properties</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">left</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">right</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">or</span> <span class="n">left</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="n">right</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;property </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must have matching dtype and trailing shape&quot;</span>
+                    <span class="p">)</span>
+
+        <span class="n">ptr_parts</span> <span class="o">=</span> <span class="p">[</span><span class="n">first</span><span class="o">.</span><span class="n">structure_molecule_ptr</span><span class="p">]</span>
+        <span class="n">molecule_offset</span> <span class="o">=</span> <span class="n">first</span><span class="o">.</span><span class="n">conformer_indices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="n">ptr_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">structure_molecule_ptr</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">+</span> <span class="n">molecule_offset</span><span class="p">)</span>
+            <span class="n">molecule_offset</span> <span class="o">+=</span> <span class="n">batch</span><span class="o">.</span><span class="n">conformer_indices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">props</span> <span class="o">=</span> <span class="n">MappingProxyType</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">batch</span><span class="o">.</span><span class="n">properties</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">property_names</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_from_validated</span><span class="p">(</span>
+            <span class="n">packing_input</span><span class="o">=</span><span class="n">first</span><span class="o">.</span><span class="n">packing_input</span><span class="p">,</span>
+            <span class="n">structure_molecule_ptr</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">ptr_parts</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">conformer_indices</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">conformer_indices</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span>
+            <span class="p">),</span>
+            <span class="n">rotations</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">batch</span><span class="o">.</span><span class="n">rotations</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">fractional_centers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">fractional_centers</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span>
+            <span class="p">),</span>
+            <span class="n">cells</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">batch</span><span class="o">.</span><span class="n">cells</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">space_groups</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">batch</span><span class="o">.</span><span class="n">space_groups</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">batch</span><span class="o">.</span><span class="n">z</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">z_prime</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">batch</span><span class="o">.</span><span class="n">z_prime</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">structure_ids</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">batch</span><span class="o">.</span><span class="n">structure_ids</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">properties</span><span class="o">=</span><span class="n">props</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RigidMoleculeASUBatch.to">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.RigidMoleculeASUBatch.html#nvalchemi.csp.RigidMoleculeASUBatch.to">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RigidMoleculeASUBatch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return newly owned ASU representation and formula tensors on ``device``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        device : torch.device or str</span>
+<span class="sd">            Target device.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        RigidMoleculeASUBatch</span>
+<span class="sd">            An independent copy of the ASU fields, properties, and formula</span>
+<span class="sd">            input on the requested device.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">move</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;Return an independent copy of one tensor on the target device.&quot;&quot;&quot;</span>
+            <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">target</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_validated</span><span class="p">(</span>
+            <span class="n">packing_input</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">packing_input</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">target</span><span class="p">),</span>
+            <span class="n">structure_molecule_ptr</span><span class="o">=</span><span class="n">move</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">structure_molecule_ptr</span><span class="p">),</span>
+            <span class="n">conformer_indices</span><span class="o">=</span><span class="n">move</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conformer_indices</span><span class="p">),</span>
+            <span class="n">rotations</span><span class="o">=</span><span class="n">move</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rotations</span><span class="p">),</span>
+            <span class="n">fractional_centers</span><span class="o">=</span><span class="n">move</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fractional_centers</span><span class="p">),</span>
+            <span class="n">cells</span><span class="o">=</span><span class="n">move</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cells</span><span class="p">),</span>
+            <span class="n">space_groups</span><span class="o">=</span><span class="n">move</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space_groups</span><span class="p">),</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">move</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="p">),</span>
+            <span class="n">z_prime</span><span class="o">=</span><span class="n">move</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">z_prime</span><span class="p">),</span>
+            <span class="n">structure_ids</span><span class="o">=</span><span class="n">move</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">structure_ids</span><span class="p">),</span>
+            <span class="n">properties</span><span class="o">=</span><span class="n">MappingProxyType</span><span class="p">(</span>
+                <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">move</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">properties</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RigidMoleculeASUBatch.to_batch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.RigidMoleculeASUBatch.html#nvalchemi.csp.RigidMoleculeASUBatch.to_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_batch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">indices</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expand selected ASU rows into a full-cell periodic Toolkit ``Batch``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indices : torch.Tensor, int32 or int64 ``[S]``, optional</span>
+<span class="sd">            Ordered ASU row selection. Repeated indices produce repeated</span>
+<span class="sd">            structures. ``None`` expands every ASU row.</span>
+<span class="sd">        device : torch.device or str, optional</span>
+<span class="sd">            Output device. Defaults to this ASU batch&#39;s device.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Batch</span>
+<span class="sd">            A periodic Toolkit Batch with explicit full-cell atoms and fields</span>
+<span class="sd">            recording their ASU source.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Expansion assumes valid index relationships and geometry. It does not</span>
+<span class="sd">        automatically call :meth:`check_integrity`; the explicit checker covers</span>
+<span class="sd">        indices only, and geometry remains a caller precondition.</span>
+
+<span class="sd">        Cells must be compatible with their space-group operations. Molecular</span>
+<span class="sd">        centers are wrapped in fractional space before their unwrapped rigid</span>
+<span class="sd">        atomic displacements are added. Provenance describes source state and</span>
+<span class="sd">        remains unchanged if a later optimizer changes geometry.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp._batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_asu_batch</span>
+
+        <span class="k">return</span> <span class="n">expand_asu_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="o">=</span><span class="n">indices</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_formula_inputs_equal</span><span class="p">(</span>
+    <span class="n">left</span><span class="p">:</span> <span class="n">MolecularPackingInput</span><span class="p">,</span> <span class="n">right</span><span class="p">:</span> <span class="n">MolecularPackingInput</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compare formula inputs exactly, moving tensor comparisons to CPU if needed.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">left</span> <span class="ow">is</span> <span class="n">right</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">left</span><span class="o">.</span><span class="n">formula_unit_volume</span> <span class="o">!=</span> <span class="n">right</span><span class="o">.</span><span class="n">formula_unit_volume</span>
+        <span class="ow">or</span> <span class="n">left</span><span class="o">.</span><span class="n">metadata</span> <span class="o">!=</span> <span class="n">right</span><span class="o">.</span><span class="n">metadata</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_FORMULA_DTYPES</span><span class="p">:</span>
+        <span class="n">left_tensor</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+        <span class="n">right_tensor</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">left_tensor</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">right_tensor</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="n">left_tensor</span> <span class="o">=</span> <span class="n">left_tensor</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+            <span class="n">right_tensor</span> <span class="o">=</span> <span class="n">right_tensor</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">left_tensor</span><span class="p">,</span> <span class="n">right_tensor</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="kc">True</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

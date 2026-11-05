@@ -575,7 +575,7 @@ Batch — Append and append_data
 Batch — put and defrag
 -----------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 297-327
+.. GENERATED FROM PYTHON SOURCE LINES 297-326
 
 .. code-block:: Python
 
@@ -599,8 +599,7 @@ Batch — put and defrag
     src_batch = Batch.from_data_list([_tiny_graph(1.0), _tiny_graph(2.0)])
     mask = torch.tensor([True, False])
     copied_mask = torch.zeros(2, dtype=torch.bool)
-    dest_mask = torch.zeros(buffer.system_capacity, dtype=torch.bool)
-    buffer.put(src_batch, mask, copied_mask=copied_mask, dest_mask=dest_mask)
+    buffer.put(src_batch, mask, copied_mask=copied_mask)
     print(
         f"After put: buffer has {buffer.num_graphs} graphs; copied_mask={copied_mask.tolist()}"
     )
@@ -626,12 +625,12 @@ Batch — put and defrag
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 328-330
+.. GENERATED FROM PYTHON SOURCE LINES 327-329
 
 Batch — Device, clone, contiguous, pin_memory
 -----------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 330-340
+.. GENERATED FROM PYTHON SOURCE LINES 329-339
 
 .. code-block:: Python
 
@@ -659,12 +658,12 @@ Batch — Device, clone, contiguous, pin_memory
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 341-343
+.. GENERATED FROM PYTHON SOURCE LINES 340-342
 
 Batch — Serialization
 ----------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 343-349
+.. GENERATED FROM PYTHON SOURCE LINES 342-348
 
 .. code-block:: Python
 
@@ -688,7 +687,7 @@ Batch — Serialization
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 350-362
+.. GENERATED FROM PYTHON SOURCE LINES 349-361
 
 Batch — Computing neighbors
 ----------------------------
@@ -703,7 +702,7 @@ from a model's :attr:`~nvalchemi.models.base.ModelConfig.neighbor_config`.
 The result is written into the batch as ``neighbor_matrix`` /
 ``num_neighbors`` (MATRIX format) or ``neighbor_list`` (COO format).
 
-.. GENERATED FROM PYTHON SOURCE LINES 362-385
+.. GENERATED FROM PYTHON SOURCE LINES 361-384
 
 .. code-block:: Python
 
@@ -744,7 +743,7 @@ The result is written into the batch as ``neighbor_matrix`` /
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 386-392
+.. GENERATED FROM PYTHON SOURCE LINES 385-391
 
 Round-trip summary
 ------------------
@@ -753,7 +752,7 @@ Round-trip summary
 ``node_feat`` was dropped earlier by ``append()`` when we added graphs that
 did not carry that key, it is expected to remain absent after the round-trip.
 
-.. GENERATED FROM PYTHON SOURCE LINES 392-400
+.. GENERATED FROM PYTHON SOURCE LINES 391-399
 
 .. code-block:: Python
 
@@ -782,7 +781,7 @@ did not carry that key, it is expected to remain absent after the round-trip.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.412 seconds)
+   **Total running time of the script:** (0 minutes 0.364 seconds)
 
 
 .. _sphx_glr_download_examples_basic_01_data_structures.py:

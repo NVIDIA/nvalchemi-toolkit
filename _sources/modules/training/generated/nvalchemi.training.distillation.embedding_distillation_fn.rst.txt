@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.embedding\_distillation\_fn
+===========================================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autofunction:: embedding_distillation_fn

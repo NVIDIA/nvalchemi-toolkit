@@ -1,0 +1,1140 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.dynamics.optimizers.lbfgs &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/optimizers/lbfgs';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.dy...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.dynamics.optimizers.lbfgs</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">L-BFGS and L-BFGS+variable-cell geometry optimizers.</span>
+
+<span class="sd">L-BFGS steps along a quasi-Newton direction built from the last</span>
+<span class="sd">``history_size`` position/force differences, bounded by a ``maxstep`` trust</span>
+<span class="sd">region.  One force evaluation per step; no energy.</span>
+
+<span class="sd">* ``LBFGS``             — fixed-cell coordinate optimizer.</span>
+<span class="sd">* ``LBFGSVariableCell`` — variable-cell optimizer.</span>
+
+<span class="sd">Both classes delegate to ``lbfgs_step_coord`` and ``lbfgs_step_coord_cell``</span>
+<span class="sd">from :mod:`nvalchemiops.torch.lbfgs`.  The step is placed entirely in</span>
+<span class="sd">``pre_update``; ``post_update`` is a no-op.</span>
+
+<span class="sd">The two-loop recursion iterates over ``history_size`` in Python, so each</span>
+<span class="sd">step launches noticeably more Warp kernels than a FIRE2 step.  Fewer total</span>
+<span class="sd">steps usually still wins on wall-clock time once the model forward pass</span>
+<span class="sd">dominates, but with a cheap model this per-step launch overhead can make</span>
+<span class="sd">L-BFGS slower than FIRE2 despite converging in fewer steps.</span>
+
+<span class="sd">Hyperparameters:</span>
+
+<span class="sd">* ``history_size``  — stored curvature pairs (default 6); fixed at allocation</span>
+<span class="sd">* ``curvature_eps`` — pair acceptance floor (default ``None``: by dtype)</span>
+<span class="sd">* ``maxstep``       — maximum displacement per step (default 0.2)</span>
+
+<span class="sd">State spans two levels: per-update-unit scalars and a segmented ``&quot;lbfgs_dofs&quot;``</span>
+<span class="sd">level (one row per atom, plus two per system for variable cell) holding</span>
+<span class="sd">the history. Fixed-cell LBFGS can treat a group of graphs as one update unit.</span>
+<span class="sd">Positions must not be edited between steps (e.g. by</span>
+<span class="sd">``WrapPeriodicHook``): the next step differences them against the last.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics._ops._bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">_make_two_level_state_batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics._ops.cell_align</span><span class="w"> </span><span class="kn">import</span> <span class="n">cell_alignment_offenders</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics._ops.lbfgs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LBFGSCellState</span><span class="p">,</span>
+    <span class="n">LBFGSState</span><span class="p">,</span>
+    <span class="n">lbfgs_prepare_cell_state</span><span class="p">,</span>
+    <span class="n">lbfgs_prepare_state</span><span class="p">,</span>
+    <span class="n">lbfgs_step_coord</span><span class="p">,</span>
+    <span class="n">lbfgs_step_coord_cell</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks.cell_align</span><span class="w"> </span><span class="kn">import</span> <span class="n">AlignCellHook</span><span class="p">,</span> <span class="n">_aligned_periodic</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks.periodic</span><span class="w"> </span><span class="kn">import</span> <span class="n">WrapPeriodicHook</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceHook</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hook</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;LBFGS&quot;</span><span class="p">,</span> <span class="s2">&quot;LBFGSVariableCell&quot;</span><span class="p">]</span>
+
+<span class="n">_LBFGS_DEFAULTS</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+    <span class="n">history_size</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
+    <span class="n">curvature_eps</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">maxstep</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_DOF_LEVEL</span> <span class="o">=</span> <span class="s2">&quot;lbfgs_dofs&quot;</span>
+<span class="n">_PER_DOF</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;x_base&quot;</span><span class="p">,</span> <span class="s2">&quot;force_base&quot;</span><span class="p">,</span> <span class="s2">&quot;direction&quot;</span><span class="p">,</span> <span class="s2">&quot;s_history&quot;</span><span class="p">,</span> <span class="s2">&quot;y_history&quot;</span><span class="p">)</span>
+<span class="n">_PER_SYSTEM</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;ys&quot;</span><span class="p">,</span> <span class="s2">&quot;yy&quot;</span><span class="p">,</span> <span class="s2">&quot;alpha_hist&quot;</span><span class="p">,</span> <span class="s2">&quot;beta_hist&quot;</span><span class="p">,</span> <span class="s2">&quot;ss&quot;</span><span class="p">,</span> <span class="s2">&quot;gg&quot;</span><span class="p">,</span> <span class="s2">&quot;d0&quot;</span><span class="p">,</span> <span class="s2">&quot;dmax&quot;</span><span class="p">,</span> <span class="s2">&quot;dquad&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;alpha_step&quot;</span><span class="p">,</span> <span class="s2">&quot;iteration&quot;</span><span class="p">,</span> <span class="s2">&quot;end&quot;</span><span class="p">,</span> <span class="s2">&quot;n_loop&quot;</span><span class="p">,</span> <span class="s2">&quot;history_count&quot;</span><span class="p">,</span>
+<span class="p">)</span>  <span class="c1"># fmt: skip</span>
+<span class="n">_CELL_PER_DOF</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;ext_positions&quot;</span><span class="p">,</span> <span class="s2">&quot;ext_forces&quot;</span><span class="p">)</span>
+<span class="n">_CELL_PER_SYSTEM</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;ref_cell&quot;</span><span class="p">,</span> <span class="s2">&quot;ref_cell_inv&quot;</span><span class="p">,</span> <span class="s2">&quot;kappa&quot;</span><span class="p">,</span> <span class="s2">&quot;phi&quot;</span><span class="p">,</span> <span class="s2">&quot;phi_inv&quot;</span><span class="p">,</span> <span class="s2">&quot;d_phi&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;cell_dof_a&quot;</span><span class="p">,</span> <span class="s2">&quot;cell_dof_b&quot;</span><span class="p">,</span> <span class="s2">&quot;cell_force_a&quot;</span><span class="p">,</span> <span class="s2">&quot;cell_force_b&quot;</span><span class="p">,</span>
+<span class="p">)</span>  <span class="c1"># fmt: skip</span>
+
+
+<span class="c1">#: Axis-reversal permutation (swaps x &lt;-&gt; z, leaves y): the one piece</span>
+<span class="c1">#: ``_anti_transpose``, ``_axis_reverse_vectors`` and ``_axis_reverse_matrix``</span>
+<span class="c1">#: share.  Built lazily per dtype/device by those helpers rather than fixed</span>
+<span class="c1">#: at import time, and cached (see ``_axis_reverse`` below) since</span>
+<span class="c1">#: ``LBFGSVariableCell.pre_update`` reaches it six times a step.</span>
+<span class="n">_AXIS_REVERSE</span> <span class="o">=</span> <span class="p">((</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+
+
+<span class="nd">@functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_axis_reverse</span><span class="p">(</span><span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build (and cache) the axis-reversal tensor; read-only in every caller.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">_AXIS_REVERSE</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_anti_transpose</span><span class="p">(</span><span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Reflect a row-convention cell across its anti-diagonal for the backend.</span>
+
+<span class="sd">    ``nvalchemiops.dynamics.optimizers.lbfgs._lbfgs_step_coord_cell_impl``</span>
+<span class="sd">    computes the deformation gradient as ``Phi = H @ H_ref^-1`` from</span>
+<span class="sd">    whatever ``cell`` it is handed, packs only ``Phi``&#39;s *lower*-triangular</span>
+<span class="sd">    six entries (``(0,0),(1,0),(2,0),(1,1),(2,1),(2,2)``) as the cell&#39;s</span>
+<span class="sd">    degrees of freedom, and reads the conjugate force off the same six</span>
+<span class="sd">    slots.  ``nvalchemi`` (like ASE) stores lattice vectors as rows, aligned</span>
+<span class="sd">    so ``a`` (row 0) is simplest and ``c`` (row 2) general; nvalchemiops&#39;</span>
+<span class="sd">    own :func:`~nvalchemiops.dynamics.utils.cell_filter.align_cell` fills</span>
+<span class="sd">    the *same* row-major layout (verified: its kernel literally constructs</span>
+<span class="sd">    ``wp.mat33d(a, 0, 0,  b*cosg, b*sing, 0,  c1, c2, c3)``, i.e. row 0</span>
+<span class="sd">    simplest too) — so nvalchemi&#39;s row-aligned ``H`` already satisfies the</span>
+<span class="sd">    backend&#39;s own structural assumption, and needs no transform to reach</span>
+<span class="sd">    *a* valid chart.</span>
+
+<span class="sd">    But not *this* chart.  For two row-aligned cells ``H``, ``H0`` (both</span>
+<span class="sd">    lower-triangular as plain matrices), the true physical deformation</span>
+<span class="sd">    gradient relating them — the one whose entries actually have the</span>
+<span class="sd">    physical meaning the force formula below assumes — is forced to be</span>
+<span class="sd">    *upper*-triangular: :math:`\Phi_{\text{true}}^T = H_0^{-1} H` is a</span>
+<span class="sd">    product of lower-triangular matrices (lower-triangular itself), so</span>
+<span class="sd">    :math:`\Phi_{\text{true}}` is its transpose.  Feeding ``H`` directly</span>
+<span class="sd">    makes the backend&#39;s internal ``Phi`` lower-triangular but *wrong*</span>
+<span class="sd">    (confirmed: its force formula then only matches a from-scratch</span>
+<span class="sd">    finite-difference gradient to ~0.1% relative error, exact only in the</span>
+<span class="sd">    degenerate case ``H == H0``).  Transposing alone fixes that formula</span>
+<span class="sd">    exactly (machine precision, not ~0.1%) but makes ``Phi`` upper</span>
+<span class="sd">    triangular — so the packer&#39;s fixed lower-triangular six-slot reading</span>
+<span class="sd">    now sees structural zeros exactly where ``Phi``&#39;s real shear content</span>
+<span class="sd">    lives, permanently losing it: an optimizer built this way cannot</span>
+<span class="sd">    correct a stale shear-type reference cell no matter how long it runs</span>
+<span class="sd">    (measured: bounded force/stress oscillation that never tightens, for</span>
+<span class="sd">    any nonzero shear between reference and current cell, however small).</span>
+
+<span class="sd">    The fix is the transform that is simultaneously (a) exact for the</span>
+<span class="sd">    force formula and (b) keeps the packed ``Phi`` lower-triangular: not a</span>
+<span class="sd">    transpose, but an *anti-transpose* — reflection across the</span>
+<span class="sd">    anti-diagonal, ``H -&gt; J H^T J`` with ``J`` the axis-reversal</span>
+<span class="sd">    permutation (:data:`_AXIS_REVERSE`).  Equivalently: relabel which</span>
+<span class="sd">    physical axis is &quot;x&quot; vs &quot;z&quot; *and* which lattice vector is &quot;a&quot; vs &quot;c&quot;,</span>
+<span class="sd">    together.  ``J (H0^{-1} H)^T J`` is then a product of two</span>
+<span class="sd">    anti-transposes, each of which maps lower-triangular to lower-triangular</span>
+<span class="sd">    (reflecting across the anti-diagonal reverses which off-diagonal</span>
+<span class="sd">    entries survive the same way reversing both row and column order</span>
+<span class="sd">    would), so the packed ``Phi`` stays lower-triangular and loses nothing.</span>
+<span class="sd">    Verified end-to-end against finite differences on a periodic LJ system</span>
+<span class="sd">    with a genuinely non-trivial (non-diagonal) reference: the backend&#39;s</span>
+<span class="sd">    predicted ``dE/dPhi`` under this transform matches a central-difference</span>
+<span class="sd">    estimate to ~1e-9 relative error, and a full relaxation from a sheared</span>
+<span class="sd">    stale reference converges to the correct equilibrium — see</span>
+<span class="sd">    ``TestLBFGSVariableCellPhysicalCorrectness`` in</span>
+<span class="sd">    ``test/dynamics/test_lbfgs.py``.</span>
+
+<span class="sd">    Positions and forces are per-atom 3-vectors, not matrices, so they</span>
+<span class="sd">    carry no row/column ambiguity, but *do* need the same axis relabeling</span>
+<span class="sd">    applied component-wise — see :func:`_axis_reverse_vectors`.  Cauchy</span>
+<span class="sd">    stress is symmetric (:math:`\sigma = \sigma^T`) so it needs no</span>
+<span class="sd">    transpose, but *does* still need the axis relabeling (conjugation by</span>
+<span class="sd">    ``J``, no transpose) to stay paired with the relabeled cell — see</span>
+<span class="sd">    :func:`_axis_reverse_matrix`.  Skipping the stress relabeling alone</span>
+<span class="sd">    reintroduces a large (measured: ~67% relative) force error, because</span>
+<span class="sd">    the force formula contracts stress against ``Phi`` in the relabeled</span>
+<span class="sd">    frame.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">j</span> <span class="o">=</span> <span class="n">_axis_reverse</span><span class="p">(</span><span class="n">cell</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">cell</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">j</span> <span class="o">@</span> <span class="n">cell</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span> <span class="o">@</span> <span class="n">j</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_axis_reverse_vectors</span><span class="p">(</span><span class="n">vectors</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Swap the x/z components of each row vector: ``vectors @ J``.</span>
+
+<span class="sd">    Keeps per-atom positions/forces consistent with :func:`_anti_transpose`&#39;s</span>
+<span class="sd">    cell relabeling.  An involution: applying it twice is the identity, used</span>
+<span class="sd">    both to feed the backend and to undo the relabeling on the way out.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">j</span> <span class="o">=</span> <span class="n">_axis_reverse</span><span class="p">(</span><span class="n">vectors</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">vectors</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">vectors</span> <span class="o">@</span> <span class="n">j</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_axis_reverse_matrix</span><span class="p">(</span><span class="n">matrices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Conjugate each per-system matrix by the axis reversal: ``J @ M @ J``.</span>
+
+<span class="sd">    No transpose — unlike :func:`_anti_transpose`, this is for quantities</span>
+<span class="sd">    (stress) that already transform like a rank-2 Cartesian tensor rather</span>
+<span class="sd">    than like a cell whose rows are lattice vectors.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">j</span> <span class="o">=</span> <span class="n">_axis_reverse</span><span class="p">(</span><span class="n">matrices</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">matrices</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">j</span> <span class="o">@</span> <span class="n">matrices</span> <span class="o">@</span> <span class="n">j</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_build_state</span><span class="p">(</span>
+    <span class="n">atoms_per_system</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">history_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+    <span class="n">dev</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cell_force_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+    <span class="n">segments</span> <span class="o">=</span> <span class="n">atoms_per_system</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">0</span> <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">opt</span> <span class="o">=</span> <span class="n">lbfgs_prepare_state</span><span class="p">(</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">segments</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+        <span class="n">segments</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">,</span>
+        <span class="n">history_size</span><span class="o">=</span><span class="n">history_size</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">system</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">opt</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_PER_SYSTEM</span><span class="p">}</span>
+    <span class="n">dofs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">opt</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_PER_DOF</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">atom_ptr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span>
+            <span class="n">atoms_per_system</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="c1"># The anti-transpose of a row-aligned cell is itself lower-triangular</span>
+        <span class="c1"># (see _anti_transpose), so it passes lbfgs_prepare_cell_state&#39;s</span>
+        <span class="c1"># alignment gate directly — no need to admit the row form and then</span>
+        <span class="c1"># overwrite the chart afterward.</span>
+        <span class="n">cs</span> <span class="o">=</span> <span class="n">lbfgs_prepare_cell_state</span><span class="p">(</span>
+            <span class="n">atom_ptr</span><span class="p">,</span>
+            <span class="n">_anti_transpose</span><span class="p">(</span><span class="n">cell</span><span class="p">),</span>
+            <span class="n">cell_force_scale</span><span class="o">=</span><span class="n">cell_force_scale</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">system</span> <span class="o">|=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cs</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_CELL_PER_SYSTEM</span><span class="p">}</span>
+        <span class="n">dofs</span> <span class="o">|=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cs</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_CELL_PER_DOF</span><span class="p">}</span>
+    <span class="k">return</span> <span class="n">_make_two_level_state_batch</span><span class="p">(</span>
+        <span class="n">system</span><span class="p">,</span> <span class="n">dofs</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">level_name</span><span class="o">=</span><span class="n">_DOF_LEVEL</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_warn_if_wraps_positions</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Warn when ``WrapPeriodicHook`` is registered on *dynamics* or its ``FusedStage``.</span>
+
+<span class="sd">    L-BFGS differences consecutive positions (``s = x - x_base``) to build its</span>
+<span class="sd">    curvature history.  A hook that edits positions between steps — most</span>
+<span class="sd">    commonly ``WrapPeriodicHook``, the natural thing to copy over from an NVE</span>
+<span class="sd">    example — inserts a spurious lattice-translation jump into that history.</span>
+<span class="sd">    This doesn&#39;t error; it silently corrupts the search direction, which has</span>
+<span class="sd">    been measured to inflate the number of steps to converge by 50-500x, or</span>
+<span class="sd">    to stall convergence outright.  See the module docstring.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">own_and_enclosing</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">dynamics</span><span class="o">.</span><span class="n">hooks</span><span class="p">,</span> <span class="o">*</span><span class="n">dynamics</span><span class="o">.</span><span class="n">_enclosing_hooks</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">WrapPeriodicHook</span><span class="p">)</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">own_and_enclosing</span><span class="p">):</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">dynamics</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has WrapPeriodicHook registered. &quot;</span>
+            <span class="s2">&quot;Editing positions between steps corrupts L-BFGS&#39;s curvature &quot;</span>
+            <span class="s2">&quot;history and can silently inflate the number of steps to &quot;</span>
+            <span class="s2">&quot;converge by 50-500x, or stall convergence entirely. Remove &quot;</span>
+            <span class="s2">&quot;WrapPeriodicHook from this optimizer (or its FusedStage), or &quot;</span>
+            <span class="s2">&quot;use FIRE2/FIRE2VariableCell if periodic wrapping is required.&quot;</span><span class="p">,</span>
+            <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_ops_state</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LBFGSState</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">LBFGSState</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_PER_DOF</span> <span class="o">+</span> <span class="n">_PER_SYSTEM</span><span class="p">})</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_ops_cell_state</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LBFGSCellState</span><span class="p">:</span>
+    <span class="c1"># The packed topology is the segmented level&#39;s own; never stored.</span>
+    <span class="k">return</span> <span class="n">LBFGSCellState</span><span class="p">(</span>
+        <span class="n">ext_batch_idx</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="n">_DOF_LEVEL</span><span class="p">]</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">int</span><span class="p">(),</span>
+        <span class="n">ext_atom_ptr</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">level_ptr</span><span class="p">(</span><span class="n">_DOF_LEVEL</span><span class="p">),</span>
+        <span class="o">**</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_CELL_PER_SYSTEM</span> <span class="o">+</span> <span class="n">_CELL_PER_DOF</span><span class="p">},</span>
+    <span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_LBFGSMixin</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Allocation-time contract shared by ``LBFGS`` and ``LBFGSVariableCell``.</span>
+
+<span class="sd">    Not a :class:`~nvalchemi.dynamics.base.BaseDynamics` subclass on its</span>
+<span class="sd">    own — mixed into both concrete optimizers (which supply that base)</span>
+<span class="sd">    rather than being one itself, so the state-shape test&#39;s</span>
+<span class="sd">    ``BaseDynamics`` subclass scan</span>
+<span class="sd">    (``test_state_management._discover_dynamics_implementations``) doesn&#39;t</span>
+<span class="sd">    pick up an incomplete class missing ``__needs_keys__`` /</span>
+<span class="sd">    ``__provides_keys__``.</span>
+
+<span class="sd">    Holds the constructor envelope both optimizers share, the</span>
+<span class="sd">    ``history_size`` fixed-at-allocation property, and the</span>
+<span class="sd">    ``_init_state`` / ``_make_new_state`` / ``post_update`` bodies, which</span>
+<span class="sd">    are otherwise identical between the two and differ only in the cell</span>
+<span class="sd">    kwargs :meth:`_extra_state_kwargs` supplies.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># ``post_update`` below is unconditionally ``pass``, so a FusedStage</span>
+    <span class="c1"># sub-stage never needs the masked save/restore dance around it — see</span>
+    <span class="c1"># ``BaseDynamics._post_update_is_noop`` and ``_masked_post_update``.</span>
+    <span class="n">_post_update_is_noop</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">BaseModelMixin</span><span class="p">,</span>
+        <span class="n">history_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">_LBFGS_DEFAULTS</span><span class="p">[</span><span class="s2">&quot;history_size&quot;</span><span class="p">],</span>
+        <span class="n">curvature_eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">_LBFGS_DEFAULTS</span><span class="p">[</span><span class="s2">&quot;curvature_eps&quot;</span><span class="p">],</span>
+        <span class="n">maxstep</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">_LBFGS_DEFAULTS</span><span class="p">[</span><span class="s2">&quot;maxstep&quot;</span><span class="p">],</span>
+        <span class="n">n_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hook</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">convergence_hook</span><span class="p">:</span> <span class="n">ConvergenceHook</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">history_size</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">history_size</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="n">history_size</span> <span class="o">&lt;=</span> <span class="mi">0</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;history_size must be a positive int; got </span><span class="si">{</span><span class="n">history_size</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span>
+            <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
+            <span class="n">convergence_hook</span><span class="o">=</span><span class="n">convergence_hook</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_history_size</span> <span class="o">=</span> <span class="n">history_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">curvature_eps</span> <span class="o">=</span> <span class="n">curvature_eps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxstep</span> <span class="o">=</span> <span class="n">maxstep</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">history_size</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stored curvature pairs; fixed once state is allocated.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_history_size</span>
+
+    <span class="nd">@history_size</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">history_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+            <span class="s2">&quot;history_size is fixed when optimizer state is allocated; &quot;</span>
+            <span class="s2">&quot;construct a new optimizer to change it&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_extra_state_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extra ``_build_state`` kwargs; overridden by ``LBFGSVariableCell``.&quot;&quot;&quot;</span>
+        <span class="k">del</span> <span class="n">batch</span><span class="p">,</span> <span class="n">n</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_hook_compatibility</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Runs every step (see BaseDynamics._check_hook_compatibility), not</span>
+        <span class="c1"># just at first admission like the identical call in _init_state</span>
+        <span class="c1"># below: a WrapPeriodicHook registered after the first step — on</span>
+        <span class="c1"># this optimizer directly, or on an enclosing FusedStage — must</span>
+        <span class="c1"># still be caught.  The two calls can both fire on step one; that&#39;s</span>
+        <span class="c1"># harmless (same message, deduplicated by Python&#39;s default warning</span>
+        <span class="c1"># filter), and simpler than threading &quot;already warned&quot; state through</span>
+        <span class="c1"># both call sites.</span>
+        <span class="n">_warn_if_wraps_positions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_warn_if_wraps_positions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">by_group</span><span class="p">:</span>
+            <span class="n">layout</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">group_layout</span>
+            <span class="n">atoms_per_update</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span>
+                <span class="n">layout</span><span class="o">.</span><span class="n">node_to_group</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="n">layout</span><span class="o">.</span><span class="n">num_groups</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">atoms_per_update</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">_build_state</span><span class="p">(</span>
+            <span class="n">atoms_per_update</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history_size</span><span class="p">,</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_extra_state_kwargs</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">atoms_per_update</span><span class="o">.</span><span class="n">numel</span><span class="p">()),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_new_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">template_batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_build_state</span><span class="p">(</span>
+            <span class="n">template_batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="p">[</span><span class="o">-</span><span class="n">n</span><span class="p">:],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history_size</span><span class="p">,</span>
+            <span class="n">template_batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">template_batch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_extra_state_kwargs</span><span class="p">(</span><span class="n">template_batch</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">post_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No-op; forces from new positions are used on the next step.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="LBFGS">
+<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.LBFGS.html#nvalchemi.dynamics.LBFGS">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LBFGS</span><span class="p">(</span><span class="n">_LBFGSMixin</span><span class="p">,</span> <span class="n">BaseDynamics</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fixed-cell L-BFGS geometry optimizer.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : BaseModelMixin</span>
+<span class="sd">        The neural network potential model.</span>
+<span class="sd">    history_size : int</span>
+<span class="sd">        Stored curvature pairs.  Must be a positive int; checked at</span>
+<span class="sd">        construction.  Fixed once state is allocated.  Default 6.</span>
+<span class="sd">    curvature_eps : float, optional</span>
+<span class="sd">        Curvature-pair acceptance floor.  Default ``None`` (by dtype).</span>
+<span class="sd">    maxstep : float</span>
+<span class="sd">        Maximum displacement per step.  Not validated: ``maxstep &lt;= 0``</span>
+<span class="sd">        disables the trust region (unbounded step length per</span>
+<span class="sd">        :func:`nvalchemiops.dynamics.optimizers.lbfgs._alpha_cap`), which is</span>
+<span class="sd">        occasionally useful but easy to trigger by accident (e.g. a stray</span>
+<span class="sd">        negative sign) since nothing raises.  Default 0.2.</span>
+<span class="sd">    n_steps : int, optional</span>
+<span class="sd">        Total steps for :meth:`run`.</span>
+<span class="sd">    hooks : list[Hook], optional</span>
+<span class="sd">        Initial hooks.</span>
+<span class="sd">    convergence_hook : ConvergenceHook or dict, optional</span>
+<span class="sd">        Convergence criterion.</span>
+<span class="sd">    by_group : bool, optional</span>
+<span class="sd">        If True, update each group of graphs as a single unit, sharing</span>
+<span class="sd">        curvature history and step scaling across the graphs in that group.</span>
+<span class="sd">        Requires a valid layout set with ``batch.set_group_layout()``.</span>
+<span class="sd">        A configured convergence hook must use the same ``by_group`` setting.</span>
+<span class="sd">        Grouped sampling and refill are unsupported. Default False.</span>
+<span class="sd">        Forwarded through ``**kwargs`` to</span>
+<span class="sd">        :class:`~nvalchemi.dynamics.base.BaseDynamics`.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    __needs_keys__ : set[str]</span>
+<span class="sd">        ``{&quot;forces&quot;}``.</span>
+<span class="sd">    __provides_keys__ : set[str]</span>
+<span class="sd">        ``{&quot;positions&quot;}``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">__needs_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;forces&quot;</span><span class="p">}</span>
+    <span class="n">__provides_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">}</span>
+    <span class="n">samples_equilibrium</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A relaxation descends to a minimum rather than sampling an ensemble.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="LBFGS.pre_update">
+<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.LBFGS.html#nvalchemi.dynamics.LBFGS.pre_update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pre_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Full L-BFGS step using current forces.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            Current batch; *positions* updated in-place.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Detach positions to avoid &quot;non-leaf .grad accessed&quot; warning from</span>
+        <span class="c1"># wp.from_torch.  In-place updates still apply to the batch storage.</span>
+        <span class="n">lbfgs_step_coord</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">,</span>
+            <span class="n">_ops_state</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_update_idx</span><span class="p">(</span><span class="n">batch</span><span class="p">),</span>
+            <span class="n">maxstep</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">maxstep</span><span class="p">,</span>
+            <span class="n">curvature_eps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">curvature_eps</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="LBFGSVariableCell">
+<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.LBFGSVariableCell.html#nvalchemi.dynamics.LBFGSVariableCell">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LBFGSVariableCell</span><span class="p">(</span><span class="n">_LBFGSMixin</span><span class="p">,</span> <span class="n">BaseDynamics</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Variable-cell L-BFGS geometry optimizer.</span>
+
+<span class="sd">    Relaxes atomic coordinates and the cell together, driven by the model&#39;s</span>
+<span class="sd">    stress.  Cells must be aligned: install</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.hooks.AlignCellHook` (``frequency=1``) on this</span>
+<span class="sd">    optimizer or its ``FusedStage``, or pass pre-aligned cells.</span>
+<span class="sd">    ``by_group=True`` is unsupported because cell degrees of freedom remain</span>
+<span class="sd">    graph-level.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : BaseModelMixin</span>
+<span class="sd">        The neural network potential model.  Must produce ``&quot;stress&quot;``.</span>
+<span class="sd">    history_size : int</span>
+<span class="sd">        Stored curvature pairs.  Must be a positive int; checked at</span>
+<span class="sd">        construction.  Fixed once state is allocated.  Default 6.</span>
+<span class="sd">    curvature_eps : float, optional</span>
+<span class="sd">        Curvature-pair acceptance floor.  Default ``None`` (by dtype).</span>
+<span class="sd">    maxstep : float</span>
+<span class="sd">        Maximum displacement per step.  Not validated: ``maxstep &lt;= 0``</span>
+<span class="sd">        disables the trust region (unbounded step length per</span>
+<span class="sd">        :func:`nvalchemiops.dynamics.optimizers.lbfgs._alpha_cap`), which is</span>
+<span class="sd">        occasionally useful but easy to trigger by accident (e.g. a stray</span>
+<span class="sd">        negative sign) since nothing raises.  Default 0.2.</span>
+<span class="sd">    n_steps : int, optional</span>
+<span class="sd">        Total steps for :meth:`run`.</span>
+<span class="sd">    hooks : list[Hook], optional</span>
+<span class="sd">        Initial hooks.</span>
+<span class="sd">    convergence_hook : ConvergenceHook or dict, optional</span>
+<span class="sd">        Convergence criterion.</span>
+<span class="sd">    cell_force_scale : float</span>
+<span class="sd">        Fixed once state is allocated — unlike ``FIRE2VariableCell``&#39;s</span>
+<span class="sd">        ``cell_force_scale``, which is a plain mutable attribute read every</span>
+<span class="sd">        step; the two share a name and purpose but not a mutability</span>
+<span class="sd">        contract.  Multiplier on the atom count normalizing stress-derived</span>
+<span class="sd">        cell forces; raise it to move the cell less per step.  Default 1.0.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    __needs_keys__ : set[str]</span>
+<span class="sd">        ``{&quot;forces&quot;, &quot;stress&quot;}``.</span>
+<span class="sd">    __provides_keys__ : set[str]</span>
+<span class="sd">        ``{&quot;positions&quot;, &quot;cell&quot;}``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">__needs_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}</span>
+    <span class="n">__provides_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">}</span>
+    <span class="n">samples_equilibrium</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A relaxation descends to a minimum rather than sampling an ensemble.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">BaseModelMixin</span><span class="p">,</span>
+        <span class="n">history_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">_LBFGS_DEFAULTS</span><span class="p">[</span><span class="s2">&quot;history_size&quot;</span><span class="p">],</span>
+        <span class="n">curvature_eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">_LBFGS_DEFAULTS</span><span class="p">[</span><span class="s2">&quot;curvature_eps&quot;</span><span class="p">],</span>
+        <span class="n">maxstep</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">_LBFGS_DEFAULTS</span><span class="p">[</span><span class="s2">&quot;maxstep&quot;</span><span class="p">],</span>
+        <span class="n">n_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hook</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">convergence_hook</span><span class="p">:</span> <span class="n">ConvergenceHook</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">cell_force_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">cell_force_scale</span><span class="p">)</span> <span class="ow">or</span> <span class="n">cell_force_scale</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;cell_force_scale must be finite and positive; got </span><span class="si">{</span><span class="n">cell_force_scale</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">history_size</span><span class="o">=</span><span class="n">history_size</span><span class="p">,</span>
+            <span class="n">curvature_eps</span><span class="o">=</span><span class="n">curvature_eps</span><span class="p">,</span>
+            <span class="n">maxstep</span><span class="o">=</span><span class="n">maxstep</span><span class="p">,</span>
+            <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span>
+            <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
+            <span class="n">convergence_hook</span><span class="o">=</span><span class="n">convergence_hook</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cell_force_scale</span> <span class="o">=</span> <span class="n">cell_force_scale</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cell_force_scale</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Cell-force normalization multiplier; fixed once state is allocated.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cell_force_scale</span>
+
+    <span class="nd">@cell_force_scale</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cell_force_scale</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+            <span class="s2">&quot;cell_force_scale is fixed when optimizer state is allocated; &quot;</span>
+            <span class="s2">&quot;construct a new optimizer to change it&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reference_cells</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Aligned cells of the last *n* systems, for the chart.  Never writes *batch*.&quot;&quot;&quot;</span>
+        <span class="c1"># Own hooks, or those of an enclosing FusedStage: both run at</span>
+        <span class="c1"># BEFORE_STEP, before this stage&#39;s first pre_update.  `_enclosing_hooks`</span>
+        <span class="c1"># is a live back-pointer, so it can go stale after `+` — see the</span>
+        <span class="c1"># &quot;retained composition&quot; limitation in FusedStage.__add__.</span>
+        <span class="n">align_hooks</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">h</span>
+            <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_enclosing_hooks</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">AlignCellHook</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">frequency</span> <span class="o">!=</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">align_hooks</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;LBFGSVariableCell requires AlignCellHook(frequency=1): its &quot;</span>
+                <span class="s2">&quot;reference chart assumes every admitted cell is aligned &quot;</span>
+                <span class="s2">&quot;before the next step.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">cell</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">align_hooks</span><span class="p">:</span>
+            <span class="n">aligned</span> <span class="o">=</span> <span class="n">_aligned_periodic</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">aligned</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">cell</span> <span class="o">=</span> <span class="n">aligned</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">cell</span> <span class="o">=</span> <span class="n">cell</span><span class="p">[</span><span class="o">-</span><span class="n">n</span><span class="p">:]</span>
+        <span class="c1"># Same criterion AlignCellHook uses to decide whether a cell needs</span>
+        <span class="c1"># realigning at all, so a cell it considers already-aligned can</span>
+        <span class="c1"># never fail here, and vice versa — see cell_alignment_offenders.</span>
+        <span class="n">bad</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">cell_alignment_offenders</span><span class="p">(</span><span class="n">cell</span><span class="p">))</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">bad</span><span class="o">.</span><span class="n">numel</span><span class="p">():</span>
+            <span class="n">systems</span> <span class="o">=</span> <span class="p">(</span><span class="n">bad</span> <span class="o">+</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">-</span> <span class="n">n</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="n">skew</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">cell</span><span class="p">[</span><span class="n">bad</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+            <span class="n">fix</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="s2">&quot;AlignCellHook aligns only periodic systems; set pbc for &quot;</span>
+                <span class="s2">&quot;these, or align their cells before the run.&quot;</span>
+                <span class="k">if</span> <span class="n">align_hooks</span>
+                <span class="k">else</span> <span class="s2">&quot;Install AlignCellHook() in hooks, or align the cells &quot;</span>
+                <span class="s2">&quot;before the run.&quot;</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;LBFGSVariableCell: cell for system(s) </span><span class="si">{</span><span class="n">systems</span><span class="si">}</span><span class="s2"> is not &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;aligned (upper off-diagonal up to </span><span class="si">{</span><span class="n">skew</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3e</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="s2">&quot;or left-handed). &quot;</span> <span class="o">+</span> <span class="n">fix</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">cell</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_extra_state_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">by_group</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;LBFGSVariableCell does not support by_group=True because cell &quot;</span>
+                <span class="s2">&quot;degrees of freedom remain graph-level.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">cell</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_reference_cells</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span>
+            <span class="n">cell_force_scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cell_force_scale</span><span class="p">,</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="LBFGSVariableCell.pre_update">
+<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.LBFGSVariableCell.html#nvalchemi.dynamics.LBFGSVariableCell.pre_update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pre_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Full L-BFGS variable-cell step using current forces and stress.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            Current batch; *positions* and *cell* updated in-place.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># batch.stress is tensile-positive Cauchy stress -W/V (eV/A^3);</span>
+        <span class="c1"># ops converts it to the cell force internally.</span>
+        <span class="c1">#</span>
+        <span class="c1"># The backend wants the anti-transposed cell (see _anti_transpose)</span>
+        <span class="c1"># and axis-reversed positions/forces/stress to match.  It mutates</span>
+        <span class="c1"># positions and cell in place and requires contiguous tensors, so</span>
+        <span class="c1"># these must be transformed *copies*, not views — writes to a</span>
+        <span class="c1"># non-contiguous view would not land back in the batch, and in any</span>
+        <span class="c1"># case the backend rejects non-contiguous inputs outright.</span>
+        <span class="n">cell_fed</span> <span class="o">=</span> <span class="n">_anti_transpose</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">detach</span><span class="p">())</span>
+        <span class="n">positions_fed</span> <span class="o">=</span> <span class="n">_axis_reverse_vectors</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">detach</span><span class="p">())</span>
+        <span class="n">lbfgs_step_coord_cell</span><span class="p">(</span>
+            <span class="n">positions_fed</span><span class="p">,</span>
+            <span class="n">cell_fed</span><span class="p">,</span>
+            <span class="n">_axis_reverse_vectors</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">),</span>
+            <span class="n">_axis_reverse_matrix</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">stress</span><span class="p">),</span>
+            <span class="n">_ops_state</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">),</span>
+            <span class="n">_ops_cell_state</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">),</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">int</span><span class="p">(),</span>
+            <span class="n">maxstep</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">maxstep</span><span class="p">,</span>
+            <span class="n">curvature_eps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">curvature_eps</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">_axis_reverse_vectors</span><span class="p">(</span><span class="n">positions_fed</span><span class="p">))</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">_anti_transpose</span><span class="p">(</span><span class="n">cell_fed</span><span class="p">))</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

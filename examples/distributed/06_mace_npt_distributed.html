@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>MACE NPT: domain-decomposed constant-pressure MD with a barostat &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>MACE NPT: domain-decomposed constant-pressure MD with a barostat &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/distributed/06_mace_npt_distributed';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed" href="07_fire_nvt_dd.html" />
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Distributed Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -476,14 +487,14 @@ to download the full example code.</p>
 <section class="sphx-glr-example-title" id="mace-npt-domain-decomposed-constant-pressure-md-with-a-barostat">
 <span id="sphx-glr-examples-distributed-06-mace-npt-distributed-py"></span><h1>MACE NPT: domain-decomposed constant-pressure MD with a barostat<a class="headerlink" href="#mace-npt-domain-decomposed-constant-pressure-md-with-a-barostat" title="Link to this heading">#</a></h1>
 <p>The constant-pressure sibling of example 03. Load a MACE checkpoint, run
-a short <code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code> trajectory across multiple ranks
+a short <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.NPT.html#nvalchemi.dynamics.NPT" title="nvalchemi.dynamics.NPT"><code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code></a> trajectory across multiple ranks
 under <a class="reference internal" href="../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel" title="nvalchemi.distributed.DomainParallel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainParallel</span></code></a>, and record the
 trajectory — including the <strong>evolving cell</strong> — to an xyz file from rank 0.</p>
 <p>Why NPT-under-DD needs more than NVT: a barostat and a thermostat both
 couple to <em>global</em> thermodynamic quantities — the total kinetic energy,
 the total degrees of freedom, and the full-system pressure tensor — none
 of which any single rank can see from its owned subdomain alone. The
-framework handles this transparently: <code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code>
+framework handles this transparently: <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.NPT.html#nvalchemi.dynamics.NPT" title="nvalchemi.dynamics.NPT"><code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code></a>
 declares <code class="docutils literal notranslate"><span class="pre">__dd_thermo_kind__</span> <span class="pre">=</span> <span class="pre">&quot;npt&quot;</span></code>, and on <code class="docutils literal notranslate"><span class="pre">partition()</span></code>
 <a class="reference internal" href="../../modules/generated/nvalchemi.distributed.DomainParallel.html#nvalchemi.distributed.DomainParallel" title="nvalchemi.distributed.DomainParallel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DomainParallel</span></code></a> installs a dynamics
 coordinator that</p>
@@ -542,13 +553,13 @@ OVITO/VMD.</p>
 <span class="n">_DISTRIBUTED_ENV</span> <span class="o">=</span> <span class="s2">&quot;RANK&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span> <span class="ow">and</span> <span class="s2">&quot;WORLD_SIZE&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span>
 
 <span class="c1"># Reuse the SiO2 supercell builder from the benchmark suite (see example 03).</span>
-<span class="c1"># Sphinx-Gallery executes examples without defining ``__file__`` and skips the</span>
-<span class="c1"># launcher path below, so only resolve the benchmark import for a real run.</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="n">_DOCS_BUILD</span><span class="p">:</span>
-    <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span>
-        <span class="mi">0</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parents</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">/</span> <span class="s2">&quot;benchmark&quot;</span> <span class="o">/</span> <span class="s2">&quot;distributed&quot;</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">_benchmark_common</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_sio2_supercell</span>  <span class="c1"># noqa: E402</span>
+<span class="c1"># Sphinx-Gallery does not define ``__file__``; it runs each example from the</span>
+<span class="c1"># example&#39;s own directory, so fall back to the working directory there.</span>
+<span class="n">_EXAMPLE_DIR</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span> <span class="k">if</span> <span class="s2">&quot;__file__&quot;</span> <span class="ow">in</span> <span class="nb">globals</span><span class="p">()</span> <span class="k">else</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span>
+<span class="p">)</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">_EXAMPLE_DIR</span><span class="o">.</span><span class="n">parents</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="s2">&quot;benchmark&quot;</span> <span class="o">/</span> <span class="s2">&quot;distributed&quot;</span><span class="p">))</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">_benchmark_common</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_sio2_supercell</span>  <span class="c1"># noqa: E402</span>
 
 <span class="c1"># ----------------------------------------------------------------------</span>
 <span class="c1"># System construction (rank 0 — DomainParallel scatters from there)</span>
@@ -558,6 +569,7 @@ OVITO/VMD.</p>
 <span class="k">def</span><span class="w"> </span><span class="nf">build_initial_batch</span><span class="p">(</span>
     <span class="n">repeats</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">dtype</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span></a><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the SiO2 supercell batch on rank 0.&quot;&quot;&quot;</span>
     <span class="n">pos</span><span class="p">,</span> <span class="n">numbers</span><span class="p">,</span> <span class="n">masses</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">velocities</span> <span class="o">=</span> <span class="n">build_sio2_supercell</span><span class="p">(</span>
         <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span>
     <span class="p">)</span>
@@ -624,6 +636,7 @@ OVITO/VMD.</p>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run MACE NPT dynamics under DomainParallel.&quot;&quot;&quot;</span>
     <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
         <span class="n">description</span><span class="o">=</span><span class="s2">&quot;MACE NPT (barostat) under DomainParallel.&quot;</span>
     <span class="p">)</span>

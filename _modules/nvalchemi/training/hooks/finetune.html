@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.training.hooks.finetune &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.training.hooks.finetune &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/hooks/finetune';</script>
-    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -431,20 +431,26 @@ document.write(`
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span><span class="p">,</span> <span class="n">Final</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training._spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.optimizers</span><span class="w"> </span><span class="kn">import</span> <span class="n">iter_qualified_named_parameters</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;ModulePatchHook&quot;</span><span class="p">,</span> <span class="s2">&quot;TrainableParameterHook&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;FineTuningSummaryHook&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ModulePatchHook&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TrainableParameterHook&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 
 
 <span class="n">PatchValue</span> <span class="o">=</span> <span class="n">BaseSpec</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span>
 <span class="sd">&quot;&quot;&quot;Supported replacement value for :class:`ModulePatchHook`.&quot;&quot;&quot;</span>
+
+<span class="n">_MODULE_PATCH_HOOK_IDENTIFIER</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s2">&quot;patch&quot;</span>
 
 <span class="n">FreezeMode</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;requires_grad&quot;</span><span class="p">,</span> <span class="s2">&quot;optimizer_only&quot;</span><span class="p">]</span>
 <span class="sd">&quot;&quot;&quot;Supported parameter-freezing modes for :class:`TrainableParameterHook`.&quot;&quot;&quot;</span>
@@ -455,16 +461,21 @@ document.write(`
     <span class="n">names</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">target_type</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;parameter&quot;</span><span class="p">,</span> <span class="s2">&quot;module&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;parameter&quot;</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return names matched by glob patterns, raising on empty matches.&quot;&quot;&quot;</span>
+    <span class="n">example</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;parameter&quot;</span><span class="p">:</span> <span class="s2">&quot;main.model.projection.weight&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="s2">&quot;main.model.projection&quot;</span><span class="p">,</span>
+    <span class="p">}[</span><span class="n">target_type</span><span class="p">]</span>
     <span class="n">matched</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
     <span class="k">for</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="n">patterns</span><span class="p">:</span>
         <span class="n">pattern_matches</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span> <span class="k">if</span> <span class="n">fnmatch</span><span class="o">.</span><span class="n">fnmatchcase</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">pattern</span><span class="p">)}</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">pattern_matches</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> pattern </span><span class="si">{</span><span class="n">pattern</span><span class="si">!r}</span><span class="s2"> did not match any parameter. &quot;</span>
-                <span class="s2">&quot;Patterns are matched against fully qualified names like &quot;</span>
-                <span class="s2">&quot;&#39;main.model.projection.weight&#39;.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> pattern </span><span class="si">{</span><span class="n">pattern</span><span class="si">!r}</span><span class="s2"> did not match any </span><span class="si">{</span><span class="n">target_type</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;Patterns are matched against fully-qualified names like &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">example</span><span class="si">!r}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
         <span class="n">matched</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">pattern_matches</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">matched</span>
@@ -515,6 +526,82 @@ document.write(`
     <span class="k">return</span> <span class="n">value</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_parameter_names_under_prefix</span><span class="p">(</span><span class="n">names</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return parameter names directly under a fully-qualified module prefix.&quot;&quot;&quot;</span>
+    <span class="n">parameter_prefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">.&quot;</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span> <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">parameter_prefix</span><span class="p">)}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_registered_parameter_names</span><span class="p">(</span><span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">method_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return registered parameter names when the workflow supports a registry.&quot;&quot;&quot;</span>
+    <span class="n">method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">workflow</span><span class="p">,</span> <span class="n">method_name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">method</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">frozenset</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">method</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_registered_parameter_names</span><span class="p">(</span>
+    <span class="n">names</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">registered_names</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise when registry names no longer exist on the model.&quot;&quot;&quot;</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">registered_names</span> <span class="o">-</span> <span class="n">names</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Registered </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> parameter(s) are not present on the final &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;model: </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parameter_summary</span><span class="p">(</span>
+    <span class="n">names</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">parameter_by_name</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return tensor and scalar parameter counts.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;tensor_count&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">),</span>
+        <span class="s2">&quot;parameter_count&quot;</span><span class="p">:</span> <span class="nb">sum</span><span class="p">(</span>
+            <span class="n">parameter_by_name</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">parameter_by_name</span>
+        <span class="p">),</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_trainable_parameter_summary</span><span class="p">(</span>
+    <span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">models</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return final trainable parameter accounting grouped by registration source.&quot;&quot;&quot;</span>
+    <span class="c1"># Get the final trainable parameters to be used by the optimizer.</span>
+    <span class="n">parameter_by_name</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">iter_qualified_named_parameters</span><span class="p">(</span><span class="n">models</span><span class="p">))</span>
+    <span class="n">allowed</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;_optimizer_parameter_names&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">allowed_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">parameter_by_name</span><span class="p">)</span> <span class="k">if</span> <span class="n">allowed</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">set</span><span class="p">(</span><span class="n">allowed</span><span class="p">)</span>
+    <span class="n">summary</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;all&quot;</span><span class="p">:</span> <span class="n">_parameter_summary</span><span class="p">(</span><span class="n">allowed_names</span><span class="p">,</span> <span class="n">parameter_by_name</span><span class="p">)}</span>
+
+    <span class="c1"># Get the trainable parameter counts registered by each source.</span>
+    <span class="n">get_registered_trainable</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+        <span class="n">workflow</span><span class="p">,</span>
+        <span class="s2">&quot;get_registered_trainable_parameter_names&quot;</span><span class="p">,</span>
+        <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">registered_by_source</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">get_registered_trainable</span><span class="p">()</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">get_registered_trainable</span><span class="p">)</span> <span class="k">else</span> <span class="p">{}</span>
+    <span class="p">)</span>
+    <span class="n">registered_names</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">source</span><span class="p">,</span> <span class="n">source_names</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">registered_by_source</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+        <span class="n">selected_source_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">source_names</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">allowed_names</span>
+        <span class="n">registered_names</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">selected_source_names</span><span class="p">)</span>
+        <span class="n">summary</span><span class="p">[</span><span class="n">source</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parameter_summary</span><span class="p">(</span><span class="n">selected_source_names</span><span class="p">,</span> <span class="n">parameter_by_name</span><span class="p">)</span>
+    <span class="n">summary</span><span class="p">[</span><span class="s2">&quot;extra&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parameter_summary</span><span class="p">(</span>
+        <span class="n">allowed_names</span> <span class="o">-</span> <span class="n">registered_names</span><span class="p">,</span>
+        <span class="n">parameter_by_name</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">summary</span>
+
+
 <div class="viewcode-block" id="ModulePatchHook">
 <a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.hooks.ModulePatchHook.html#nvalchemi.training.hooks.ModulePatchHook">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ModulePatchHook</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
@@ -548,6 +635,16 @@ document.write(`
         <span class="n">description</span><span class="o">=</span><span class="p">(</span>
             <span class="s2">&quot;Ordered mapping of target paths to replacement modules or specs &quot;</span>
             <span class="s2">&quot;that build modules.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">register_parameters</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;If True, register the patched module parameters as both trainable &quot;</span>
+            <span class="s2">&quot;and managed under the fixed &#39;patch&#39; source. Registered patch &quot;</span>
+            <span class="s2">&quot;parameters are included in the final trainable allow-list by default &quot;</span>
+            <span class="s2">&quot;and are protected from being overridden by other sources modifying &quot;</span>
+            <span class="s2">&quot;the model.&quot;</span>
         <span class="p">),</span>
     <span class="p">)</span>
 
@@ -593,8 +690,32 @@ document.write(`
                     <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
                 <span class="p">)</span>
 
-        <span class="n">resolved</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># Get the previously registered managed parameter names on the workflow.</span>
+        <span class="n">registered_managed_names</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">get_registered_managed</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+            <span class="n">workflow</span><span class="p">,</span>
+            <span class="s2">&quot;get_registered_managed_parameter_names&quot;</span><span class="p">,</span>
+            <span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">get_registered_managed</span><span class="p">):</span>
+            <span class="n">registered_managed_names</span> <span class="o">=</span> <span class="n">get_registered_managed</span><span class="p">()</span>
+
+        <span class="n">resolved</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">target</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">patches</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="c1"># Check if the patch target overlaps with any other registered managed parameter names.</span>
+            <span class="n">overlaps</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">source</span><span class="p">,</span> <span class="n">source_names</span> <span class="ow">in</span> <span class="n">registered_managed_names</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">source</span> <span class="o">==</span> <span class="n">_MODULE_PATCH_HOOK_IDENTIFIER</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">matched_names</span> <span class="o">=</span> <span class="n">_parameter_names_under_prefix</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">source_names</span><span class="p">),</span> <span class="n">target</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">matched_names</span><span class="p">:</span>
+                    <span class="n">overlaps</span><span class="p">[</span><span class="n">source</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">matched_names</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">overlaps</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Module patch target </span><span class="si">{</span><span class="n">target</span><span class="si">!r}</span><span class="s2"> overlaps parameter(s) &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;already managed by another source: </span><span class="si">{</span><span class="n">overlaps</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+
             <span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span> <span class="o">=</span> <span class="n">_resolve_parent</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span><span class="p">):</span>
                 <span class="n">existing</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span><span class="p">)</span>
@@ -604,10 +725,95 @@ document.write(`
                         <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">existing</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, expected an existing &quot;</span>
                         <span class="s2">&quot;nn.Module or a new child name.&quot;</span>
                     <span class="p">)</span>
-            <span class="n">resolved</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span><span class="p">,</span> <span class="n">_build_patch_module</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">value</span><span class="p">)))</span>
+            <span class="n">resolved</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span><span class="p">,</span> <span class="n">_build_patch_module</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">value</span><span class="p">))</span>
+            <span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">resolved</span><span class="p">:</span>
-            <span class="nb">setattr</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span></div>
+        <span class="k">for</span> <span class="n">_target</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">resolved</span><span class="p">:</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">register_parameters</span><span class="p">:</span>
+            <span class="n">names</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">iter_qualified_named_parameters</span><span class="p">(</span><span class="n">models</span><span class="p">)}</span>
+            <span class="n">patch_parameter_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span><span class="o">.</span><span class="n">union</span><span class="p">(</span>
+                <span class="o">*</span><span class="p">(</span>
+                    <span class="n">_parameter_names_under_prefix</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">target</span><span class="p">,</span> <span class="o">*</span><span class="n">_rest</span> <span class="ow">in</span> <span class="n">resolved</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">register_trainable</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+                <span class="n">workflow</span><span class="p">,</span>
+                <span class="s2">&quot;register_trainable_parameter_names&quot;</span><span class="p">,</span>
+                <span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">register_trainable</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;ModulePatchHook requires a workflow with a &quot;</span>
+                    <span class="s2">&quot;register_trainable_parameter_names(names, source=...) method &quot;</span>
+                    <span class="s2">&quot;when register_parameters=True.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">register_trainable</span><span class="p">(</span>
+                <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">patch_parameter_names</span><span class="p">)),</span>
+                <span class="n">source</span><span class="o">=</span><span class="n">_MODULE_PATCH_HOOK_IDENTIFIER</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">register_managed</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+                <span class="n">workflow</span><span class="p">,</span>
+                <span class="s2">&quot;register_managed_parameter_names&quot;</span><span class="p">,</span>
+                <span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">register_managed</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;ModulePatchHook requires a workflow with a &quot;</span>
+                    <span class="s2">&quot;register_managed_parameter_names(names, source=...) method &quot;</span>
+                    <span class="s2">&quot;when register_parameters=True.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">register_managed</span><span class="p">(</span>
+                <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">patch_parameter_names</span><span class="p">)),</span>
+                <span class="n">source</span><span class="o">=</span><span class="n">_MODULE_PATCH_HOOK_IDENTIFIER</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">patched_parameter_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;_patched_parameter_names&quot;</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span>
+            <span class="p">)</span>
+            <span class="n">patched_parameter_names</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">patch_parameter_names</span><span class="p">)</span>
+            <span class="n">workflow</span><span class="o">.</span><span class="n">_patched_parameter_names</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">patched_parameter_names</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="FineTuningSummaryHook">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.hooks.FineTuningSummaryHook.html#nvalchemi.training.hooks.FineTuningSummaryHook">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FineTuningSummaryHook</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cache fine-tuning parameter counts after registration hooks run.&quot;&quot;&quot;</span>
+
+    <span class="n">frequency</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">stage</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>  <span class="c1"># noqa: ARG002</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``False`` because summary collection runs on registration.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: ARG002</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No-op stage hook; summary collection is handled by ``on_register``.&quot;&quot;&quot;</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Store trainable parameter counts on ``workflow``.&quot;&quot;&quot;</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;models&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;FineTuningSummaryHook requires a workflow with a models mapping.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">register_summary</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+            <span class="n">workflow</span><span class="p">,</span>
+            <span class="s2">&quot;register_trainable_parameter_summary&quot;</span><span class="p">,</span>
+            <span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">register_summary</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;FineTuningSummaryHook requires a workflow with a &quot;</span>
+                <span class="s2">&quot;register_trainable_parameter_summary(summary) method.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">register_summary</span><span class="p">(</span><span class="n">_trainable_parameter_summary</span><span class="p">(</span><span class="n">workflow</span><span class="p">,</span> <span class="n">models</span><span class="p">))</span></div>
 
 
 
@@ -618,11 +824,14 @@ document.write(`
 
 <span class="sd">    On registration with a :class:`~nvalchemi.training.strategy.TrainingStrategy`,</span>
 <span class="sd">    ``freeze_patterns`` and ``trainable_patterns`` (globs over fully-qualified</span>
-<span class="sd">    parameter names) resolve to the trainable set. What you set decides the</span>
+<span class="sd">    parameter names), together with parameters previously registered as trainable</span>
+<span class="sd">    by earlier hooks, resolve to the trainable set. What you set decides the</span>
 <span class="sd">    behaviour:</span>
 
-<span class="sd">    - ``trainable_patterns`` only — train exactly those; freeze the rest.</span>
-<span class="sd">    - ``freeze_patterns`` only — freeze those; train the rest.</span>
+<span class="sd">    - ``trainable_patterns`` only — train exactly those, plus any parameters</span>
+<span class="sd">      previously registered as trainable; freeze the rest,</span>
+<span class="sd">    - ``freeze_patterns`` only — freeze those; train the rest, including any</span>
+<span class="sd">      parameters previously registered as trainable.</span>
 <span class="sd">    - both — freeze the ``freeze_patterns`` set, but ``trainable_patterns`` win:</span>
 <span class="sd">      a parameter they match stays trainable even if a freeze pattern also</span>
 <span class="sd">      matches it.</span>
@@ -634,7 +843,8 @@ document.write(`
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If no patterns are supplied, or if any pattern matches no parameter.</span>
+<span class="sd">        If no trainable parameters are selected, or if any pattern matches no</span>
+<span class="sd">        parameter.</span>
 
 <span class="sd">    Warns</span>
 <span class="sd">    -----</span>
@@ -666,8 +876,10 @@ document.write(`
         <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
         <span class="n">Field</span><span class="p">(</span>
             <span class="n">description</span><span class="o">=</span><span class="p">(</span>
-                <span class="s2">&quot;Glob patterns for parameters to keep trainable. On their own &quot;</span>
-                <span class="s2">&quot;they define the full trainable set (everything else is frozen).&quot;</span>
+                <span class="s2">&quot;Glob patterns for parameters to keep trainable. When supplied &quot;</span>
+                <span class="s2">&quot;without ``freeze_patterns``, they define the full trainable set, &quot;</span>
+                <span class="s2">&quot;along with the trainable parameters registered by earlier hooks, &quot;</span>
+                <span class="s2">&quot;e.g., ``ModulePatchHook``. Everything else is frozen.&quot;</span>
             <span class="p">)</span>
         <span class="p">),</span>
     <span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
@@ -686,16 +898,6 @@ document.write(`
     <span class="n">stage</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TrainableParameterHook</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Require at least one pattern so registration has a visible effect.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">freeze_patterns</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainable_patterns</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;TrainableParameterHook requires freeze_patterns, &quot;</span>
-                <span class="s2">&quot;trainable_patterns, or both.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>  <span class="c1"># noqa: ARG002</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``False`` because optimizer filters run only on registration.&quot;&quot;&quot;</span>
@@ -724,10 +926,42 @@ document.write(`
             <span class="n">trainable_matches</span> <span class="o">=</span> <span class="n">_matched_names</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">trainable_patterns</span><span class="p">,</span> <span class="n">names</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;trainable_patterns&quot;</span>
             <span class="p">)</span>
+        <span class="n">registered_trainable_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="n">_registered_parameter_names</span><span class="p">(</span>
+                <span class="n">workflow</span><span class="p">,</span>
+                <span class="s2">&quot;get_flattened_registered_trainable_parameter_names&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">registered_managed_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="n">_registered_parameter_names</span><span class="p">(</span>
+                <span class="n">workflow</span><span class="p">,</span>
+                <span class="s2">&quot;get_flattened_registered_managed_parameter_names&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">_validate_registered_parameter_names</span><span class="p">(</span>
+            <span class="n">names</span><span class="p">,</span>
+            <span class="n">registered_trainable_names</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="s2">&quot;trainable&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">_validate_registered_parameter_names</span><span class="p">(</span>
+            <span class="n">names</span><span class="p">,</span>
+            <span class="n">registered_managed_names</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="s2">&quot;managed&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">trainable_matches</span> <span class="o">-=</span> <span class="n">registered_managed_names</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainable_patterns</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">freeze_patterns</span><span class="p">:</span>
             <span class="n">allowed</span> <span class="o">=</span> <span class="n">trainable_matches</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainable_patterns</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">freeze_patterns</span><span class="p">:</span>
+            <span class="n">allowed</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">allowed</span> <span class="o">=</span> <span class="p">(</span><span class="n">names</span> <span class="o">-</span> <span class="n">freeze_matches</span><span class="p">)</span> <span class="o">|</span> <span class="n">trainable_matches</span>
+        <span class="n">allowed</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">registered_trainable_names</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">allowed</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;TrainableParameterHook selected no trainable parameters. &quot;</span>
+                <span class="s2">&quot;Provide freeze_patterns or trainable_patterns, or register &quot;</span>
+                <span class="s2">&quot;trainable parameters before this hook.&quot;</span>
+            <span class="p">)</span>
 
         <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;_optimizers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">getattr</span><span class="p">(</span>
             <span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;_flat_opts&quot;</span><span class="p">,</span> <span class="kc">None</span>
@@ -749,6 +983,9 @@ document.write(`
             <span class="p">)</span>
         <span class="n">set_optimizer_parameter_filter</span><span class="p">(</span><span class="n">allowed</span><span class="p">)</span>
 
+        <span class="c1"># For freeze_mode=&quot;requires_grad&quot;, preserve requires_grad for parameters in the</span>
+        <span class="c1"># allowed list and temporarily set all other parameters to requires_grad=False.</span>
+        <span class="c1"># For freeze_mode=&quot;optimizer_only&quot;, do not change requires_grad here</span>
         <span class="n">set_trainable_parameter_filter</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
             <span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;set_trainable_parameter_filter&quot;</span><span class="p">,</span> <span class="kc">None</span>
         <span class="p">)</span>
@@ -762,6 +999,7 @@ document.write(`
         <span class="k">else</span><span class="p">:</span>
             <span class="n">set_trainable_parameter_filter</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 
+        <span class="c1"># Force explicitly selected or registered trainable parameters on to be trainable.</span>
         <span class="n">set_force_trainable_parameter_filter</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
             <span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;set_force_trainable_parameter_filter&quot;</span><span class="p">,</span> <span class="kc">None</span>
         <span class="p">)</span>
@@ -771,7 +1009,9 @@ document.write(`
                 <span class="s2">&quot;set_force_trainable_parameter_filter(names) method.&quot;</span>
             <span class="p">)</span>
         <span class="n">set_force_trainable_parameter_filter</span><span class="p">(</span>
-            <span class="n">trainable_matches</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainable_patterns</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">(</span><span class="n">trainable_matches</span> <span class="o">|</span> <span class="n">registered_trainable_names</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trainable_patterns</span> <span class="ow">or</span> <span class="n">registered_trainable_names</span>
+            <span class="k">else</span> <span class="kc">None</span>
         <span class="p">)</span></div>
 
 </pre></div>

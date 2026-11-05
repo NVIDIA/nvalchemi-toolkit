@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.chem.build\_contact\_distance\_matrix
+===================================================
+
+.. currentmodule:: nvalchemi.csp.chem
+
+.. autofunction:: build_contact_distance_matrix

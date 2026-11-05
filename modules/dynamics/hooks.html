@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Dynamics Hooks — Stages &amp; Usage &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Dynamics Hooks — Stages &amp; Usage &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'modules/dynamics/hooks';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="nvalchemi.dynamics.hooks.LoggingHook" href="generated/nvalchemi.dynamics.hooks.LoggingHook.html" />
@@ -371,8 +371,13 @@ document.write(`
 <li class="toctree-l1 has-children"><a class="reference internal" href="../data.html">Data module (AtomicData, Batch, readers/writers)</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.AtomicData.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicData</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.Batch.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Batch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.LevelSchema.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.LevelSchema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.resolve_device.html">nvalchemi.data.resolve_device</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.transforms.Compose.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.transforms</span></code>.Compose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.transforms.make_supercell.html">nvalchemi.data.transforms.make_supercell</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.AtomicDataZarrWriter.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrWriter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.AtomicDataZarrReader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrReader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.FieldSchema.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.FieldSchema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.Dataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Dataset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.InMemoryDataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.InMemoryDataset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.DataLoader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.DataLoader</a></li>
@@ -380,6 +385,9 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.datapipes.MultiDataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.MultiDataset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.datapipes.MultiDatasetSampler.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.MultiDatasetSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.datapipes.MultiDatasetBatchSampler.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.MultiDatasetBatchSampler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.datapipes.distributed_shard.html">nvalchemi.data.datapipes.distributed_shard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.datapipes.dataset_device.html">nvalchemi.data.datapipes.dataset_device</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.datapipes.same_device.html">nvalchemi.data.datapipes.same_device</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.datapipes.ZarrArrayConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrArrayConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.datapipes.ZarrWriteConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrWriteConfig</a></li>
 </ul>
@@ -389,6 +397,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.hooks.CheckpointableHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code>.CheckpointableHook</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.hooks.HookContext.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code>.HookContext</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.hooks.DynamicsContext.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code>.DynamicsContext</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.hooks.GenerationContext.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code>.GenerationContext</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.hooks.TrainContext.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code>.TrainContext</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.hooks.HookRegistryMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code>.HookRegistryMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.hooks.BiasedPotentialHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code>.BiasedPotentialHook</a></li>
@@ -416,9 +425,15 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.SnapshotHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>.SnapshotHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>.ConvergedSnapshotHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>.EnergyDriftMonitorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.StabilityMonitor.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>.StabilityMonitor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.StabilityMetrics.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>.StabilityMetrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.total_momentum.html">nvalchemi.dynamics.hooks.total_momentum</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>.NaNDetectorHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>.MaxForceClampHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.nonfinite_graph_mask.html">nvalchemi.dynamics.hooks.nonfinite_graph_mask</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>.FreezeAtomsHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.PairSwapHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>.PairSwapHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.kinetic_energy_per_graph.html">nvalchemi.dynamics.hooks.kinetic_energy_per_graph</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="convergence.html">Convergence Criteria</a></li>
@@ -429,27 +444,65 @@ document.write(`
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="implementing_dynamics.html">Implementing Custom Dynamics</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="api.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-6"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="mep.html">Reaction Paths and NEB</a><input class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-6"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.NEB.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep</span></code>.NEB</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.ClimbingImageConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep</span></code>.ClimbingImageConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.interpolate_paths.html">nvalchemi.dynamics.mep.interpolate_paths</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.IDPPModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep</span></code>.IDPPModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.prepare_idpp_targets.html">nvalchemi.dynamics.mep.prepare_idpp_targets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.validate_paths.html">nvalchemi.dynamics.mep.validate_paths</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.align_batch_positions.html">nvalchemi.dynamics.mep.align_batch_positions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.NEBMethod.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep</span></code>.NEBMethod</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.TorchNEBMethod.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep</span></code>.TorchNEBMethod</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.SpringConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep</span></code>.SpringConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.ConstantSpringConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep</span></code>.ConstantSpringConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.SpringContext.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep</span></code>.SpringContext</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep.hooks</span></code>.PathEnergyStatsHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.hooks.PathEnergyStats.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep.hooks</span></code>.PathEnergyStats</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.hooks.PathDiagnosticsHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep.hooks</span></code>.PathDiagnosticsHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.hooks.PathDiagnostics.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep.hooks</span></code>.PathDiagnostics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.hooks.NEBForceHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep.hooks</span></code>.NEBForceHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep.hooks</span></code>.ClimbingImageSelectionHook</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="api.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-7"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.BaseDynamics.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.BaseDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.DynamicsStrategy.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.DynamicsStrategy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.DemoDynamics.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.DemoDynamics</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.FusedStage.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.FusedStage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.DistributedPipeline.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.DistributedPipeline</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.DynamicsStage.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.DynamicsStage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.ConvergenceHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.ConvergenceHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.KB_EV.html">nvalchemi.dynamics.KB_EV</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.NVE.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.NVE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.NVTLangevin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.NVTLangevin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.NVTNoseHoover.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.NVTNoseHoover</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.NPT.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.NPT</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.NPH.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.NPH</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.FIRE2.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.FIRE2</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.FIRE2VariableCell.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.FIRE2VariableCell</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.LBFGS.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.LBFGS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.LBFGSVariableCell.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.LBFGSVariableCell</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.DataSink.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.DataSink</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.ResizableSink.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.ResizableSink</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.GPUBuffer.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.GPUBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.HostMemory.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.HostMemory</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.ZarrData.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.ZarrData</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.SizeAwareSampler.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.SizeAwareSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.OrderedStructureSampler.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.OrderedStructureSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.StructureSource.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.StructureSource</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.FitPolicy.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.FitPolicy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.WithinBudget.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code>.WithinBudget</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="methods.html">Integrator Algorithms</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-7"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-8"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.base.ModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.base.NeighborConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.NeighborConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.HessianOperator.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models</span></code>.HessianOperator</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.mace.MACEWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.mace</span></code>.MACEWrapper</a></li>
@@ -464,8 +517,21 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.pipeline.PipelineGroup.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineGroup</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../training/index.html">Training module</a><input class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-8"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../training/checkpoints.html">Training checkpoints</a><input class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-9"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../gen.html">Generative module (AtomisticGenerator, hooks, pipelines)</a><input class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-9"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.gen.AtomisticGenerator.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.gen</span></code>.AtomisticGenerator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.gen.GeneratingFunction.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.gen</span></code>.GeneratingFunction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.gen.ConditionFunction.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.gen</span></code>.ConditionFunction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.gen.GenerationStage.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.gen</span></code>.GenerationStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.gen.GenerationContext.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.gen</span></code>.GenerationContext</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.gen.GenerationPipeline.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.gen</span></code>.GenerationPipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.gen.GenerativeModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.gen</span></code>.GenerativeModelConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.gen.GenerativeModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.gen</span></code>.GenerativeModelMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.gen.demo.DemoGANModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.gen.demo</span></code>.DemoGANModel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.gen.demo.DemoDiffusionModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.gen.demo</span></code>.DemoDiffusionModel</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../training/index.html">Training module</a><input class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-10"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../training/checkpoints.html">Training checkpoints</a><input class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-11"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.TrainingStrategy.save_checkpoint.html">nvalchemi.training.TrainingStrategy.save_checkpoint</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.TrainingStrategy.restore_checkpoint.html">nvalchemi.training.TrainingStrategy.restore_checkpoint</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.TrainingStrategy.load_checkpoint.html">nvalchemi.training.TrainingStrategy.load_checkpoint</a></li>
@@ -474,7 +540,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.hooks.CheckpointHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.hooks</span></code>.CheckpointHook</a></li>
 </ul>
 </li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../training/strategy.html">Training strategy API</a><input class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-10"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../training/strategy.html">Training strategy API</a><input class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-12"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.TrainingStrategy.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.TrainingStrategy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.default_training_fn.html">nvalchemi.training.default_training_fn</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.OptimizerConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.OptimizerConfig</a></li>
@@ -489,17 +555,91 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.CheckpointManifest.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.CheckpointManifest</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.save_checkpoint.html">nvalchemi.training.save_checkpoint</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.load_checkpoint.html">nvalchemi.training.load_checkpoint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.configure_dataloader.html">nvalchemi.training.configure_dataloader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.configure_parallelism.html">nvalchemi.training.configure_parallelism</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.move_to_devices.html">nvalchemi.training.move_to_devices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.rehome_optimizer_state.html">nvalchemi.training.rehome_optimizer_state</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.freeze_unconfigured_models.html">nvalchemi.training.freeze_unconfigured_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.eval_configured_models.html">nvalchemi.training.eval_configured_models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.evaluating.html">nvalchemi.training.evaluating</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.unwrap_model.html">nvalchemi.training.unwrap_model</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distributed.all_reduce_flags.html">nvalchemi.training.distributed.all_reduce_flags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distributed.all_gather_rows.html">nvalchemi.training.distributed.all_gather_rows</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distributed.all_gather_objects.html">nvalchemi.training.distributed.all_gather_objects</a></li>
 </ul>
 </li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../training/finetuning.html">Fine-tuning API</a><input class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-11"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../training/finetuning.html">Fine-tuning API</a><input class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-13"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.FineTuningStrategy.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.FineTuningStrategy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint.html">nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.FineTuningStrategy.load_checkpoint.html">nvalchemi.training.FineTuningStrategy.load_checkpoint</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.hooks.ModulePatchHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.hooks</span></code>.ModulePatchHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.hooks.TrainableParameterHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.hooks</span></code>.TrainableParameterHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.hooks.FineTuningSummaryHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.hooks</span></code>.FineTuningSummaryHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.hooks.BaseFingerprintHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.hooks</span></code>.BaseFingerprintHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.peft.lora_hook.LoRAHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.peft.lora_hook</span></code>.LoRAHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.peft.PeftMethodRegistration.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.peft</span></code>.PeftMethodRegistration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.peft.register_peft_method.html">nvalchemi.training.peft.register_peft_method</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.peft.available_peft_methods.html">nvalchemi.training.peft.available_peft_methods</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.peft.load_peft_checkpoint_into_model.html">nvalchemi.training.peft.load_peft_checkpoint_into_model</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.peft.lora.LoRAConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.peft.lora</span></code>.LoRAConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.peft.lora.available_lora_wrappers.html">nvalchemi.training.peft.lora.available_lora_wrappers</a></li>
 </ul>
 </li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../training/hooks.html">Training update hooks</a><input class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-12"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../training/distillation.html">Distillation API</a><input class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-14"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.TeacherScorer.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.TeacherScorer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.InProcessTeacherScorer.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.InProcessTeacherScorer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.TeacherSignal.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.TeacherSignal</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.signal_fields.html">nvalchemi.training.distillation.signal_fields</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.scorer_fields.html">nvalchemi.training.distillation.scorer_fields</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.signal_for_field.html">nvalchemi.training.distillation.signal_for_field</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.SignalLevel.html">nvalchemi.training.distillation.SignalLevel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.SignalNormalizer.html">nvalchemi.training.distillation.SignalNormalizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.NeighborListPolicy.html">nvalchemi.training.distillation.NeighborListPolicy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.label_dataset.html">nvalchemi.training.distillation.label_dataset</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.DistillationStrategy.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.DistillationStrategy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.default_distillation_fn.html">nvalchemi.training.distillation.default_distillation_fn</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.embedding_distillation_fn.html">nvalchemi.training.distillation.embedding_distillation_fn</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.hessian_distillation_fn.html">nvalchemi.training.distillation.hessian_distillation_fn</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.OnPolicyConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.OnPolicyConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.OnPolicySettings.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.OnPolicySettings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.InitialStructures.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.InitialStructures</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.TeacherLabelHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.TeacherLabelHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.nonfinite_divergence.html">nvalchemi.training.distillation.nonfinite_divergence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.ReplayBuffer.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.ReplayBuffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.AdmissionPolicy.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.AdmissionPolicy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.EvictionPolicy.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.EvictionPolicy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.FIFO.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.FIFO</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.ReplayEviction.html">nvalchemi.training.distillation.ReplayEviction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.build_mixed_loader.html">nvalchemi.training.distillation.build_mixed_loader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.AtomicEnergyMatchingLoss.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.AtomicEnergyMatchingLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.EmbeddingMatchingLoss.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.EmbeddingMatchingLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.EmbeddingProjector.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.EmbeddingProjector</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.HessianMatchingLoss.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.HessianMatchingLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.BoltzmannMatchingLoss.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation</span></code>.BoltzmannMatchingLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.evaluate_accuracy.html">nvalchemi.training.distillation.evaluation.evaluate_accuracy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.AccuracyMetrics.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.AccuracyMetrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.AccuracyQuantity.html">nvalchemi.training.distillation.evaluation.AccuracyQuantity</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.AccuracyQuantitySpec.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.AccuracyQuantitySpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.non_conservative_residual.html">nvalchemi.training.distillation.evaluation.non_conservative_residual</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.NonConservativeResidual.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.NonConservativeResidual</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.extensivity_error.html">nvalchemi.training.distillation.evaluation.extensivity_error</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.ExtensivityMetrics.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.ExtensivityMetrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.radial_distribution.html">nvalchemi.training.distillation.evaluation.radial_distribution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.RadialDistribution.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.RadialDistribution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.compare_radial_distributions.html">nvalchemi.training.distillation.evaluation.compare_radial_distributions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.RDFComparison.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.RDFComparison</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.build_acceptance_report.html">nvalchemi.training.distillation.evaluation.build_acceptance_report</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.AcceptanceReport.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.AcceptanceReport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.AcceptanceThresholds.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.AcceptanceThresholds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.AcceptanceCheck.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.AcceptanceCheck</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.StudentEvaluation.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.StudentEvaluation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.StudentVerdict.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.StudentVerdict</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.MeasurementRecord.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.MeasurementRecord</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.measured_bars.html">nvalchemi.training.distillation.evaluation.measured_bars</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.MetricFamily.html">nvalchemi.training.distillation.evaluation.MetricFamily</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.distillation.evaluation.AcceptanceBar.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.distillation.evaluation</span></code>.AcceptanceBar</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../training/hooks.html">Training update hooks</a><input class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-15"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.hooks.DDPHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.hooks</span></code>.DDPHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.hooks.MixedPrecisionHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.hooks</span></code>.MixedPrecisionHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.hooks.TrainingUpdateHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.hooks</span></code>.TrainingUpdateHook</a></li>
@@ -508,7 +648,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.hooks.CheckpointHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training.hooks</span></code>.CheckpointHook</a></li>
 </ul>
 </li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../training/losses.html">Losses — Training Terms</a><input class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-13"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../training/losses.html">Losses — Training Terms</a><input class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-16"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.BaseLossFunction.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.BaseLossFunction</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.ReductionContext.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.ReductionContext</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.ComposedLossFunction.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.ComposedLossFunction</a></li>
@@ -528,18 +668,42 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.PiecewiseWeight.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.PiecewiseWeight</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.losses.reductions.per_graph_sum.html">nvalchemi.training.losses.reductions.per_graph_sum</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.losses.reductions.per_graph_mean.html">nvalchemi.training.losses.reductions.per_graph_mean</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.losses.reductions.graph_balanced_mean.html">nvalchemi.training.losses.reductions.graph_balanced_mean</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.losses.reductions.masked_mean.html">nvalchemi.training.losses.reductions.masked_mean</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.losses.reductions.frobenius_mse.html">nvalchemi.training.losses.reductions.frobenius_mse</a></li>
 </ul>
 </li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../training/validation.html">Validation</a><input class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-14"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../training/validation.html">Validation</a><input class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-17"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.ValidationConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.ValidationConfig</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.ValidationLoop.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.ValidationLoop</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.BatchValidationCallback.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.training</span></code>.BatchValidationCallback</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../training/generated/nvalchemi.training.ensure_reiterable_validation_data.html">nvalchemi.training.ensure_reiterable_validation_data</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed.html">Distributed (spatial domain decomposition)</a><input class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-15"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../enhanced_sampling.html">Enhanced sampling API</a><input class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-18"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.EnhancedSampling.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.ThermodynamicState.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.ThermodynamicState</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.ReplicaExchange.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.ReplicaExchange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.ConservativeBias.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.ConservativeBias</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.AdaptivePotentialMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.AdaptivePotentialMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.BiasHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.BiasHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.EpochCommitHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.EpochCommitHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.WalkerIdentityHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.WalkerIdentityHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.HarmonicUmbrellaBias.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.HarmonicUmbrellaBias</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.UpperWall.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.UpperWall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.LowerWall.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.LowerWall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.FlatBottomRestraint.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.FlatBottomRestraint</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.WellTemperedMetaDynamicsBias.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.WellTemperedMetaDynamicsBias</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.RMSDMetaDynamicsBias.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.RMSDMetaDynamicsBias</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>.AdaptiveBiasingForce</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.pair_distance.html">nvalchemi.enhanced_sampling.pair_distance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.pair_displacement.html">nvalchemi.enhanced_sampling.pair_displacement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.enhanced_sampling.periodic_difference.html">nvalchemi.enhanced_sampling.periodic_difference</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed.html">Distributed (spatial domain decomposition)</a><input class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-19"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.DomainParallel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code>.DomainParallel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.DomainConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code>.DomainConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.HookScope.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code>.HookScope</a></li>
@@ -589,12 +753,57 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.reshard_by_destination.html">nvalchemi.distributed.reshard_by_destination</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed_runtime.html">Distributed runtime utilities</a><input class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-16"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed_runtime.html">Distributed runtime utilities</a><input class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-20"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.DistributedManager.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code>.DistributedManager</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.PhysicsNeMoUninitializedDistributedManagerWarning.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code>.PhysicsNeMoUninitializedDistributedManagerWarning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.ProcessGroupContext.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code>.ProcessGroupContext</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.CollectivePhase.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.distributed</span></code>.CollectivePhase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.collective_error_sync.html">nvalchemi.distributed.collective_error_sync</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.resolve_world_size.html">nvalchemi.distributed.resolve_world_size</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.resolve_global_rank.html">nvalchemi.distributed.resolve_global_rank</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.distributed.collective_device.html">nvalchemi.distributed.collective_device</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../csp.html">Crystal structure prediction API</a><input class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-21"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.MolecularPackingInput.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp</span></code>.MolecularPackingInput</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.chem.RDKitConformerConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.chem</span></code>.RDKitConformerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.chem.generate_conformers_from_smiles.html">nvalchemi.csp.chem.generate_conformers_from_smiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.chem.build_contact_distance_matrix.html">nvalchemi.csp.chem.build_contact_distance_matrix</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.chem.build_molecular_packing_input.html">nvalchemi.csp.chem.build_molecular_packing_input</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.estimate_formula_unit_volume.html">nvalchemi.csp.estimate_formula_unit_volume</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.get_default_atomic_volumes.html">nvalchemi.csp.get_default_atomic_volumes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.CrystalSystem.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp</span></code>.CrystalSystem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.SpaceGroupPolicy.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp</span></code>.SpaceGroupPolicy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.get_space_group_candidates.html">nvalchemi.csp.get_space_group_candidates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.sample_space_groups.html">nvalchemi.csp.sample_space_groups</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.csd_space_group_probabilities.html">nvalchemi.csp.csd_space_group_probabilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.get_space_group_operations.html">nvalchemi.csp.get_space_group_operations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.get_space_group_operation_count.html">nvalchemi.csp.get_space_group_operation_count</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.get_crystal_system.html">nvalchemi.csp.get_crystal_system</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.is_sohncke_space_group.html">nvalchemi.csp.is_sohncke_space_group</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.CSPGenerator.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp</span></code>.CSPGenerator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.packer.CrystalPacker.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.packer</span></code>.CrystalPacker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.packer.CandidateBudgetPacker.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.packer</span></code>.CandidateBudgetPacker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.packer.PackingContext.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.packer</span></code>.PackingContext</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.packer.PackingReport.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.packer</span></code>.PackingReport</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.packer.PackingResult.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.packer</span></code>.PackingResult</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.packer.PackingStopReason.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.packer</span></code>.PackingStopReason</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.packer.OverlapReliefConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.packer</span></code>.OverlapReliefConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.packer.OverlapReliefPacker.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.packer</span></code>.OverlapReliefPacker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.packer.OverlapReliefProgress.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.packer</span></code>.OverlapReliefProgress</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.RigidMoleculeASUBatch.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp</span></code>.RigidMoleculeASUBatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.RigidMoleculeASUZarrWriter.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp</span></code>.RigidMoleculeASUZarrWriter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.RigidMoleculeASUZarrReader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp</span></code>.RigidMoleculeASUZarrReader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.comparison.RadialComparisonIndex.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.comparison</span></code>.RadialComparisonIndex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.comparison.DeduplicationResult.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.comparison</span></code>.DeduplicationResult</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.comparison.deduplicate_batch.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.comparison</span></code>.deduplicate_batch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.comparison.deduplicate_stream.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.comparison</span></code>.deduplicate_stream</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.comparison.iter_matches_stream.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.comparison</span></code>.iter_matches_stream</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.hooks.DeduplicationEngine.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.hooks</span></code>.DeduplicationEngine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.hooks.DeduplicateHook.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.hooks</span></code>.DeduplicateHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.chem.TopologicalAtomTypeMap.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.csp.chem</span></code>.TopologicalAtomTypeMap</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.chem.topological_atom_types_from_connectivity.html">nvalchemi.csp.chem.topological_atom_types_from_connectivity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.csp.chem.topological_atom_types_from_mol.html">nvalchemi.csp.chem.topological_atom_types_from_mol</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../typing.html">Typing module (type aliases, enums, protocols)</a></li>
@@ -674,16 +883,17 @@ custom hooks, and composing hook pipelines.</p></li>
 </div>
 <section id="dynamicsstage">
 <h2>DynamicsStage<a class="headerlink" href="#dynamicsstage" title="Link to this heading">#</a></h2>
-<p><a class="reference internal" href="_generated/nvalchemi.dynamics.DynamicsStage.html#nvalchemi.dynamics.DynamicsStage" title="nvalchemi.dynamics.base.DynamicsStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStage</span></code></a> enumerates the nine
-hook-firing points within a single dynamics step:</p>
+<p><a class="reference internal" href="_generated/nvalchemi.dynamics.DynamicsStage.html#nvalchemi.dynamics.DynamicsStage" title="nvalchemi.dynamics.base.DynamicsStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStage</span></code></a> enumerates eleven lifecycle
+hook-firing points: <code class="docutils literal notranslate"><span class="pre">ON_ADMISSION</span></code> for batch setup, followed by ten stages
+within each dynamics step:</p>
 <figure class="align-default" id="id1">
-<div class="graphviz"><object data="../../_images/graphviz-3a28537f17b7c61ed49eab94a7cbaf049a7081fd.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">digraph dynamics_stages {
+digraph dynamics_stages {
     rankdir=TB
     compound=true
     node [fontsize=11 shape=box style=&quot;rounded,filled&quot; fillcolor=&quot;#1a1a1a&quot;]
     edge [fontsize=10 style=bold]
 
+    ON_ADMISSION [label=&quot;ON_ADMISSION\n(once per admission)&quot; fillcolor=&quot;#4a3315&quot;]
     BEFORE_STEP [label=&quot;BEFORE_STEP&quot; fillcolor=&quot;#4a3315&quot;]
 
     subgraph cluster_step {
@@ -714,13 +924,15 @@ hook-firing points within a single dynamics step:</p>
 
     AFTER_STEP  [label=&quot;AFTER_STEP&quot; fillcolor=&quot;#4a3315&quot;]
     ON_CONVERGE [label=&quot;ON_CONVERGE\n(if converged)&quot; fillcolor=&quot;#4a3315&quot;]
+    ON_GRADUATE [label=&quot;ON_GRADUATE\n(with graduated mask)&quot; fillcolor=&quot;#4a3315&quot;]
 
+    ON_ADMISSION -&gt; BEFORE_STEP
     BEFORE_STEP -&gt; BEFORE_PRE_UPDATE [lhead=cluster_step]
     AFTER_POST_UPDATE -&gt; AFTER_STEP [ltail=cluster_step]
     AFTER_STEP -&gt; ON_CONVERGE [style=dashed]
-}</p></object></div>
-<figcaption>
-<p><span class="caption-text">DynamicsStage hook firing points within a single step.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+    ON_CONVERGE -&gt; ON_GRADUATE [style=dashed]
+}<figcaption>
+<p><span class="caption-text">DynamicsStage lifecycle hook firing points.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <table class="table" id="id2">
@@ -737,44 +949,71 @@ hook-firing points within a single dynamics step:</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ON_ADMISSION</span></code></p></td>
+<td><p>-1</p></td>
+<td><p>Once when a batch enters the engine, before force priming and the first step.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code></p></td>
 <td><p>0</p></td>
 <td><p>Very start of each step, before any operations.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_PRE_UPDATE</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_PRE_UPDATE</span></code></p></td>
 <td><p>1</p></td>
 <td><p>Before the first integrator half-step (positions).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_PRE_UPDATE</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_PRE_UPDATE</span></code></p></td>
 <td><p>2</p></td>
 <td><p>After positions are updated, before the forward pass.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code></p></td>
 <td><p>3</p></td>
 <td><p>Before the model forward pass.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code></p></td>
 <td><p>4</p></td>
 <td><p>After forces/energy are written to the batch.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_POST_UPDATE</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BEFORE_POST_UPDATE</span></code></p></td>
 <td><p>5</p></td>
 <td><p>Before the second integrator half-step (velocities).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_POST_UPDATE</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_POST_UPDATE</span></code></p></td>
 <td><p>6</p></td>
 <td><p>After velocities are updated.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code></p></td>
 <td><p>7</p></td>
 <td><p>Very end of the step, after all operations.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code></p></td>
 <td><p>8</p></td>
-<td><p>Only when the convergence hook detects converged samples.</p></td>
+<td><p>After convergence evaluation. <code class="docutils literal notranslate"><span class="pre">BaseDynamics.step()</span></code> calls registered
+hooks only when samples converge; fused sub-stages call them at the
+step interval configured by <code class="docutils literal notranslate"><span class="pre">hook.frequency</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ON_GRADUATE</span></code></p></td>
+<td><p>9</p></td>
+<td><p>After <code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code>. <code class="docutils literal notranslate"><span class="pre">ctx.graduated_mask</span></code> marks the graphs whose
+status reached <code class="docutils literal notranslate"><span class="pre">exit_status</span></code> during the step, whatever changed it.
+Dispatched on every step on which a hook is registered for it and the
+batch carries a <code class="docutils literal notranslate"><span class="pre">status</span></code> column, ignoring the hook’s <code class="docutils literal notranslate"><span class="pre">frequency</span></code>,
+so the mask may be all <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></td>
 </tr>
 </tbody>
 </table>
+<p><code class="docutils literal notranslate"><span class="pre">ON_ADMISSION</span></code> fires once per run or managed batch replacement, before force
+priming. It ignores a hook’s step-based <code class="docutils literal notranslate"><span class="pre">frequency</span></code>; for a multi-stage hook,
+the frequency continues to gate all other stages. In
+<a class="reference internal" href="_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>, it runs outside the compiled
+<code class="docutils literal notranslate"><span class="pre">_step_impl</span></code>, making it suitable for validation and shape-dependent setup.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ON_GRADUATE</span></code> reports graduation. A graph is <em>active</em> while its <code class="docutils literal notranslate"><span class="pre">status</span></code> is
+below the engine’s <code class="docutils literal notranslate"><span class="pre">exit_status</span></code>, and it <em>graduates</em> on the step its status
+reaches <code class="docutils literal notranslate"><span class="pre">exit_status</span></code>, whether a convergence criterion, a step budget, or
+another hook changed it, at any stage of the step: the mask compares the status
+at step start with the status at dispatch. Without a <code class="docutils literal notranslate"><span class="pre">status</span></code> column nothing
+can graduate, so the stage is not dispatched; with one, it is not gated on the
+mask, because checking the mask first would synchronize with the host. A hook
+must therefore read <code class="docutils literal notranslate"><span class="pre">ctx.graduated_mask</span></code> rather than assume a graph graduated.</p>
 </section>
 <section id="built-in-dynamics-hooks">
 <h2>Built-in dynamics hooks<a class="headerlink" href="#built-in-dynamics-hooks" title="Link to this heading">#</a></h2>
@@ -853,6 +1092,38 @@ validation.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">frequency</span></code> — check every N steps. Checking every step is accurate but
 adds overhead for large batches; <code class="docutils literal notranslate"><span class="pre">frequency=100</span></code> is typical.</p></li>
 </ul>
+</section>
+<section id="stabilitymonitor">
+<h4>StabilityMonitor<a class="headerlink" href="#stabilitymonitor" title="Link to this heading">#</a></h4>
+<p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.StabilityMonitor.html#nvalchemi.dynamics.hooks.StabilityMonitor" title="nvalchemi.dynamics.hooks.StabilityMonitor"><code class="xref py py-class docutils literal notranslate"><span class="pre">StabilityMonitor</span></code></a> is the offline counterpart
+of the drift monitor. Instead of comparing one live value against a threshold,
+it records the total energy and momentum of every graph at each firing, as
+float64 on the host, and reports the whole series once the run is over through
+<a class="reference internal" href="generated/nvalchemi.dynamics.hooks.StabilityMonitor.html#nvalchemi.dynamics.hooks.StabilityMonitor.metrics" title="nvalchemi.dynamics.hooks.StabilityMonitor.metrics"><code class="xref py py-meth docutils literal notranslate"><span class="pre">metrics()</span></code></a>. The result is a
+<a class="reference internal" href="generated/nvalchemi.dynamics.hooks.StabilityMetrics.html#nvalchemi.dynamics.hooks.StabilityMetrics" title="nvalchemi.dynamics.hooks.StabilityMetrics"><code class="xref py py-class docutils literal notranslate"><span class="pre">StabilityMetrics</span></code></a> record: the endpoint drift
+per atom, a least-squares drift rate per nanosecond when a <code class="docutils literal notranslate"><span class="pre">timestep_fs</span></code> is
+given, the RMS fluctuation about that fit, the largest excursion, and the
+largest deviation of any graph’s total momentum, each for the worst graph or as
+the mean over graphs under <code class="docutils literal notranslate"><span class="pre">aggregate=&quot;mean&quot;</span></code>.</p>
+<p>Key arguments:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">warmup_steps</span></code> — firings before this step count are discarded, so a
+structure that is not an equilibrium of the propagated potential relaxes
+before the series starts. Without it, the relaxation is reported as drift.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">divergence</span></code> — a predicate flagging diverged graphs, evaluated at every
+firing. The first firing that flags any graph ends the series and is
+recorded as <code class="docutils literal notranslate"><span class="pre">first_divergence_step</span></code>. It defaults to
+<a class="reference internal" href="generated/nvalchemi.dynamics.hooks.nonfinite_graph_mask.html#nvalchemi.dynamics.hooks.nonfinite_graph_mask" title="nvalchemi.dynamics.hooks.nonfinite_graph_mask"><code class="xref py py-func docutils literal notranslate"><span class="pre">nonfinite_graph_mask()</span></code></a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stop_on_composition_change</span></code> — recording always stops when the graph
+count or the per-graph atom counts change; this flag also stops it when a
+<code class="docutils literal notranslate"><span class="pre">system_id</span></code> in a slot changes, which is what an inflight refill of an
+equal-size system looks like.</p></li>
+</ul>
+<p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.total_momentum.html#nvalchemi.dynamics.hooks.total_momentum" title="nvalchemi.dynamics.hooks.total_momentum"><code class="xref py py-func docutils literal notranslate"><span class="pre">total_momentum()</span></code></a>, the per-graph mass-weighted
+velocity sum the monitor records, is exported alongside it. A batch that
+carries <code class="docutils literal notranslate"><span class="pre">status</span></code> brings an <code class="docutils literal notranslate"><span class="pre">active_graph_mask</span></code> to every dispatch, and the
+monitor records as long as that mask keeps every graph active. Like the drift
+monitor, it does not yet support a dispatch in which some graphs are inactive.</p>
 <p>StageTimingHook and TorchProfilerHook are described in <a class="reference internal" href="../hooks.html#hooks-api"><span class="std std-ref">Hooks — Core Framework</span></a>.</p>
 </section>
 </section>
@@ -887,22 +1158,40 @@ poorly-sampled configurations. It is a safety net, not a model fix: if
 clamping fires frequently, the model has accuracy problems for those
 structures.</p>
 </section>
+<section id="nonfinite-graph-mask">
+<h4>nonfinite_graph_mask<a class="headerlink" href="#nonfinite-graph-mask" title="Link to this heading">#</a></h4>
+<p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.nonfinite_graph_mask.html#nvalchemi.dynamics.hooks.nonfinite_graph_mask" title="nvalchemi.dynamics.hooks.nonfinite_graph_mask"><code class="xref py py-func docutils literal notranslate"><span class="pre">nonfinite_graph_mask()</span></code></a> is a standalone
+per-graph finiteness check for a hook or workflow to call directly; the two
+guards above keep element-level checks of their own. It returns one boolean per
+graph, <code class="docutils literal notranslate"><span class="pre">True</span></code> where any value under the inspected keys (<code class="docutils literal notranslate"><span class="pre">positions</span></code> and
+<code class="docutils literal notranslate"><span class="pre">forces</span></code> by default) is NaN or infinite, and it does not synchronize with the
+host. It takes no action itself. The caller decides what to do with a diverged
+graph, meaning one holding a non-finite value: freeze it, drop it, or keep it
+out of a capture.</p>
+</section>
 </section>
 <section id="constraint-hooks">
 <h3>Constraint hooks<a class="headerlink" href="#constraint-hooks" title="Link to this heading">#</a></h3>
 <p>Constraint hooks enforce geometric constraints across integration steps. They
-fire at both <code class="docutils literal notranslate"><span class="pre">BEFORE_PRE_UPDATE</span></code> (to snapshot positions) and
-<code class="docutils literal notranslate"><span class="pre">AFTER_POST_UPDATE</span></code> (to restore them).</p>
+can span the pre-update, compute, and post-update boundaries to prevent frozen
+state from influencing either half of the integrator while still presenting a
+constrained geometry to the model.</p>
 <section id="freezeatomshook">
 <h4>FreezeAtomsHook<a class="headerlink" href="#freezeatomshook" title="Link to this heading">#</a></h4>
 <p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a> keeps selected atoms fixed:
-it snapshots their positions at <code class="docutils literal notranslate"><span class="pre">BEFORE_PRE_UPDATE</span></code> and restores them —
-with zeroed velocities — at <code class="docutils literal notranslate"><span class="pre">AFTER_POST_UPDATE</span></code>. The integrator runs
-normally and the positions are overwritten afterward, so no integrator
-modification is required.</p>
-<p><code class="docutils literal notranslate"><span class="pre">categories</span></code> is a string or list of strings matching atom type categories in
-the batch (for example, <code class="docutils literal notranslate"><span class="pre">&quot;substrate&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">[&quot;substrate&quot;,</span> <span class="pre">&quot;boundary&quot;]</span></code>). Only
-atoms in the listed categories are frozen; all others evolve freely.</p>
+it fires at five stages. At <code class="docutils literal notranslate"><span class="pre">BEFORE_PRE_UPDATE</span></code> it snapshots positions and
+clears prior forces and velocities; at <code class="docutils literal notranslate"><span class="pre">AFTER_PRE_UPDATE</span></code> it restores the
+constrained geometry before compute preparation; at <code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code> it clears
+new model forces when <code class="docutils literal notranslate"><span class="pre">zero_forces=True</span></code>; at <code class="docutils literal notranslate"><span class="pre">BEFORE_POST_UPDATE</span></code> it always
+clears frozen-atom forces; and at <code class="docutils literal notranslate"><span class="pre">AFTER_POST_UPDATE</span></code> it restores positions
+and zeroes velocities.</p>
+<p><code class="docutils literal notranslate"><span class="pre">freeze_category</span></code> is the integer <code class="docutils literal notranslate"><span class="pre">batch.atom_categories</span></code> value that marks
+frozen atoms. It defaults to <code class="xref py py-attr docutils literal notranslate"><span class="pre">SPECIAL</span></code>.
+Only atoms matching that value are frozen; all others evolve freely.</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">zero_forces=False</span></code> to expose raw frozen-atom model forces to
+<code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code> observers. Those forces are still cleared at
+<code class="docutils literal notranslate"><span class="pre">BEFORE_POST_UPDATE</span></code>, before the second integrator update, so they cannot
+move the frozen atoms.</p>
 <p>Use this hook for partial-system relaxations (freeze the substrate, relax the
 adsorbate), slab calculations (freeze bottom layers), or any configuration
 where part of the system must remain rigid.</p>
@@ -954,71 +1243,95 @@ checking so the detector sees the corrected forces:</p>
 </section>
 <section id="hooks-inside-fusedstage">
 <h2>Hooks inside <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code><a class="headerlink" href="#hooks-inside-fusedstage" title="Link to this heading">#</a></h2>
-<p>When hooks are registered on sub-stage dynamics inside a
-<a class="reference internal" href="_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>, their firing semantics differ
-slightly from standalone execution:</p>
-<p><strong>Fired on each sub-stage:</strong></p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code>, <code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code>, <code class="docutils literal notranslate"><span class="pre">BEFORE_PRE_UPDATE</span></code>,
-<code class="docutils literal notranslate"><span class="pre">AFTER_POST_UPDATE</span></code>, <code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code>, <code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code></p></li>
-</ul>
-<p><strong>Not fired on sub-stages</strong> (because the forward pass is shared):</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code>, <code class="docutils literal notranslate"><span class="pre">AFTER_PRE_UPDATE</span></code>, <code class="docutils literal notranslate"><span class="pre">BEFORE_POST_UPDATE</span></code></p></li>
-</ul>
-<p>This means safety hooks (<code class="docutils literal notranslate"><span class="pre">NaNDetectorHook</span></code>, <code class="docutils literal notranslate"><span class="pre">MaxForceClampHook</span></code>)
-and observer hooks (<code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code>, <code class="docutils literal notranslate"><span class="pre">SnapshotHook</span></code>) work as expected
-inside fused stages, since they fire at <code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code> or
-<code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code>.</p>
+<p>Hooks may be registered directly on a
+<a class="reference internal" href="_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a> or on any of its sub-stages. Step,
+compute, and integrator update boundaries all fire at both levels. Every hook
+receives the full batch and an active mask for the graphs participating at that
+boundary. Fused-stage masks span all participating sub-stages; sub-stage masks
+are restricted to that sub-stage’s status. Every mask is fixed at the start of
+the step. A hook that must see a status change made earlier in the same step
+reads the current <code class="docutils literal notranslate"><span class="pre">status</span></code> through
+<a class="reference internal" href="_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics.active_graph_mask" title="nvalchemi.dynamics.BaseDynamics.active_graph_mask"><code class="xref py py-meth docutils literal notranslate"><span class="pre">BaseDynamics.active_graph_mask(ctx.batch,</span> <span class="pre">exit_status)</span></code></a>.
+During force repriming, graphs remain
+active for step and compute hooks but are excluded from pre-update and
+post-update hooks because their integrator updates are skipped. At admission,
+the fused-stage <code class="docutils literal notranslate"><span class="pre">ON_ADMISSION</span></code> hooks fire first, followed by each sub-stage’s
+admission hooks in sub-stage order.</p>
+<p>At every <code class="docutils literal notranslate"><span class="pre">BEFORE_*</span></code> boundary, the fused-stage hooks fire before the sub-stage
+hooks. At every <code class="docutils literal notranslate"><span class="pre">AFTER_*</span></code> boundary, the sub-stage hooks fire before the
+fused-stage hooks. Only <code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code> remains sub-stage-only because
+convergence is evaluated independently for each sub-stage. Registered
+<code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code> hooks on a fused sub-stage run every step interval configured by
+<code class="docutils literal notranslate"><span class="pre">hook.frequency</span></code> and must inspect <code class="docutils literal notranslate"><span class="pre">ctx.converged_mask</span></code> to determine which
+samples, if any, converged.
+<code class="docutils literal notranslate"><span class="pre">BaseDynamics.step()</span></code> calls these hooks only when convergence is detected.
+<code class="docutils literal notranslate"><span class="pre">ON_GRADUATE</span></code> fires at both levels, after the step-budget migration and the
+<code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code> dispatch. Sub-stage hooks fire first, each with
+<code class="docutils literal notranslate"><span class="pre">ctx.graduated_mask</span></code> limited to the graphs its sub-stage owned. Fused-stage
+hooks fire last, with every graph that graduated during the step. The dispatch
+is not gated on the mask, so the mask may be all <code class="docutils literal notranslate"><span class="pre">False</span></code> and a hook must read
+it.</p>
+<p>Register a cross-stage constraint once on the fused stage when it should apply
+to every active system, regardless of its current sub-stage:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">FreezeAtomsHook</span>
+
+<span class="n">fused</span> <span class="o">=</span> <span class="n">optimizer</span> <span class="o">+</span> <span class="n">md</span>
+<span class="n">fused</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">FreezeAtomsHook</span><span class="p">())</span>
+<span class="n">fused</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Register the hook on an individual sub-stage instead when the constraint should
+apply only during that phase.</p>
 <p>Hook ordering inside a fused step:</p>
 <figure class="align-default" id="id3">
-<div class="graphviz"><object data="../../_images/graphviz-04e54bf971b5624de17c1cd48664ca72c7476387.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">digraph fused_hook_order {
+digraph fused_hook_order {
     rankdir=TB
+    ranksep=0.3
     compound=true
     node [fontsize=11 shape=box style=&quot;rounded,filled&quot; fillcolor=&quot;#1a1a1a&quot;]
     edge [fontsize=10 style=bold]
 
-    subgraph cluster_before {
-        label=&quot;for each sub-stage&quot;
-        style=dashed
-        color=&quot;#76b900&quot;
-        fontcolor=&quot;#76b900&quot;
-        fontsize=10
-        BEFORE_STEP [label=&quot;BEFORE_STEP hooks&quot;]
-    }
+    fused_on_admission [label=&quot;FusedStage ON_ADMISSION hooks\n(outside compiled step)&quot; fillcolor=&quot;#4a3315&quot;]
+    sub_on_admission [label=&quot;each sub-stage ON_ADMISSION hooks\n(in sub-stage order)&quot;]
+    fused_before_step [label=&quot;FusedStage BEFORE_STEP hooks&quot; fillcolor=&quot;#4a3315&quot;]
+    fused_before_pre [label=&quot;FusedStage BEFORE_PRE_UPDATE hooks&quot; fillcolor=&quot;#4a3315&quot;]
+    fused_after_pre [label=&quot;FusedStage AFTER_PRE_UPDATE hooks&quot; fillcolor=&quot;#4a3315&quot;]
+    sub_before_step [label=&quot;each sub-stage BEFORE_STEP hooks\n(in sub-stage order)&quot;]
 
-    compute [label=&quot;single compute()&quot; fillcolor=&quot;#4a3315&quot;]
-
-    subgraph cluster_after_compute {
-        label=&quot;for each sub-stage&quot;
-        style=dashed
-        color=&quot;#76b900&quot;
-        fontcolor=&quot;#76b900&quot;
-        fontsize=10
-        AFTER_COMPUTE [label=&quot;AFTER_COMPUTE hooks&quot;]
-    }
-
-    subgraph cluster_update {
+    subgraph cluster_pre_update {
         label=&quot;for each sub-stage&quot;
         style=dashed
         color=&quot;#76b900&quot;
         fontcolor=&quot;#76b900&quot;
         fontsize=10
         BEFORE_PRE [label=&quot;BEFORE_PRE_UPDATE hooks&quot;]
-        masked     [label=&quot;masked_update()\n(if samples match status)&quot; fillcolor=&quot;#1a1a1a&quot;]
-        AFTER_POST [label=&quot;AFTER_POST_UPDATE hooks&quot;]
-        BEFORE_PRE -&gt; masked -&gt; AFTER_POST
+        pre_update [label=&quot;masked_pre_update()&quot; fillcolor=&quot;#1a1a1a&quot;]
+        AFTER_PRE [label=&quot;AFTER_PRE_UPDATE hooks&quot;]
+        BEFORE_PRE -&gt; pre_update -&gt; AFTER_PRE
     }
 
-    subgraph cluster_after_step {
+    fused_before_compute [label=&quot;FusedStage BEFORE_COMPUTE hooks&quot; fillcolor=&quot;#4a3315&quot;]
+    sub_before_compute [label=&quot;each sub-stage BEFORE_COMPUTE hooks\n(in sub-stage order)&quot;]
+    compute [label=&quot;single shared compute()&quot; fillcolor=&quot;#4a3315&quot;]
+    sub_after_compute [label=&quot;each sub-stage AFTER_COMPUTE hooks\n(in sub-stage order)&quot;]
+    fused_before_post [label=&quot;FusedStage BEFORE_POST_UPDATE hooks&quot; fillcolor=&quot;#4a3315&quot;]
+    fused_after_post [label=&quot;FusedStage AFTER_POST_UPDATE hooks&quot; fillcolor=&quot;#4a3315&quot;]
+    fused_after_compute [label=&quot;FusedStage AFTER_COMPUTE hooks&quot; fillcolor=&quot;#4a3315&quot;]
+
+    subgraph cluster_post_update {
         label=&quot;for each sub-stage&quot;
         style=dashed
         color=&quot;#76b900&quot;
         fontcolor=&quot;#76b900&quot;
         fontsize=10
-        AFTER_STEP [label=&quot;AFTER_STEP hooks&quot;]
+        BEFORE_POST [label=&quot;BEFORE_POST_UPDATE hooks&quot;]
+        post_update [label=&quot;masked_post_update()&quot; fillcolor=&quot;#1a1a1a&quot;]
+        AFTER_POST [label=&quot;AFTER_POST_UPDATE hooks&quot;]
+        BEFORE_POST -&gt; post_update -&gt; AFTER_POST
     }
+
+    sub_after_step [label=&quot;each sub-stage AFTER_STEP hooks\n(in sub-stage order)&quot;]
+    fused_after_step [label=&quot;FusedStage AFTER_STEP hooks&quot; fillcolor=&quot;#4a3315&quot;]
 
     subgraph cluster_converge {
         label=&quot;for each sub-stage&quot;
@@ -1026,28 +1339,49 @@ inside fused stages, since they fire at <code class="docutils literal notranslat
         color=&quot;#76b900&quot;
         fontcolor=&quot;#76b900&quot;
         fontsize=10
-        conv_check  [label=&quot;convergence check&quot; fillcolor=&quot;#1a1a1a&quot;]
-        ON_CONVERGE [label=&quot;ON_CONVERGE hooks&quot; fillcolor=&quot;#4a3315&quot;]
-        conv_check -&gt; ON_CONVERGE [style=dashed label=&quot;if converged&quot;]
+        conv_check  [label=&quot;convergence evaluation&quot; fillcolor=&quot;#1a1a1a&quot;]
+        ON_CONVERGE [label=&quot;ON_CONVERGE hooks\n(with convergence mask)&quot;]
+        conv_check -&gt; ON_CONVERGE [style=dashed]
     }
 
-    BEFORE_STEP -&gt; compute
-    compute -&gt; AFTER_COMPUTE
-    AFTER_COMPUTE -&gt; BEFORE_PRE
-    AFTER_POST -&gt; AFTER_STEP
-    AFTER_STEP -&gt; conv_check
-}</p></object></div>
-<figcaption>
+    sub_on_graduate [label=&quot;each sub-stage ON_GRADUATE hooks\n(with graduated mask)&quot;]
+    fused_on_graduate [label=&quot;FusedStage ON_GRADUATE hooks\n(with graduated mask)&quot; fillcolor=&quot;#4a3315&quot;]
+
+    fused_on_admission -&gt; sub_on_admission
+    sub_on_admission -&gt; fused_before_step
+    fused_before_step -&gt; sub_before_step
+    sub_before_step -&gt; fused_before_pre
+    fused_before_pre -&gt; BEFORE_PRE [lhead=cluster_pre_update]
+    AFTER_PRE -&gt; fused_after_pre [ltail=cluster_pre_update]
+    fused_after_pre -&gt; fused_before_compute
+    fused_before_compute -&gt; sub_before_compute
+    sub_before_compute -&gt; compute
+    compute -&gt; sub_after_compute
+    sub_after_compute -&gt; fused_after_compute
+    fused_after_compute -&gt; fused_before_post
+    fused_before_post -&gt; BEFORE_POST [lhead=cluster_post_update]
+    AFTER_POST -&gt; fused_after_post [ltail=cluster_post_update]
+    fused_after_post -&gt; sub_after_step
+    sub_after_step -&gt; fused_after_step
+    fused_after_step -&gt; conv_check [lhead=cluster_converge]
+    ON_CONVERGE -&gt; sub_on_graduate [ltail=cluster_converge style=dashed]
+    sub_on_graduate -&gt; fused_on_graduate
+}<figcaption>
 <p><span class="caption-text">Hook ordering inside a single <code class="docutils literal notranslate"><span class="pre">FusedStage.step()</span></code>.</span><a class="headerlink" href="#id3" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
+<p>Initial force priming follows the same nested <code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code> and
+<code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code> ordering. Safety hooks (<code class="docutils literal notranslate"><span class="pre">NaNDetectorHook</span></code>,
+<code class="docutils literal notranslate"><span class="pre">MaxForceClampHook</span></code>) and observer hooks (<code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code>, <code class="docutils literal notranslate"><span class="pre">SnapshotHook</span></code>)
+therefore behave consistently whether they are registered on the fused stage
+or on a specific sub-stage.</p>
 </section>
 <section id="api-reference">
 <h2>API reference<a class="headerlink" href="#api-reference" title="Link to this heading">#</a></h2>
 <table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LoggingHook</span></code></a></p></td>
-<td><p>Log per-sample scalar observables from the simulation.</p></td>
+<td><p>Log scalar observables with one row per graph or group.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a></p></td>
 <td><p>Save a snapshot of the active batch to a <code class="xref py py-class docutils literal notranslate"><span class="pre">DataSink</span></code> at a given frequency.</p></td>
@@ -1058,14 +1392,38 @@ inside fused stages, since they fire at <code class="docutils literal notranslat
 <tr class="row-even"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html#nvalchemi.dynamics.hooks.EnergyDriftMonitorHook" title="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnergyDriftMonitorHook</span></code></a></p></td>
 <td><p>Track energy drift and warn or stop if it exceeds a threshold.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html#nvalchemi.dynamics.hooks.NaNDetectorHook" title="nvalchemi.dynamics.hooks.NaNDetectorHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NaNDetectorHook</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.StabilityMonitor.html#nvalchemi.dynamics.hooks.StabilityMonitor" title="nvalchemi.dynamics.hooks.StabilityMonitor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StabilityMonitor</span></code></a></p></td>
+<td><p>Dynamics hook recording energy and momentum along a trajectory.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.StabilityMetrics.html#nvalchemi.dynamics.hooks.StabilityMetrics" title="nvalchemi.dynamics.hooks.StabilityMetrics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StabilityMetrics</span></code></a></p></td>
+<td><p>Conservation diagnostics of one trajectory.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.total_momentum.html#nvalchemi.dynamics.hooks.total_momentum" title="nvalchemi.dynamics.hooks.total_momentum"><code class="xref py py-obj docutils literal notranslate"><span class="pre">total_momentum</span></code></a></p></td>
+<td><p>Return the total linear momentum of each graph.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html#nvalchemi.dynamics.hooks.NaNDetectorHook" title="nvalchemi.dynamics.hooks.NaNDetectorHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NaNDetectorHook</span></code></a></p></td>
 <td><p>Detect NaN or Inf values in model outputs and raise immediately.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html#nvalchemi.dynamics.hooks.MaxForceClampHook" title="nvalchemi.dynamics.hooks.MaxForceClampHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MaxForceClampHook</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html#nvalchemi.dynamics.hooks.MaxForceClampHook" title="nvalchemi.dynamics.hooks.MaxForceClampHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MaxForceClampHook</span></code></a></p></td>
 <td><p>Clamp per-atom force vectors to a maximum magnitude.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.nonfinite_graph_mask.html#nvalchemi.dynamics.hooks.nonfinite_graph_mask" title="nvalchemi.dynamics.hooks.nonfinite_graph_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nonfinite_graph_mask</span></code></a></p></td>
+<td><p>Flag the graphs of <em>batch</em> holding a NaN or infinite value under any of <em>keys</em>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a></p></td>
 <td><p>Freeze selected atoms during molecular dynamics simulation.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.PairSwapHook.html#nvalchemi.dynamics.hooks.PairSwapHook" title="nvalchemi.dynamics.hooks.PairSwapHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PairSwapHook</span></code></a></p></td>
+<td><p>Propose and accept pairwise swaps of per-system state.</p></td>
+</tr>
+</tbody>
+</table>
+<p>The module-level kinetic-energy helper the temperature-reading hooks are
+built on is exported alongside them:</p>
+<table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/nvalchemi.dynamics.hooks.kinetic_energy_per_graph.html#nvalchemi.dynamics.hooks.kinetic_energy_per_graph" title="nvalchemi.dynamics.hooks.kinetic_energy_per_graph"><code class="xref py py-obj docutils literal notranslate"><span class="pre">kinetic_energy_per_graph</span></code></a></p></td>
+<td><p>Compute <code class="docutils literal notranslate"><span class="pre">0.5</span> <span class="pre">*</span> <span class="pre">sum(m_i</span> <span class="pre">*</span> <span class="pre">||v_i||^2)</span></code> per graph.</p></td>
 </tr>
 </tbody>
 </table>
@@ -1129,11 +1487,13 @@ documented in <a class="reference internal" href="../hooks.html#hooks-api"><span
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#snapshothook">SnapshotHook</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#convergedsnapshothook">ConvergedSnapshotHook</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#energydriftmonitorhook">EnergyDriftMonitorHook</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#stabilitymonitor">StabilityMonitor</a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#post-compute-hooks">Post-compute hooks</a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#nandetectorhook">NaNDetectorHook</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#maxforceclamphook">MaxForceClampHook</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#nonfinite-graph-mask">nonfinite_graph_mask</a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#constraint-hooks">Constraint hooks</a><ul class="nav section-nav flex-column">
@@ -1149,7 +1509,9 @@ documented in <a class="reference internal" href="../hooks.html#hooks-api"><span
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks-inside-fusedstage">Hooks inside <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-reference">API reference</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-reference">API reference</a><ul class="visible nav section-nav flex-column">
+</ul>
+</li>
 </ul>
   </nav></div>
 

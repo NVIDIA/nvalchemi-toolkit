@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>AtomicData and Batch &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>AtomicData and Batch &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/data';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Data Loading Pipeline" href="datapipes.html" />
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -491,6 +499,16 @@ as <code class="docutils literal notranslate"><span class="pre">shifts</span></c
 <p>For stress, virial, and pressure sign conventions, see <a class="reference internal" href="about/conventions.html#conventions"><span class="std std-ref">Conventions</span></a>.</p>
 <p>All tensor fields use PyTorch tensors, so you can move them to GPU with <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code> or
 use the mixin method <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.data.DataMixin.to()</span></code> for device/dtype changes.</p>
+<p>Floating-point fields are cast to the dtype of <code class="docutils literal notranslate"><span class="pre">positions</span></code> on construction, so a
+<code class="docutils literal notranslate"><span class="pre">float64</span></code> label passed alongside <code class="docutils literal notranslate"><span class="pre">float32</span></code> positions is downcast with a one-time
+<code class="xref py py-class docutils literal notranslate"><span class="pre">UserWarning</span></code>. To keep a field at its own precision, name it in the
+<code class="docutils literal notranslate"><span class="pre">precision_preserving_keys</span></code> class attribute, for example
+<code class="docutils literal notranslate"><span class="pre">AtomicData.precision_preserving_keys</span> <span class="pre">=</span> <span class="pre">frozenset({&quot;energy&quot;})</span></code> so an extensive
+total energy is not quantized to <code class="docutils literal notranslate"><span class="pre">float32</span></code>. The exemption follows the field through
+batching, cloning, selection, device moves, and Zarr storage. Set it on
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> itself rather than on a subclass when the data
+flows through a <code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code>, which rebuilds each
+sample as a plain <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code>.</p>
 <p>Example:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
@@ -545,6 +563,35 @@ System-level tensors are stacked so that the first dimension is the number of gr
 <span class="n">again</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">to_data_list</span><span class="p">()</span>
 </pre></div>
 </div>
+<section id="grouping-graphs">
+<h3>Grouping graphs<a class="headerlink" href="#grouping-graphs" title="Link to this heading">#</a></h3>
+<p>A batch can optionally tag contiguous runs of graphs as <strong>groups</strong> — a single
+logical unit such as the images of one NEB path — via
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">set_group_layout()</span></code>. This is unrelated to
+the internal atoms/edges/system <strong>storage groups</strong> described later in <em>How
+Batch stores data internally</em>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">batch</span><span class="o">.</span><span class="n">set_group_layout</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">group_idx</span><span class="p">)</span>  <span class="c1"># tensor([0, 0, 1, 1, 1]) - normalized to dense IDs</span>
+</pre></div>
+</div>
+<p>The derived <code class="xref py py-attr docutils literal notranslate"><span class="pre">group_layout</span></code> property
+lazily builds and caches a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">GroupLayout</span></code>, mapping between graph,
+node, and group cardinalities (<code class="docutils literal notranslate"><span class="pre">graph_rank</span></code>, <code class="docutils literal notranslate"><span class="pre">node_to_group</span></code>, <code class="docutils literal notranslate"><span class="pre">group_ptr</span></code>,
+<code class="docutils literal notranslate"><span class="pre">num_graphs_per_group</span></code>), plus mask/broadcast helpers <code class="docutils literal notranslate"><span class="pre">reduce_all</span></code>,
+<code class="docutils literal notranslate"><span class="pre">reduce_any</span></code>, and <code class="docutils literal notranslate"><span class="pre">broadcast</span></code>. The cache invalidates automatically when
+<code class="docutils literal notranslate"><span class="pre">group_idx</span></code> is reassigned or graph membership
+mutates (selection, <code class="docutils literal notranslate"><span class="pre">zero</span></code>, <code class="docutils literal notranslate"><span class="pre">defrag</span></code>, …). The derived metadata is a snapshot
+taken when <code class="docutils literal notranslate"><span class="pre">group_layout</span></code> is first accessed. In-place changes such as
+<code class="docutils literal notranslate"><span class="pre">batch.group_idx[3]</span> <span class="pre">=</span> <span class="pre">2</span></code> cannot be detected; call
+<code class="docutils literal notranslate"><span class="pre">batch.set_group_layout(batch.group_idx)</span></code> afterward to validate the new grouping
+and rebuild the cached layout. A selection that leaves group numbering
+non-dense must be repaired with <code class="docutils literal notranslate"><span class="pre">batch.set_group_layout(batch.group_idx)</span></code> before
+<code class="docutils literal notranslate"><span class="pre">group_layout</span></code> is accessed again. <code class="docutils literal notranslate"><span class="pre">append()</span></code> requires both batches grouped or
+both ungrouped and rebases labels. <code class="docutils literal notranslate"><span class="pre">put()</span></code> rejects a grouped source or
+destination because graph-level buffer masks can split logical groups, while
+<code class="docutils literal notranslate"><span class="pre">append_data()</span></code> is rejected on a grouped batch.</p>
+</section>
 <section id="indexing-and-selection">
 <h3>Indexing and selection<a class="headerlink" href="#indexing-and-selection" title="Link to this heading">#</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">Batch</span></code> supports bracket indexing that mirrors familiar Python and PyTorch
@@ -622,52 +669,278 @@ to lists in JSON mode.</p></li>
 </section>
 <section id="how-batch-stores-data-internally">
 <h2>How Batch stores data internally<a class="headerlink" href="#how-batch-stores-data-internally" title="Link to this heading">#</a></h2>
-<p>When you call <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.from_data_list()</span></code>, the resulting
-<code class="docutils literal notranslate"><span class="pre">Batch</span></code> does not simply stack all tensors along a new “batch” axis. Different kinds
-of data need different layouts, and the toolkit uses a storage model that reflects
-this.</p>
-<p>Every tensor attribute belongs to one of three <strong>levels</strong>:</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">Batch</span></code> organizes tensor fields by their cardinality within each atomic system.
+Each field belongs to a <strong>level</strong>, which determines how many logical entities it
+contains per system and how those values are packed across the batch. The three
+built-in levels cover the usual atomic-data layout:</p>
 <table class="table">
 <thead>
-<tr class="row-odd"><th class="head"><p>Level</p></th>
-<th class="head"><p>Storage class</p></th>
-<th class="head"><p>Shape convention</p></th>
+<tr class="row-odd"><th class="head"><p>Built-in level</p></th>
+<th class="head"><p>Kind</p></th>
+<th class="head text-right"><p>Per-system cardinality</p></th>
 <th class="head"><p>Examples</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><strong>system</strong></p></td>
-<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">UniformLevelStorage</span></code></p></td>
-<td><p>First dim = number of graphs</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">system</span></code></p></td>
+<td><p>Uniform</p></td>
+<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">cell</span></code>, <code class="docutils literal notranslate"><span class="pre">pbc</span></code>, <code class="docutils literal notranslate"><span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">stress</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>atoms</strong></p></td>
-<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">SegmentedLevelStorage</span></code></p></td>
-<td><p>Concatenated across graphs</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms</span></code></p></td>
+<td><p>Segmented</p></td>
+<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">N_i</span></code> atoms</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">positions</span></code>, <code class="docutils literal notranslate"><span class="pre">atomic_numbers</span></code>, <code class="docutils literal notranslate"><span class="pre">forces</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><strong>edges</strong></p></td>
-<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">SegmentedLevelStorage</span></code></p></td>
-<td><p>Concatenated across graphs</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code>, <code class="docutils literal notranslate"><span class="pre">shifts</span></code>, <code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span></code>, <code class="docutils literal notranslate"><span class="pre">edge_embeddings</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">edges</span></code></p></td>
+<td><p>Segmented</p></td>
+<td class="text-right"><p><code class="docutils literal notranslate"><span class="pre">E_i</span></code> edges</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code>, <code class="docutils literal notranslate"><span class="pre">shifts</span></code>, <code class="docutils literal notranslate"><span class="pre">edge_embeddings</span></code></p></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Uniform storage</strong> is straightforward: every graph contributes exactly one row, so
-the i-th graph’s data is always at index <code class="docutils literal notranslate"><span class="pre">i</span></code>. System-level properties like the
-simulation cell or total energy work this way.</p>
-<p><strong>Segmented storage</strong> is designed for variable-length data. Positions, for example,
-are concatenated into a single tensor of shape <code class="docutils literal notranslate"><span class="pre">(total_nodes,</span> <span class="pre">3)</span></code>. To know where each
-graph’s atoms start and end, the storage tracks <code class="docutils literal notranslate"><span class="pre">segment_lengths</span></code> and a pointer array
-<code class="docutils literal notranslate"><span class="pre">batch_ptr</span></code>. The i-th graph’s nodes live at <code class="docutils literal notranslate"><span class="pre">positions[batch_ptr[i]:batch_ptr[i+1]]</span></code>.
-Edge data works the same way, with node-index offsets automatically applied to
-<code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code> so that each graph’s edges still point to the correct atoms in the
-flattened array.</p>
-<p>The mapping from attribute name to level is determined by a
-<code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_ATTRIBUTE_MAP</span></code>. When you add a new key with
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">add_key()</span></code>, you explicitly specify the level
-(<code class="docutils literal notranslate"><span class="pre">&quot;node&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;edge&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;system&quot;</span></code>) so the batch knows how to slice it back out when
-you call <code class="xref py py-meth docutils literal notranslate"><span class="pre">get_data()</span></code>.</p>
+<p>A uniform level contributes one row per system. A segmented level may contribute a
+different number of rows from each system. For example, all positions are packed
+into one tensor, and an atom pointer records the slice owned by each system. Edge
+data uses the same segmented representation with a separate pointer.</p>
+<section id="defining-custom-levels">
+<h3>Defining custom levels<a class="headerlink" href="#defining-custom-levels" title="Link to this heading">#</a></h3>
+<p>Use <a class="reference internal" href="../modules/generated/nvalchemi.data.LevelSchema.html#nvalchemi.data.LevelSchema" title="nvalchemi.data.LevelSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">LevelSchema</span></code></a> when data needs cardinalities beyond the
+built-in atom, edge, and system levels. A schema can register:</p>
+<ul class="simple">
+<li><p>A custom <strong>uniform</strong> level with one entity per system.</p></li>
+<li><p>A custom <strong>segmented</strong> level with an arbitrary entity count per system.</p></li>
+<li><p>A <strong>product</strong> level representing the Cartesian product of two ordered segmented
+base levels.</p></li>
+</ul>
+<p>The example below adds a custom <code class="docutils literal notranslate"><span class="pre">constraints</span></code> level to the schema and fills it with
+a variable number of constraint records per system. Each record is represented here
+by an eight-element feature vector.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">LevelSchema</span>
+
+<span class="n">data_list</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">num_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">num_atoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">num_atoms</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="p">]</span>
+
+<span class="n">schema</span> <span class="o">=</span> <span class="n">LevelSchema</span><span class="p">()</span>
+<span class="n">schema</span><span class="o">.</span><span class="n">add_level</span><span class="p">(</span><span class="s2">&quot;constraints&quot;</span><span class="p">,</span> <span class="n">segmented</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">schema</span><span class="o">.</span><span class="n">level_names</span><span class="p">)</span>
+<span class="c1"># (&#39;atoms&#39;, &#39;edges&#39;, &#39;system&#39;, &#39;constraints&#39;)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">schema</span><span class="o">.</span><span class="n">level_kind</span><span class="p">(</span><span class="s2">&quot;constraints&quot;</span><span class="p">))</span>  <span class="c1"># &#39;segmented&#39;</span>
+
+<span class="n">constraint_batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list</span><span class="p">,</span> <span class="n">attr_map</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+<span class="n">constraint_values</span> <span class="o">=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">)]</span>
+<span class="n">constraint_batch</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span>
+    <span class="s2">&quot;constraint_features&quot;</span><span class="p">,</span>
+    <span class="n">constraint_values</span><span class="p">,</span>
+    <span class="n">level</span><span class="o">=</span><span class="s2">&quot;constraints&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">constraint_batch</span><span class="o">.</span><span class="n">level_ptr</span><span class="p">(</span><span class="s2">&quot;constraints&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>  <span class="c1"># [0, 4, 5]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">constraint_batch</span><span class="o">.</span><span class="n">constraint_features</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># torch.Size([5, 8])</span>
+</pre></div>
+</div>
+<p>The two systems contain four and one constraint records. These counts do not need to
+match their atom or edge counts.</p>
+<p>Registering a level defines its cardinality semantics; it does not automatically
+assign arbitrary tensor fields to that level. There are three ways to classify a
+custom field:</p>
+<ol class="arabic simple">
+<li><p>For a field already present on each <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code>, call
+<code class="docutils literal notranslate"><span class="pre">schema.set(&quot;constraint_features&quot;,</span> <span class="pre">&quot;constraints&quot;)</span></code> before constructing the
+batch.</p></li>
+<li><p>Pass <code class="docutils literal notranslate"><span class="pre">field_levels={&quot;constraint_features&quot;:</span> <span class="pre">&quot;constraints&quot;}</span></code> to
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.from_data_list" title="nvalchemi.data.Batch.from_data_list"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_data_list()</span></code></a>.</p></li>
+<li><p>Add values after construction with
+<code class="docutils literal notranslate"><span class="pre">batch.add_key(&quot;constraint_features&quot;,</span> <span class="pre">values,</span> <span class="pre">level=&quot;constraints&quot;)</span></code>, as in the
+example above.</p></li>
+</ol>
+<p>All three routes record field ownership in the batch-owned schema. The explicit
+<code class="docutils literal notranslate"><span class="pre">field_levels</span></code> form is useful when the input objects should remain unchanged.</p>
+</section>
+<section id="extending-an-existing-batch-schema">
+<h3>Extending an existing Batch schema<a class="headerlink" href="#extending-an-existing-batch-schema" title="Link to this heading">#</a></h3>
+<p>An already-created <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> can copy level declarations
+from another batch or register additional levels directly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">destination</span><span class="o">.</span><span class="n">extend_level_schema</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">get_level_schema</span><span class="p">())</span>
+<span class="n">destination</span><span class="o">.</span><span class="n">add_product_level</span><span class="p">(</span>
+    <span class="s2">&quot;atom_atom&quot;</span><span class="p">,</span>
+    <span class="n">left</span><span class="o">=</span><span class="s2">&quot;atoms&quot;</span><span class="p">,</span>
+    <span class="n">right</span><span class="o">=</span><span class="s2">&quot;atoms&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.get_level_schema" title="nvalchemi.data.Batch.get_level_schema"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_level_schema()</span></code></a> returns a defensive copy, so
+changing the returned <a class="reference internal" href="../modules/generated/nvalchemi.data.LevelSchema.html#nvalchemi.data.LevelSchema" title="nvalchemi.data.LevelSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">LevelSchema</span></code></a> does not modify the
+source batch. Schema extension copies declarations only; it does not copy tensor
+data, allocate storage groups, or create placeholder fields. Materialize a field
+separately with <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.add_key" title="nvalchemi.data.Batch.add_key"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add_key()</span></code></a> after its level has been
+registered.</p>
+<p>The names <code class="docutils literal notranslate"><span class="pre">get_level_schema</span></code>, <code class="docutils literal notranslate"><span class="pre">extend_level_schema</span></code>, <code class="docutils literal notranslate"><span class="pre">add_level</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">add_product_level</span></code> are reserved for the <code class="docutils literal notranslate"><span class="pre">Batch</span></code> API during attribute-style access.
+Custom tensor fields may still use those names, but access them through item syntax:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">batch</span><span class="p">[</span><span class="s2">&quot;get_level_schema&quot;</span><span class="p">]</span>
+<span class="n">batch</span><span class="p">[</span><span class="s2">&quot;add_product_level&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Attribute syntax such as <code class="docutils literal notranslate"><span class="pre">batch.get_level_schema()</span></code> and
+<code class="docutils literal notranslate"><span class="pre">batch.add_product_level(...)</span></code> always resolves to the corresponding <code class="docutils literal notranslate"><span class="pre">Batch</span></code> API.</p>
+</section>
+<section id="adding-fields-to-a-zero-graph-batch">
+<h3>Adding fields to a zero-graph Batch<a class="headerlink" href="#adding-fields-to-a-zero-graph-batch" title="Link to this heading">#</a></h3>
+<p>A zero-graph batch has no per-system tensors from which <code class="docutils literal notranslate"><span class="pre">add_key()</span></code> can infer a
+field’s dtype or trailing payload shape. Supply both explicitly when materializing
+such a field:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">empty_batch</span><span class="o">.</span><span class="n">add_product_level</span><span class="p">(</span>
+    <span class="s2">&quot;atom_atom&quot;</span><span class="p">,</span>
+    <span class="n">left</span><span class="o">=</span><span class="s2">&quot;atoms&quot;</span><span class="p">,</span>
+    <span class="n">right</span><span class="o">=</span><span class="s2">&quot;atoms&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">empty_batch</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span>
+    <span class="s2">&quot;pair_blocks&quot;</span><span class="p">,</span>
+    <span class="p">[],</span>
+    <span class="n">level</span><span class="o">=</span><span class="s2">&quot;atom_atom&quot;</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="n">payload_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">empty_batch</span><span class="o">.</span><span class="n">pair_blocks</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># torch.Size([0, 3, 3])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">empty_batch</span><span class="o">.</span><span class="n">level_ptr</span><span class="p">(</span><span class="s2">&quot;atom_atom&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>  <span class="c1"># [0]</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">payload_shape</span></code> contains only dimensions not owned by the level. Uniform levels
+own the graph axis, segmented levels own one cardinality axis, and product levels
+own two parent-cardinality axes. Existing pre-allocated group capacity is retained;
+a newly materialized group starts with zero capacity. For non-empty values these
+keywords are optional consistency checks, and ordinary shape and dtype inference
+remains unchanged.</p>
+</section>
+<section id="storing-a-hessian">
+<h3>Storing a Hessian<a class="headerlink" href="#storing-a-hessian" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.compute_hessian" title="nvalchemi.models.base.BaseModelMixin.compute_hessian"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compute_hessian()</span></code></a> stores the
+Hessian of total energy with respect to Cartesian positions on a product level
+whose left and right parents are both the built-in <code class="docutils literal notranslate"><span class="pre">atoms</span></code> level:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">compute_hessian</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">,</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;vmap&quot;</span><span class="p">,</span>
+    <span class="n">row_chunk_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">result</span> <span class="ow">is</span> <span class="n">batch</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">get_level_schema</span><span class="p">()</span><span class="o">.</span><span class="n">product_parents</span><span class="p">[</span><span class="s2">&quot;atom_atom&quot;</span><span class="p">])</span>
+<span class="c1"># (&#39;atoms&#39;, &#39;atoms&#39;)</span>
+</pre></div>
+</div>
+<p>To keep a simulation batch unchanged, supply a separate analysis batch with its
+required neighbor data already prepared.</p>
+<p>For a system with <code class="docutils literal notranslate"><span class="pre">N_i</span></code> atoms, <code class="docutils literal notranslate"><span class="pre">get_data(i).hessian</span></code> has logical shape
+<code class="docutils literal notranslate"><span class="pre">[N_i,</span> <span class="pre">N_i,</span> <span class="pre">3,</span> <span class="pre">3]</span></code>. Its axes are
+<code class="docutils literal notranslate"><span class="pre">[atom_out,</span> <span class="pre">atom_in,</span> <span class="pre">xyz_out,</span> <span class="pre">xyz_in]</span></code>. A batch containing systems with two and
+three atoms packs their four and nine atom-pair blocks without padding:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">level_ptr</span><span class="p">(</span><span class="s2">&quot;atom_atom&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>  <span class="c1"># [0, 4, 13]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">hessian</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># torch.Size([13, 3, 3])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">hessian</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># torch.Size([2, 2, 3, 3])</span>
+</pre></div>
+</div>
+<p>The product blocks are restored with their two atom axes by
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.get_data" title="nvalchemi.data.Batch.get_data"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_data()</span></code></a> and
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.to_data_list" title="nvalchemi.data.Batch.to_data_list"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_data_list()</span></code></a>. They retain their schema, pointers,
+dtype, and values through cloning, selection, compatible append, and device
+movement. The stored tensor is detached from the construction graph.</p>
+<p>The field also uses the existing custom-level Zarr representation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrReader</span><span class="p">,</span> <span class="n">AtomicDataZarrWriter</span><span class="p">,</span> <span class="n">Dataset</span>
+
+<span class="n">writer</span> <span class="o">=</span> <span class="n">AtomicDataZarrWriter</span><span class="p">(</span><span class="s2">&quot;hessians.zarr&quot;</span><span class="p">)</span>
+<span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="s2">&quot;hessians.zarr&quot;</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="n">loaded</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])[</span><span class="mi">0</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">loaded</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">hessian</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># torch.Size([3, 3, 3, 3])</span>
+</pre></div>
+</div>
+<p>Appending another Hessian batch requires the same level definitions, field set,
+dtype, and trailing <code class="docutils literal notranslate"><span class="pre">[3,</span> <span class="pre">3]</span></code> payload shape. Zarr stores the packed product payload
+and an <code class="docutils literal notranslate"><span class="pre">int64</span></code> dataset-wide pointer; no Hessian-specific on-disk format is used.</p>
+<p>Dense Hessians have quadratic storage cost and are intended for explicit analysis
+or dataset generation. Do not carry them through active in-flight dynamics
+batches. Use the matrix-free model HVP APIs when dense storage is unnecessary.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field kind</p></th>
+<th class="head"><p>Per-system logical shape</p></th>
+<th class="head"><p>Packed <code class="docutils literal notranslate"><span class="pre">Batch</span></code> shape</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Uniform</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">H]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">H]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Segmented</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[S_i,</span> <span class="pre">H]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[sum(S_i),</span> <span class="pre">H]</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Product</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[L_i,</span> <span class="pre">R_i,</span> <span class="pre">H]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[sum(L_i</span> <span class="pre">*</span> <span class="pre">R_i),</span> <span class="pre">H]</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.level_keys" title="nvalchemi.data.Batch.level_keys"><code class="xref py py-attr docutils literal notranslate"><span class="pre">level_keys</span></code></a> reports every cardinality-resolved level
+and its fields in schema order. A fieldless resolved level appears with an empty set.
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.level_ptr" title="nvalchemi.data.Batch.level_ptr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">level_ptr()</span></code></a> returns its cumulative per-system pointer
+as an <code class="docutils literal notranslate"><span class="pre">int32</span></code> tensor. This limit applies to each materialized level in one in-memory
+<code class="docutils literal notranslate"><span class="pre">Batch</span></code>; constructing a level whose packed cardinality exceeds the signed <code class="docutils literal notranslate"><span class="pre">int32</span></code>
+range raises an error. Zarr uses <code class="docutils literal notranslate"><span class="pre">int64</span></code> pointers for dataset-wide offsets, so the
+total dataset may contain more entities than a single <code class="docutils literal notranslate"><span class="pre">Batch</span></code>. The existing
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.keys" title="nvalchemi.data.Batch.keys"><code class="xref py py-attr docutils literal notranslate"><span class="pre">keys</span></code></a> property remains the node, edge, and system
+compatibility view and does not list custom levels.</p>
+</section>
+<section id="fieldless-cardinality-metadata">
+<h3>Fieldless cardinality metadata<a class="headerlink" href="#fieldless-cardinality-metadata" title="Link to this heading">#</a></h3>
+<p>A level’s cardinality can be known even when it owns no tensor field. This is useful
+when a product field is the only value that exposes one of its parent dimensions:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">schema</span> <span class="o">=</span> <span class="n">LevelSchema</span><span class="p">()</span>
+<span class="n">schema</span><span class="o">.</span><span class="n">add_level</span><span class="p">(</span><span class="s2">&quot;augmented&quot;</span><span class="p">,</span> <span class="n">segmented</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">schema</span><span class="o">.</span><span class="n">add_product_level</span><span class="p">(</span>
+    <span class="s2">&quot;atom_augmented&quot;</span><span class="p">,</span>
+    <span class="n">left</span><span class="o">=</span><span class="s2">&quot;atoms&quot;</span><span class="p">,</span>
+    <span class="n">right</span><span class="o">=</span><span class="s2">&quot;augmented&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">augmented_batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list</span><span class="p">,</span> <span class="n">attr_map</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+<span class="n">augmented_batch</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span>
+    <span class="s2">&quot;atom_augmented_features&quot;</span><span class="p">,</span>
+    <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">)],</span>
+    <span class="n">level</span><span class="o">=</span><span class="s2">&quot;atom_augmented&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">augmented_batch</span><span class="o">.</span><span class="n">level_keys</span><span class="p">[</span><span class="s2">&quot;augmented&quot;</span><span class="p">])</span>          <span class="c1"># set()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">augmented_batch</span><span class="o">.</span><span class="n">level_ptr</span><span class="p">(</span><span class="s2">&quot;augmented&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>  <span class="c1"># [0, 4, 9]</span>
+</pre></div>
+</div>
+<p>In this example the augmented counts happen to be <code class="docutils literal notranslate"><span class="pre">N_i</span> <span class="pre">+</span> <span class="pre">2</span></code>. The schema does not
+store or evaluate that expression: the product tensors supply the concrete counts
+four and five. Registered segmented and product levels are otherwise materialized
+lazily, when a field or product axis establishes their cardinality. Zero-length
+parent and product axes are valid.</p>
+<p>Custom definitions and segment boundaries are preserved through reconstruction,
+selection, append, device movement, buffering, and point-to-point batch transport.
+Custom segmented payloads remain opaque: only the built-in <code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code> receives
+automatic atom-index offsets. A custom edge-like tensor that contains indices must
+manage its own index semantics.</p>
+<p>Custom point-to-point transport uses the receiver’s template to determine message
+order, field dtypes, and payload shapes. The sender and receiver must therefore use
+independently matching templates; the transport does not negotiate or validate two
+different layouts at runtime.</p>
+</section>
 </section>
 <section id="neighbor-list-formats">
 <h2>Neighbor list formats<a class="headerlink" href="#neighbor-list-formats" title="Link to this heading">#</a></h2>
@@ -764,6 +1037,32 @@ schema:</p>
 </div>
 <p>All tensors are pre-allocated at the given capacity. The batch’s <code class="docutils literal notranslate"><span class="pre">num_graphs</span></code> starts
 at zero.</p>
+<p>For a <code class="docutils literal notranslate"><span class="pre">Batch</span></code> template with custom levels, pass an element capacity for each
+payload-bearing custom segmented or product level:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">custom_buffer</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+    <span class="n">num_systems</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+    <span class="n">num_nodes</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+    <span class="n">num_edges</span><span class="o">=</span><span class="mi">32768</span><span class="p">,</span>
+    <span class="n">template</span><span class="o">=</span><span class="n">hessian_batch</span><span class="p">,</span>
+    <span class="n">level_capacities</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;atom_atom&quot;</span><span class="p">:</span> <span class="mi">8192</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Custom uniform levels use <code class="docutils literal notranslate"><span class="pre">num_systems</span></code>. Product capacity is explicit and is not
+derived from either parent capacity. A fieldless segmented parent needs pointer
+metadata but no element-buffer entry in <code class="docutils literal notranslate"><span class="pre">level_capacities</span></code>. Use
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.empty_like" title="nvalchemi.data.Batch.empty_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">empty_like()</span></code></a> to create an empty buffer that
+preserves an existing batch’s complete materialized layout and capacities.</p>
+<p>The generic buffer kernels support <code class="docutils literal notranslate"><span class="pre">bool</span></code>, <code class="docutils literal notranslate"><span class="pre">float32</span></code>, <code class="docutils literal notranslate"><span class="pre">float64</span></code>, <code class="docutils literal notranslate"><span class="pre">int32</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">int64</span></code> payloads, and built-in fields may use any of those dtypes. Custom uniform
+levels use the same set. For custom segmented and product levels,
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">put()</span></code></a> currently accepts only <code class="docutils literal notranslate"><span class="pre">float32</span></code> payloads.
+Unsupported or mismatched dtypes are rejected before any batch group is modified.
+This narrower buffer-copy policy does not change the dtype support of ordinary,
+tightly packed <code class="docutils literal notranslate"><span class="pre">Batch</span></code> objects.</p>
 </section>
 <section id="filling-the-buffer-with-put">
 <h3>Filling the buffer with <code class="docutils literal notranslate"><span class="pre">put</span></code><a class="headerlink" href="#filling-the-buffer-with-put" title="Link to this heading">#</a></h3>
@@ -797,6 +1096,91 @@ pipeline iteration.</p>
 dynamics pipeline’s inflight batching, where systems enter and leave a running
 simulation at different times.</p>
 </section>
+</section>
+<section id="persisting-custom-levels-in-zarr">
+<h2>Persisting custom levels in Zarr<a class="headerlink" href="#persisting-custom-levels-in-zarr" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter" title="nvalchemi.data.AtomicDataZarrWriter"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code></a> persists a batch’s complete level
+schema. Custom fields are stored under <code class="docutils literal notranslate"><span class="pre">levels/&lt;level&gt;/</span></code>, while cumulative pointers
+for resolved custom segmented and product levels are stored under
+<code class="docutils literal notranslate"><span class="pre">meta/level_ptrs/</span></code>. Product payloads stay packed on disk and are restored to their
+two logical parent axes when read.</p>
+<p>The root <code class="docutils literal notranslate"><span class="pre">attrs[&quot;levels&quot;]</span></code> entry contains locally versioned custom-level definitions.
+This version applies only to that metadata; it is not a store-wide format version.
+A batch containing only the built-in levels retains the existing <code class="docutils literal notranslate"><span class="pre">core/</span></code>, <code class="docutils literal notranslate"><span class="pre">custom/</span></code>,
+and built-in pointer layout and does not create custom-level metadata.</p>
+<p>The example below writes two ordinary systems, then adds a variable-length
+<code class="docutils literal notranslate"><span class="pre">constraints</span></code> field. The pointer is a complete physical-store prefix pointer: the
+two systems own two and three constraint rows, respectively.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AtomicData</span><span class="p">,</span>
+    <span class="n">AtomicDataZarrReader</span><span class="p">,</span>
+    <span class="n">AtomicDataZarrWriter</span><span class="p">,</span>
+    <span class="n">Batch</span><span class="p">,</span>
+    <span class="n">Dataset</span><span class="p">,</span>
+    <span class="n">LevelSchema</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">systems</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">num_atoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">num_atoms</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="p">]</span>
+
+<span class="n">writer</span> <span class="o">=</span> <span class="n">AtomicDataZarrWriter</span><span class="p">(</span><span class="s2">&quot;features.zarr&quot;</span><span class="p">)</span>
+<span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">systems</span><span class="p">))</span>
+
+<span class="n">schema</span> <span class="o">=</span> <span class="n">LevelSchema</span><span class="p">()</span>
+<span class="n">schema</span><span class="o">.</span><span class="n">add_level</span><span class="p">(</span><span class="s2">&quot;constraints&quot;</span><span class="p">,</span> <span class="n">segmented</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">constraint_ptr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+<span class="n">constraint_values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+<span class="n">writer</span><span class="o">.</span><span class="n">add_custom</span><span class="p">(</span>
+    <span class="s2">&quot;constraint_features&quot;</span><span class="p">,</span>
+    <span class="n">constraint_values</span><span class="p">,</span>
+    <span class="s2">&quot;constraints&quot;</span><span class="p">,</span>
+    <span class="n">attr_map</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span>
+    <span class="n">level_ptrs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;constraints&quot;</span><span class="p">:</span> <span class="n">constraint_ptr</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="n">reader</span> <span class="o">=</span> <span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="s2">&quot;features.zarr&quot;</span><span class="p">)</span>
+<span class="n">stored_schema</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">level_schema</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="n">loaded_batch</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">loaded_batch</span><span class="o">.</span><span class="n">level_ptr</span><span class="p">(</span><span class="s2">&quot;constraints&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>  <span class="c1"># [0, 2, 5]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">loaded_batch</span><span class="o">.</span><span class="n">constraint_features</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># torch.Size([5, 8])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">loaded_batch</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">constraint_features</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># torch.Size([3, 8])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">loaded_batch</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">constraint_features</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+<span class="c1"># [16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0]</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">reader.level_schema</span></code> returns an independent schema. The reader also describes
+the store without reading a chunk: <code class="docutils literal notranslate"><span class="pre">reader.schema()</span></code> returns one
+<a class="reference internal" href="../modules/generated/nvalchemi.data.FieldSchema.html#nvalchemi.data.FieldSchema" title="nvalchemi.data.FieldSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">FieldSchema</span></code></a> (level, dtype, row shape) per stored
+field, <code class="docutils literal notranslate"><span class="pre">reader.level_sizes()</span></code> the row count of every level including custom
+ones, <code class="docutils literal notranslate"><span class="pre">reader.num_samples</span></code> the stored sample count with soft-deleted samples
+included, <code class="docutils literal notranslate"><span class="pre">reader.field_array(name)</span></code> the Zarr array behind a field, and
+<code class="docutils literal notranslate"><span class="pre">reader.check_integrity()</span></code> raises when the pointers, masks, and field arrays
+disagree with the committed sample count, which is what an append interrupted
+mid-write leaves behind. <code class="docutils literal notranslate"><span class="pre">Dataset</span></code> and
+<a class="reference internal" href="../modules/generated/nvalchemi.data.InMemoryDataset.html#nvalchemi.data.InMemoryDataset" title="nvalchemi.data.InMemoryDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">InMemoryDataset</span></code></a> propagate field-bearing custom levels
+and fieldless parents whose counts can be recovered from product payload axes. A
+level represented only by a stored pointer, with no field or product payload, is
+preserved by Zarr but is not reconstructed by those dataset batching paths.</p>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter.add_custom" title="nvalchemi.data.AtomicDataZarrWriter.add_custom"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add_custom()</span></code></a> can add a field on a new
+custom level to an existing store by accepting its <code class="docutils literal notranslate"><span class="pre">attr_map</span></code> and complete physical
+store prefix pointers through <code class="docutils literal notranslate"><span class="pre">level_ptrs</span></code>. Each pointer must have one entry more
+than the number of physical samples and must cover deleted rows as well as active
+samples. Definitions, pointers, and tensor conversion are validated before new
+level groups or arrays are created. Once a definition and its pointers are stored,
+later fields on the same level can reuse them.</p>
+<p>Legacy stores are opened without migration or rewriting. Conversely, Toolkit
+versions that predate custom levels do not know how to recover fields stored in the
+new <code class="docutils literal notranslate"><span class="pre">levels/</span></code> groups, even though the store’s legacy <code class="docutils literal notranslate"><span class="pre">core/</span></code> and <code class="docutils literal notranslate"><span class="pre">custom/</span></code> contents
+retain their existing representation.</p>
 </section>
 <section id="ase-atoms-interoperability">
 <h2>ASE Atoms interoperability<a class="headerlink" href="#ase-atoms-interoperability" title="Link to this heading">#</a></h2>
@@ -1018,12 +1402,20 @@ into <a class="reference internal" href="../modules/generated/nvalchemi.data.Dat
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#atomicdata-a-single-graph">AtomicData: a single graph</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#batch-multiple-graphs">Batch: multiple graphs</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#grouping-graphs">Grouping graphs</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#indexing-and-selection">Indexing and selection</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-keys-to-a-batch">Adding keys to a batch</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#device-and-serialization">Device and serialization</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-batch-stores-data-internally">How Batch stores data internally</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-batch-stores-data-internally">How Batch stores data internally</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#defining-custom-levels">Defining custom levels</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#extending-an-existing-batch-schema">Extending an existing Batch schema</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-fields-to-a-zero-graph-batch">Adding fields to a zero-graph Batch</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#storing-a-hessian">Storing a Hessian</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fieldless-cardinality-metadata">Fieldless cardinality metadata</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#neighbor-list-formats">Neighbor list formats</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pre-allocated-batches-and-the-buffer-api">Pre-allocated batches and the buffer API</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-an-empty-buffer">Creating an empty buffer</a></li>
@@ -1032,6 +1424,7 @@ into <a class="reference internal" href="../modules/generated/nvalchemi.data.Dat
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resetting-with-zero">Resetting with <code class="docutils literal notranslate"><span class="pre">zero</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#persisting-custom-levels-in-zarr">Persisting custom levels in Zarr</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ase-atoms-interoperability">ASE Atoms interoperability</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#converting-ase-atoms-to-atomicdata">Converting ASE Atoms to AtomicData</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#atom-categories">Atom categories</a></li>

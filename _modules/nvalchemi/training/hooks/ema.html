@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.training.hooks.ema &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.training.hooks.ema &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/hooks/ema';</script>
-    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -428,15 +428,22 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">PrivateAttr</span><span class="p">,</span> <span class="n">StringConstraints</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseModel</span><span class="p">,</span>
+    <span class="n">ConfigDict</span><span class="p">,</span>
+    <span class="n">Field</span><span class="p">,</span>
+    <span class="n">PrivateAttr</span><span class="p">,</span>
+    <span class="n">StringConstraints</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim.swa_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">AveragedModel</span><span class="p">,</span> <span class="n">get_ema_multi_avg_fn</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training._stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingStage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.hooks.update</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingUpdateHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">unwrap_model</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -445,11 +452,6 @@ document.write(`
 
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;EMAHook&quot;</span><span class="p">]</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_unwrap_model</span><span class="p">(</span><span class="n">m</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns a nested module if it exists, otherwise no-op&quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">m</span><span class="o">.</span><span class="n">module</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="s2">&quot;module&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">m</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_module_tensors</span><span class="p">(</span><span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
@@ -635,6 +637,10 @@ document.write(`
 
     <span class="n">_averaged_model</span><span class="p">:</span> <span class="n">AveragedModel</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
     <span class="n">_pending_averaged_state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="c1"># Preserve strict-vs-partial load intent until lazy EMA initialization runs.</span>
+    <span class="n">_pending_averaged_state_load</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;full&quot;</span><span class="p">,</span> <span class="s2">&quot;partial&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">&quot;full&quot;</span>
+    <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_build_averaged_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AveragedModel</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Build the :class:`AveragedModel` wrapping ``source``.</span>
@@ -664,7 +670,7 @@ document.write(`
                 <span class="sa">f</span><span class="s2">&quot;available keys in TrainContext.models: </span><span class="si">{</span><span class="n">available</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_averaged_model</span><span class="p">(</span><span class="n">_unwrap_model</span><span class="p">(</span><span class="n">source</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_averaged_model</span><span class="p">(</span><span class="n">unwrap_model</span><span class="p">(</span><span class="n">source</span><span class="p">))</span>
         <span class="c1"># in the event there are user-defined methods that need</span>
         <span class="c1"># to re-patch effects that are not included in the deepcopy</span>
         <span class="n">modify_ema_methods</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
@@ -673,10 +679,14 @@ document.write(`
         <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">modify_ema_methods</span><span class="p">):</span>
             <span class="n">modify_ema_methods</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">source_tensors</span> <span class="o">=</span> <span class="n">_module_tensors</span><span class="p">(</span><span class="n">_unwrap_model</span><span class="p">(</span><span class="n">source</span><span class="p">))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span><span class="p">)</span>
+            <span class="n">source_tensors</span> <span class="o">=</span> <span class="n">_module_tensors</span><span class="p">(</span><span class="n">unwrap_model</span><span class="p">(</span><span class="n">source</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span><span class="p">,</span>
+                <span class="n">strict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state_load</span> <span class="o">!=</span> <span class="s2">&quot;partial&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="n">_align_to_source_tensors</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="n">source_tensors</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state_load</span> <span class="o">=</span> <span class="s2">&quot;full&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_publish_averaged_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">TrainContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Publish averaged weights into the strategy inference-model slot.&quot;&quot;&quot;</span>
@@ -708,7 +718,7 @@ document.write(`
                 <span class="c1"># Apply the actual EMA update only after an eligible optimizer step.</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_initialized</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
                 <span class="n">source</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">models</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">model_key</span><span class="p">]</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">get_averaged_model</span><span class="p">()</span><span class="o">.</span><span class="n">update_parameters</span><span class="p">(</span><span class="n">_unwrap_model</span><span class="p">(</span><span class="n">source</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">get_averaged_model</span><span class="p">()</span><span class="o">.</span><span class="n">update_parameters</span><span class="p">(</span><span class="n">unwrap_model</span><span class="p">(</span><span class="n">source</span><span class="p">))</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">num_updates</span> <span class="o">+=</span> <span class="mi">1</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_publish_averaged_model</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
             <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
@@ -754,6 +764,8 @@ document.write(`
             <span class="n">out</span><span class="p">[</span><span class="s2">&quot;averaged_model_state&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">out</span><span class="p">[</span><span class="s2">&quot;averaged_model_state&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state_load</span> <span class="o">==</span> <span class="s2">&quot;partial&quot;</span><span class="p">:</span>
+                <span class="n">out</span><span class="p">[</span><span class="s2">&quot;averaged_model_state_load&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;partial&quot;</span>
         <span class="k">return</span> <span class="n">out</span></div>
 
 
@@ -800,16 +812,23 @@ document.write(`
         <span class="k">if</span> <span class="s2">&quot;num_updates&quot;</span> <span class="ow">in</span> <span class="n">state</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">num_updates</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;num_updates&quot;</span><span class="p">])</span>
         <span class="k">if</span> <span class="s2">&quot;averaged_model_state&quot;</span> <span class="ow">in</span> <span class="n">state</span><span class="p">:</span>
+            <span class="n">averaged_state_load</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;averaged_model_state_load&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;averaged_model_state&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state_load</span> <span class="o">=</span> <span class="n">averaged_state_load</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">tensors</span> <span class="o">=</span> <span class="n">_module_tensors</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span><span class="o">.</span><span class="n">module</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;averaged_model_state&quot;</span><span class="p">])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span>
+                    <span class="n">state</span><span class="p">[</span><span class="s2">&quot;averaged_model_state&quot;</span><span class="p">],</span>
+                    <span class="n">strict</span><span class="o">=</span><span class="n">averaged_state_load</span> <span class="o">!=</span> <span class="s2">&quot;partial&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
                 <span class="n">_align_to_source_tensors</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="n">tensors</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state_load</span> <span class="o">=</span> <span class="s2">&quot;full&quot;</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_averaged_model</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span> <span class="o">=</span> <span class="kc">None</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pending_averaged_state_load</span> <span class="o">=</span> <span class="s2">&quot;full&quot;</span></div>
 </div>
 
 </pre></div>

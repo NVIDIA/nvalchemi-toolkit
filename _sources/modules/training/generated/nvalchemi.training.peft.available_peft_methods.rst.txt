@@ -1,0 +1,6 @@
+﻿nvalchemi.training.peft.available\_peft\_methods
+================================================
+
+.. currentmodule:: nvalchemi.training.peft
+
+.. autofunction:: available_peft_methods

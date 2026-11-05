@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi._typing &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi._typing &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/_typing';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -431,6 +431,7 @@ document.write(`
 
 <span class="sd">The notation we will use for shapes is as follows:</span>
 <span class="sd">- B: Batch size</span>
+<span class="sd">- G: Number of groups in a batch</span>
 <span class="sd">- V: Number of nodes (vertices)</span>
 <span class="sd">- E: Number of edges</span>
 <span class="sd">- H: Hidden feature dimensionality</span>
@@ -462,6 +463,7 @@ document.write(`
     <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
 
 <span class="n">B</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span>
+<span class="n">G</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span>  <span class="c1"># groups in a batch</span>
 <span class="n">V</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span>
 <span class="n">E</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span>
 <span class="n">H</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span>
@@ -505,9 +507,43 @@ document.write(`
 <span class="n">NumSteps</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">Status</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">Fmax</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="n">StateVersion</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="n">Diagnostic</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Num</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;...&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">ModelOutputs</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">[</span>
-    <span class="nb">str</span><span class="p">,</span> <span class="n">Energy</span> <span class="o">|</span> <span class="n">Forces</span> <span class="o">|</span> <span class="n">Hessian</span> <span class="o">|</span> <span class="n">Stress</span> <span class="o">|</span> <span class="n">Virials</span> <span class="o">|</span> <span class="n">Dipole</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="nb">str</span><span class="p">,</span>
+    <span class="n">Energy</span>
+    <span class="o">|</span> <span class="n">Forces</span>
+    <span class="o">|</span> <span class="n">Hessian</span>
+    <span class="o">|</span> <span class="n">Stress</span>
+    <span class="o">|</span> <span class="n">Virials</span>
+    <span class="o">|</span> <span class="n">Dipole</span>
+    <span class="o">|</span> <span class="n">StateVersion</span>
+    <span class="o">|</span> <span class="n">Diagnostic</span>
+    <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="sd">&quot;&quot;&quot;Named outputs of one forward pass, or of one additive contribution to it.</span>
+
+<span class="sd">Three key namespaces share the mapping:</span>
+
+<span class="sd">``energy``, ``forces``, ``stress``, ``virial``, ``hessian``, ``dipole``</span>
+<span class="sd">    Physical quantities with defined shapes and combination rules.</span>
+<span class="sd">    :func:`~nvalchemi.models._utils.sum_outputs` adds them; a consumer that</span>
+<span class="sd">    applies them to a batch knows which buffer each one belongs in.</span>
+<span class="sd">``state_version``</span>
+<span class="sd">    Integer version IDs, shape ``[B]``, identifying which revision of a</span>
+<span class="sd">    producer&#39;s internal state generated the rest of the mapping.  Written by</span>
+<span class="sd">    components whose state evolves during a run — an adaptive bias, an</span>
+<span class="sd">    on-the-fly-fitted correction — so a consumer can tell a stale result from</span>
+<span class="sd">    a current one.</span>
+<span class="sd">``diagnostics/&lt;name&gt;``</span>
+<span class="sd">    Arbitrary reported tensors, no shape contract, never summed.  For</span>
+<span class="sd">    quantities a consumer displays or records rather than applies: a</span>
+<span class="sd">    collective-variable value, a per-bin sample count, a convergence measure.</span>
+<span class="sd">    Prefix with :data:`~nvalchemi.models._utils.DIAGNOSTIC_PREFIX`.</span>
+
+<span class="sd">:func:`~nvalchemi.models._utils.validate_contribution` checks a mapping</span>
+<span class="sd">against these conventions.</span>
+<span class="sd">&quot;&quot;&quot;</span>
 <span class="n">SampleScores</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">Centroids</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;C H&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">NodeKineticEnergies</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>

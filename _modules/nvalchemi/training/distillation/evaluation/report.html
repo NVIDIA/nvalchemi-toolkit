@@ -1,0 +1,1675 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.distillation.evaluation.report &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/distillation/evaluation/report';</script>
+    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.distillation.evaluation.report</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Acceptance verdicts across a family of students.</span>
+
+<span class="sd">A caller collects one :class:`StudentEvaluation` per candidate student and sets</span>
+<span class="sd">the acceptance bars on an :class:`AcceptanceThresholds`.</span>
+<span class="sd">:func:`build_acceptance_report` then returns an :class:`AcceptanceReport`, which</span>
+<span class="sd">renders as Rich tables and exports as a plain dictionary. :func:`measured_bars`</span>
+<span class="sd">reports which bars a partial set of measurements can decide. Every measurement</span>
+<span class="sd">rebuilds from its own export, so a sweep can evaluate each student in a</span>
+<span class="sd">separate job and assemble the report in a final job.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span><span class="p">,</span> <span class="n">get_args</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich</span><span class="w"> </span><span class="kn">import</span> <span class="n">box</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.console</span><span class="w"> </span><span class="kn">import</span> <span class="n">Group</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rich.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.evaluation._export</span><span class="w"> </span><span class="kn">import</span> <span class="n">MeasurementRecord</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.evaluation.accuracy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AccuracyMetrics</span><span class="p">,</span>
+    <span class="n">AccuracyQuantity</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.evaluation.stability</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ExtensivityMetrics</span><span class="p">,</span>
+    <span class="n">RDFComparison</span><span class="p">,</span>
+    <span class="n">StabilityMetrics</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;AcceptanceBar&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AcceptanceCheck&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AcceptanceReport&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AcceptanceThresholds&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;BAR_FAMILIES&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DEFAULT_BARS&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;MetricFamily&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;StudentEvaluation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;StudentVerdict&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;build_acceptance_report&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;measured_bars&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">_MISSING</span> <span class="o">=</span> <span class="s2">&quot;-&quot;</span>
+<span class="sd">&quot;&quot;&quot;Cell rendered where a student has no value for a column.&quot;&quot;&quot;</span>
+
+<span class="n">_WEIGHT_SOURCES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;ema&quot;</span><span class="p">,</span> <span class="s2">&quot;raw&quot;</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Weight sets a student evaluation can record having been measured on.&quot;&quot;&quot;</span>
+
+<span class="n">_EXTRA_FAMILY_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;extra:&quot;</span>
+<span class="sd">&quot;&quot;&quot;Prefix naming a family a bar reads out of ``StudentEvaluation.extra``.&quot;&quot;&quot;</span>
+
+<span class="n">_COMPARISONS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span> <span class="s2">&quot;&gt;=&quot;</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Directions an acceptance bar can pass in.&quot;&quot;&quot;</span>
+
+<span class="n">_FROM_SCRATCH_BAR</span> <span class="o">=</span> <span class="s2">&quot;max_from_scratch_ratio&quot;</span>
+<span class="sd">&quot;&quot;&quot;The one bar formed across two families, and so the one with no ``check``.&quot;&quot;&quot;</span>
+
+<span class="n">_DIVERGENCE_BAR</span> <span class="o">=</span> <span class="s2">&quot;no_divergence&quot;</span>
+<span class="sd">&quot;&quot;&quot;The stability bar read as a flag rather than compared against a number.&quot;&quot;&quot;</span>
+
+<span class="n">MetricFamily</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span>
+    <span class="s2">&quot;accuracy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;stability&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;extensivity&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;rdf&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;baseline_accuracy&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+<span class="sd">&quot;&quot;&quot;Measurement slot of a :class:`StudentEvaluation` an acceptance bar reads.&quot;&quot;&quot;</span>
+
+
+<span class="n">_STUDENT_SECTIONS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">MetricFamily</span><span class="p">,</span> <span class="nb">type</span><span class="p">[</span><span class="n">MeasurementRecord</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;accuracy&quot;</span><span class="p">:</span> <span class="n">AccuracyMetrics</span><span class="p">,</span>
+    <span class="s2">&quot;stability&quot;</span><span class="p">:</span> <span class="n">StabilityMetrics</span><span class="p">,</span>
+    <span class="s2">&quot;extensivity&quot;</span><span class="p">:</span> <span class="n">ExtensivityMetrics</span><span class="p">,</span>
+    <span class="s2">&quot;rdf&quot;</span><span class="p">:</span> <span class="n">RDFComparison</span><span class="p">,</span>
+    <span class="s2">&quot;baseline_accuracy&quot;</span><span class="p">:</span> <span class="n">AccuracyMetrics</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Measurement class behind each nested slot of a student evaluation.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="StudentEvaluation">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.StudentEvaluation.html#nvalchemi.training.distillation.evaluation.StudentEvaluation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StudentEvaluation</span><span class="p">(</span><span class="n">MeasurementRecord</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Everything measured about one candidate student.</span>
+
+<span class="sd">    Only *name* and *accuracy* are required. Each remaining slot holds a</span>
+<span class="sd">    measurement that a caller may or may not have run. A bar aimed at an empty</span>
+<span class="sd">    slot fails the student rather than passing it silently. *weights* is not a</span>
+<span class="sd">    slot: it notes where the numbers came from, and no bar reads it.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Label the student is reported under.</span>
+<span class="sd">    accuracy : AccuracyMetrics</span>
+<span class="sd">        Held-out errors, from</span>
+<span class="sd">        :func:`~nvalchemi.training.distillation.evaluation.evaluate_accuracy`.</span>
+<span class="sd">    stability : StabilityMetrics | None</span>
+<span class="sd">        Trajectory conservation metrics, from</span>
+<span class="sd">        :meth:`~nvalchemi.training.distillation.evaluation.StabilityMonitor.metrics`.</span>
+<span class="sd">    extensivity : ExtensivityMetrics | None</span>
+<span class="sd">        Energy-scaling error, from</span>
+<span class="sd">        :func:`~nvalchemi.training.distillation.evaluation.extensivity_error`.</span>
+<span class="sd">    rdf : RDFComparison | None</span>
+<span class="sd">        Structural match against a reference trajectory, from</span>
+<span class="sd">        :func:`~nvalchemi.training.distillation.evaluation.compare_radial_distributions`.</span>
+<span class="sd">    baseline_accuracy : AccuracyMetrics | None</span>
+<span class="sd">        The same accuracy evaluation run on an equal-size student trained from</span>
+<span class="sd">        scratch. The from-scratch bar compares the student against it. A</span>
+<span class="sd">        baseline whose graph and atom counts differ from those of *accuracy*</span>
+<span class="sd">        fails the bar rather than being used for a ratio.</span>
+<span class="sd">    num_parameters : int | None</span>
+<span class="sd">        Parameter count, reported beside the student&#39;s errors.</span>
+<span class="sd">    weights : Literal[&quot;ema&quot;, &quot;raw&quot;] | None</span>
+<span class="sd">        Which of the student&#39;s weights the numbers were measured on: its</span>
+<span class="sd">        EMA-averaged weights (``&quot;ema&quot;``) or its live ones (``&quot;raw&quot;``). Only the</span>
+<span class="sd">        caller knows whether it passed</span>
+<span class="sd">        :func:`~nvalchemi.training.distillation.evaluation.evaluate_accuracy` a</span>
+<span class="sd">        ``strategy.inference_model``, so record it here. ``None`` records</span>
+<span class="sd">        nothing, which is not the same as ``&quot;raw&quot;``.</span>
+<span class="sd">    extra : Mapping[str, Mapping[str, float]]</span>
+<span class="sd">        Measurements outside the typed slots, as one flat map of numbers per</span>
+<span class="sd">        family. A custom :class:`AcceptanceBar` reads a family through</span>
+<span class="sd">        ``&quot;extra:&lt;family&gt;&quot;``. Default empty.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If a measurement slot holds anything but its own metrics class.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *weights* names neither of the two weight sets.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">accuracy</span><span class="p">:</span> <span class="n">AccuracyMetrics</span>
+    <span class="n">stability</span><span class="p">:</span> <span class="n">StabilityMetrics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">extensivity</span><span class="p">:</span> <span class="n">ExtensivityMetrics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">rdf</span><span class="p">:</span> <span class="n">RDFComparison</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">baseline_accuracy</span><span class="p">:</span> <span class="n">AccuracyMetrics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">num_parameters</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">weights</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ema&quot;</span><span class="p">,</span> <span class="s2">&quot;raw&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">extra</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_slots</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject a mistyped measurement slot or an unrecognized weights marker.</span>
+
+<span class="sd">        The slots are read attribute by attribute much later, when the report</span>
+<span class="sd">        is built. Without this check, an object of the wrong kind would surface</span>
+<span class="sd">        as an ``AttributeError`` inside :func:`build_acceptance_report` rather</span>
+<span class="sd">        than at the line that filled the slot. A mapping is let through for</span>
+<span class="sd">        field validation to rebuild.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="k">for</span> <span class="n">slot</span><span class="p">,</span> <span class="n">metric</span> <span class="ow">in</span> <span class="n">_STUDENT_SECTIONS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="n">metric</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;StudentEvaluation.</span><span class="si">{</span><span class="n">slot</span><span class="si">}</span><span class="s2"> must be a </span><span class="si">{</span><span class="n">metric</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> or &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;None; got </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">. An accessor left uncalled, such as &quot;</span>
+                    <span class="s2">&quot;StabilityMonitor.metrics rather than the metrics it &quot;</span>
+                    <span class="s2">&quot;returns, is the usual cause.&quot;</span>
+                <span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;weights&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">weights</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_WEIGHT_SOURCES</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;StudentEvaluation.weights must be one of </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_WEIGHT_SOURCES</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;or None; got </span><span class="si">{</span><span class="n">weights</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+<div class="viewcode-block" id="StudentEvaluation.to_dict">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.StudentEvaluation.html#nvalchemi.training.distillation.evaluation.StudentEvaluation.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the populated measurements and markers as plain dictionaries.&quot;&quot;&quot;</span>
+        <span class="n">measured</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;accuracy&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">accuracy</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span>
+            <span class="s2">&quot;stability&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">stability</span><span class="p">,</span>
+            <span class="s2">&quot;extensivity&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">extensivity</span><span class="p">,</span>
+            <span class="s2">&quot;rdf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">rdf</span><span class="p">,</span>
+            <span class="s2">&quot;baseline_accuracy&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">baseline_accuracy</span><span class="p">,</span>
+            <span class="s2">&quot;num_parameters&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_parameters</span><span class="p">,</span>
+            <span class="s2">&quot;weights&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights</span><span class="p">,</span>
+            <span class="s2">&quot;extra&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">extra</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">key</span><span class="p">:</span> <span class="n">value</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;to_dict&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">value</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">measured</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="StudentEvaluation.from_dict">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.StudentEvaluation.html#nvalchemi.training.distillation.evaluation.StudentEvaluation.from_dict">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">StudentEvaluation</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild an evaluation, and its measurements, from a :meth:`to_dict` export.</span>
+
+<span class="sd">        An entry taken straight out of :meth:`AcceptanceReport.to_dict` is also</span>
+<span class="sd">        accepted. Its ``verdict`` is dropped, because verdicts are formed from</span>
+<span class="sd">        the thresholds of the report being built, not carried between jobs.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the export, or one of its nested measurements, carries a key the</span>
+<span class="sd">            record does not declare or omits a required one.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rebuilt</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="o">!=</span> <span class="s2">&quot;verdict&quot;</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">metric</span> <span class="ow">in</span> <span class="n">_STUDENT_SECTIONS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">rebuilt</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">metric</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">rebuilt</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">rebuilt</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="AcceptanceThresholds">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AcceptanceThresholds.html#nvalchemi.training.distillation.evaluation.AcceptanceThresholds">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AcceptanceThresholds</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Acceptance bars a student has to clear to be accepted.</span>
+
+<span class="sd">    Every bar defaults to ``None``, which means &quot;do not test this&quot;, except</span>
+<span class="sd">    ``no_divergence``, a flag that defaults to ``False`` with the same</span>
+<span class="sd">    meaning. A bar that is set but has no matching measurement fails the</span>
+<span class="sd">    student; it is never skipped silently. A bar outside the built-in table is</span>
+<span class="sd">    set through ``extra``, keyed by the name of its :class:`AcceptanceBar`.</span>
+<span class="sd">    :func:`build_acceptance_report` refuses an ``extra`` key that its table of</span>
+<span class="sd">    bars does not carry.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import AcceptanceThresholds</span>
+<span class="sd">    &gt;&gt;&gt; thresholds = AcceptanceThresholds(</span>
+<span class="sd">    ...     max_energy_per_atom_mae=0.005,</span>
+<span class="sd">    ...     max_forces_mae=0.05,</span>
+<span class="sd">    ...     max_energy_drift_per_atom_per_ns=0.01,</span>
+<span class="sd">    ...     max_from_scratch_ratio=1.0,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; thresholds.max_from_scratch_ratio</span>
+<span class="sd">    1.0</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">max_energy_per_atom_mae</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Largest accepted energy MAE per atom.&quot;</span><span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_forces_mae</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Largest accepted force MAE per Cartesian component.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_stress_mae</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Largest accepted stress MAE.&quot;</span><span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">min_force_cosine</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">ge</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">le</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Smallest accepted magnitude-weighted cosine similarity between &quot;</span>
+                <span class="s2">&quot;the student&#39;s and the target force fields. It is read off &quot;</span>
+                <span class="s2">&quot;force_cosine_aggregate rather than the per-atom mean, which the &quot;</span>
+                <span class="s2">&quot;holdout&#39;s near-zero forces dominate.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_energy_drift_per_atom_per_ns</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Largest accepted fitted energy drift rate, in eV/atom/ns.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_energy_drift_per_atom_per_step</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Largest accepted energy drift per atom per step.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_momentum_drift</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Largest accepted deviation of a graph&#39;s total momentum. Only &quot;</span>
+                <span class="s2">&quot;meaningful under a momentum-conserving integrator: a stochastic &quot;</span>
+                <span class="s2">&quot;thermostat exchanges momentum with its bath by design.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">no_divergence</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Fail a student whose stability series stopped on a divergence, &quot;</span>
+                <span class="s2">&quot;that is, whose StabilityMetrics carry a first_divergence_step. &quot;</span>
+                <span class="s2">&quot;The drift bars alone cannot catch one: the series ends at the &quot;</span>
+                <span class="s2">&quot;step the monitor&#39;s predicate fired, so they describe the segment &quot;</span>
+                <span class="s2">&quot;before it, which can look perfectly conserved.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">max_extensivity_error_per_atom</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Largest accepted supercell energy-scaling error per atom.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_rdf_jensen_shannon</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">le</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Largest accepted Jensen-Shannon divergence between the student&#39;s &quot;</span>
+                <span class="s2">&quot;and the reference trajectory&#39;s pair-distance histograms. Blind &quot;</span>
+                <span class="s2">&quot;to which species a pair joins unless the compared distributions &quot;</span>
+                <span class="s2">&quot;were themselves resolved to one pair of species.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_from_scratch_ratio</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Largest accepted ratio of the distilled student&#39;s error to the &quot;</span>
+                <span class="s2">&quot;equal-size from-scratch student&#39;s error on the same holdout. The &quot;</span>
+                <span class="s2">&quot;ratio is taken on energy_per_atom_mae, forces_mae, and stress_mae, &quot;</span>
+                <span class="s2">&quot;whichever both carry, and the worst one is kept. A limit of 1.0 &quot;</span>
+                <span class="s2">&quot;demands a match and a limit below 1.0 demands a margin.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">extra</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Limits of custom acceptance bars, keyed by the AcceptanceBar name &quot;</span>
+                <span class="s2">&quot;they are applied under in the table the report is built with.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="AcceptanceBar">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AcceptanceBar.html#nvalchemi.training.distillation.evaluation.AcceptanceBar">[docs]</a>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AcceptanceBar</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Where one acceptance bar reads the number it gates, and which way it passes.</span>
+
+<span class="sd">    An *acceptance bar* is a limit that one number from a student&#39;s</span>
+<span class="sd">    measurements must clear for the student to be accepted. The built-in bars</span>
+<span class="sd">    are :data:`DEFAULT_BARS`. To register a custom bar, pass a table that</span>
+<span class="sd">    includes it to :func:`build_acceptance_report` and :func:`measured_bars`.</span>
+<span class="sd">    Set its limit under its name in ``AcceptanceThresholds.extra``, and file</span>
+<span class="sd">    its number under its family in ``StudentEvaluation.extra``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Name the bar&#39;s limit is set under: a field of</span>
+<span class="sd">        :class:`AcceptanceThresholds` for a built-in bar, or a key of its</span>
+<span class="sd">        ``extra`` for a custom one.</span>
+<span class="sd">    families : tuple[str, ...]</span>
+<span class="sd">        Measurement slots the bar reads. A slot of :class:`StudentEvaluation`</span>
+<span class="sd">        names a typed measurement. ``&quot;extra:&lt;family&gt;&quot;`` names a map of numbers</span>
+<span class="sd">        under ``StudentEvaluation.extra``.</span>
+<span class="sd">    check : str, optional</span>
+<span class="sd">        Row the bar reports under. Unless *attribute* overrides it, this is</span>
+<span class="sd">        also the field or key the bar reads from its first family. Required</span>
+<span class="sd">        for every bar but the built-in from-scratch ratio, which spans two</span>
+<span class="sd">        families and is computed by the report itself. Default ``&quot;&quot;``.</span>
+<span class="sd">    attribute : str, optional</span>
+<span class="sd">        Field or key read when it differs from *check*. Default ``&quot;&quot;``.</span>
+<span class="sd">    comparison : {&quot;&lt;=&quot;, &quot;&gt;=&quot;}, optional</span>
+<span class="sd">        Direction the check passes in. Default ``&quot;&lt;=&quot;``.</span>
+<span class="sd">    quantities : tuple[str, ...], optional</span>
+<span class="sd">        Accuracy quantities, any one of which is enough to decide the bar.</span>
+<span class="sd">        :func:`measured_bars` uses them to narrow its answer. Default ``()``.</span>
+<span class="sd">    missing : str, optional</span>
+<span class="sd">        Detail reported when the family was supplied but the number it reads</span>
+<span class="sd">        was not. Default ``&quot;&quot;``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *name* or *families* is empty, if *check* is empty for any bar but</span>
+<span class="sd">        the from-scratch ratio, if a family is neither a measurement slot nor</span>
+<span class="sd">        an ``&quot;extra:&quot;`` family, or if *comparison* is not ``&quot;&lt;=&quot;`` or</span>
+<span class="sd">        ``&quot;&gt;=&quot;``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import (</span>
+<span class="sd">    ...     DEFAULT_BARS,</span>
+<span class="sd">    ...     AcceptanceBar,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; dipole_bar = AcceptanceBar(</span>
+<span class="sd">    ...     &quot;max_dipole_mae&quot;, (&quot;extra:dipole&quot;,), &quot;dipole_mae&quot;</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; bars = (*DEFAULT_BARS, dipole_bar)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">families</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">check</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">attribute</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">comparison</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span> <span class="s2">&quot;&gt;=&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&lt;=&quot;</span>
+    <span class="n">quantities</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">missing</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject a bar that names nothing, reads nowhere, or passes in no direction.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">families</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;An acceptance bar needs a name and at least one family; got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;name=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">, families=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">families</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">check</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="n">_FROM_SCRATCH_BAR</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Acceptance bar </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> names no field or key to check. Only &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;the built-in </span><span class="si">{</span><span class="n">_FROM_SCRATCH_BAR</span><span class="si">!r}</span><span class="s2">, which the report forms across &quot;</span>
+                <span class="s2">&quot;two families, leaves check empty.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="p">[</span><span class="n">family</span> <span class="k">for</span> <span class="n">family</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">families</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">_is_family</span><span class="p">(</span><span class="n">family</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Acceptance bar </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> reads unknown families </span><span class="si">{</span><span class="n">unknown</span><span class="si">!r}</span><span class="s2">; &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;expected slots from </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">_STUDENT_SECTIONS</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> or &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_EXTRA_FAMILY_PREFIX</span><span class="si">!r}</span><span class="s2"> followed by a family name.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">comparison</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_COMPARISONS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Acceptance bar </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must compare with one of &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_COMPARISONS</span><span class="p">)</span><span class="si">!r}</span><span class="s2">; got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">comparison</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_family</span><span class="p">(</span><span class="n">family</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether *family* names a typed slot or a non-empty extra family.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">family</span> <span class="ow">in</span> <span class="n">_STUDENT_SECTIONS</span> <span class="ow">or</span> <span class="p">(</span>
+        <span class="n">family</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">_EXTRA_FAMILY_PREFIX</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">family</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">_EXTRA_FAMILY_PREFIX</span><span class="p">)</span>
+    <span class="p">)</span>
+
+
+<span class="n">DEFAULT_BARS</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AcceptanceBar</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="s2">&quot;max_energy_per_atom_mae&quot;</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;accuracy&quot;</span><span class="p">,),</span>
+        <span class="s2">&quot;energy_per_atom_mae&quot;</span><span class="p">,</span>
+        <span class="n">quantities</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,),</span>
+        <span class="n">missing</span><span class="o">=</span><span class="s2">&quot;the accuracy pass did not compare energy&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="s2">&quot;max_forces_mae&quot;</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;accuracy&quot;</span><span class="p">,),</span>
+        <span class="s2">&quot;forces_mae&quot;</span><span class="p">,</span>
+        <span class="n">quantities</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">,),</span>
+        <span class="n">missing</span><span class="o">=</span><span class="s2">&quot;the accuracy pass did not compare forces&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="s2">&quot;max_stress_mae&quot;</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;accuracy&quot;</span><span class="p">,),</span>
+        <span class="s2">&quot;stress_mae&quot;</span><span class="p">,</span>
+        <span class="n">quantities</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;stress&quot;</span><span class="p">,),</span>
+        <span class="n">missing</span><span class="o">=</span><span class="s2">&quot;the accuracy pass did not compare stress&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="s2">&quot;min_force_cosine&quot;</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;accuracy&quot;</span><span class="p">,),</span>
+        <span class="s2">&quot;force_cosine_aggregate&quot;</span><span class="p">,</span>
+        <span class="n">comparison</span><span class="o">=</span><span class="s2">&quot;&gt;=&quot;</span><span class="p">,</span>
+        <span class="n">quantities</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">,),</span>
+        <span class="n">missing</span><span class="o">=</span><span class="s2">&quot;the accuracy pass did not compare forces&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="s2">&quot;max_energy_drift_per_atom_per_ns&quot;</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;stability&quot;</span><span class="p">,),</span>
+        <span class="s2">&quot;energy_drift_per_atom_per_ns&quot;</span><span class="p">,</span>
+        <span class="n">missing</span><span class="o">=</span><span class="s2">&quot;the trajectory was recorded without a timestep, so no rate was fitted&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="s2">&quot;max_energy_drift_per_atom_per_step&quot;</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;stability&quot;</span><span class="p">,),</span>
+        <span class="s2">&quot;energy_drift_per_atom_per_step&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span><span class="s2">&quot;max_momentum_drift&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;stability&quot;</span><span class="p">,),</span> <span class="s2">&quot;max_momentum_drift&quot;</span><span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="n">_DIVERGENCE_BAR</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;stability&quot;</span><span class="p">,),</span> <span class="s2">&quot;divergence&quot;</span><span class="p">,</span> <span class="s2">&quot;first_divergence_step&quot;</span>
+    <span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="s2">&quot;max_extensivity_error_per_atom&quot;</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;extensivity&quot;</span><span class="p">,),</span>
+        <span class="s2">&quot;extensivity_error_per_atom&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;max_error_per_atom&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="s2">&quot;max_rdf_jensen_shannon&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;rdf&quot;</span><span class="p">,),</span> <span class="s2">&quot;rdf_jensen_shannon&quot;</span><span class="p">,</span> <span class="s2">&quot;jensen_shannon&quot;</span>
+    <span class="p">),</span>
+    <span class="n">AcceptanceBar</span><span class="p">(</span>
+        <span class="n">_FROM_SCRATCH_BAR</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;accuracy&quot;</span><span class="p">,</span> <span class="s2">&quot;baseline_accuracy&quot;</span><span class="p">),</span>
+        <span class="n">quantities</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">),</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Built-in bars of :class:`AcceptanceThresholds`, in the order they are applied.&quot;&quot;&quot;</span>
+
+<span class="n">BAR_FAMILIES</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">bar</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">bar</span><span class="o">.</span><span class="n">families</span><span class="p">)</span> <span class="k">for</span> <span class="n">bar</span> <span class="ow">in</span> <span class="n">DEFAULT_BARS</span>
+<span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Measurement families each built-in bar reads, keyed by threshold field.&quot;&quot;&quot;</span>
+
+<span class="n">_BUILTIN_BAR_FIELDS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">BAR_FAMILIES</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Threshold fields the built-in bars are set through, as opposed to ``extra``.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="measured_bars">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.measured_bars.html#nvalchemi.training.distillation.evaluation.measured_bars">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">measured_bars</span><span class="p">(</span>
+    <span class="o">*</span><span class="n">families</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">accuracy_quantities</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">AccuracyQuantity</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">bars</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">AcceptanceBar</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_BARS</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the acceptance bars *families* hold enough measurements to decide.</span>
+
+<span class="sd">    A bar counts as measured only when every family it reads was supplied,</span>
+<span class="sd">    because :func:`build_acceptance_report` fails a student on a bar whose</span>
+<span class="sd">    measurement is missing rather than skipping it. ``max_from_scratch_ratio``</span>
+<span class="sd">    therefore needs both ``&quot;accuracy&quot;`` and ``&quot;baseline_accuracy&quot;``.</span>
+<span class="sd">    *accuracy_quantities* narrows the answer further. An accuracy pass fills</span>
+<span class="sd">    only the quantities it compared, so a held-out set scored on energy alone</span>
+<span class="sd">    leaves ``max_forces_mae`` as unfillable as no pass at all. One bar has a</span>
+<span class="sd">    precondition that no argument here can express, and it is reported on the</span>
+<span class="sd">    strength of its family alone: ``max_energy_drift_per_atom_per_ns`` needs a</span>
+<span class="sd">    :class:`~nvalchemi.training.distillation.evaluation.StabilityMonitor` built</span>
+<span class="sd">    with ``timestep_fs``. A check that fails for that reason says so.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    *families : str</span>
+<span class="sd">        Slots of a :class:`StudentEvaluation` the caller fills, or</span>
+<span class="sd">        ``&quot;extra:&lt;family&gt;&quot;`` for a number map under its ``extra``. Naming none</span>
+<span class="sd">        returns an empty set.</span>
+<span class="sd">    accuracy_quantities : Sequence[AccuracyQuantity] | None, optional</span>
+<span class="sd">        Quantities the accuracy pass compared. Default ``None`` (every</span>
+<span class="sd">        quantity).</span>
+<span class="sd">    bars : Sequence[AcceptanceBar], optional</span>
+<span class="sd">        Table of bars to answer for. Default :data:`DEFAULT_BARS`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    frozenset[str]</span>
+<span class="sd">        Names of the bars that may be set: fields of</span>
+<span class="sd">        :class:`AcceptanceThresholds`, or keys of its ``extra``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a name in *families* is not a measurement family the table reads,</span>
+<span class="sd">        or a name in *accuracy_quantities* is not an accuracy quantity.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import measured_bars</span>
+<span class="sd">    &gt;&gt;&gt; sorted(measured_bars(&quot;accuracy&quot;))</span>
+<span class="sd">    [&#39;max_energy_per_atom_mae&#39;, &#39;max_forces_mae&#39;, &#39;max_stress_mae&#39;, &#39;min_force_cosine&#39;]</span>
+<span class="sd">    &gt;&gt;&gt; sorted(measured_bars(&quot;accuracy&quot;, accuracy_quantities=[&quot;energy&quot;]))</span>
+<span class="sd">    [&#39;max_energy_per_atom_mae&#39;]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">supplied</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">families</span><span class="p">)</span>
+    <span class="n">readable</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">_STUDENT_SECTIONS</span><span class="p">)</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="n">bar</span><span class="o">.</span><span class="n">families</span> <span class="k">for</span> <span class="n">bar</span> <span class="ow">in</span> <span class="n">bars</span><span class="p">))</span>
+    <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">supplied</span> <span class="o">-</span> <span class="n">readable</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Unknown measurement families </span><span class="si">{</span><span class="n">unknown</span><span class="si">!r}</span><span class="s2">; expected names from &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">readable</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">known</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">get_args</span><span class="p">(</span><span class="n">AccuracyQuantity</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">accuracy_quantities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">compared</span> <span class="o">=</span> <span class="n">known</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">compared</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">accuracy_quantities</span><span class="p">)</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">compared</span> <span class="o">-</span> <span class="n">known</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unknown accuracy quantities </span><span class="si">{</span><span class="n">unknown</span><span class="si">!r}</span><span class="s2">; expected names from &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">known</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">frozenset</span><span class="p">(</span>
+        <span class="n">bar</span><span class="o">.</span><span class="n">name</span>
+        <span class="k">for</span> <span class="n">bar</span> <span class="ow">in</span> <span class="n">bars</span>
+        <span class="k">if</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">bar</span><span class="o">.</span><span class="n">families</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">supplied</span>
+        <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">bar</span><span class="o">.</span><span class="n">quantities</span> <span class="ow">or</span> <span class="n">compared</span> <span class="o">&amp;</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">bar</span><span class="o">.</span><span class="n">quantities</span><span class="p">))</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="AcceptanceCheck">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AcceptanceCheck.html#nvalchemi.training.distillation.evaluation.AcceptanceCheck">[docs]</a>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AcceptanceCheck</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;One threshold applied to one measurement.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Row label of the check: the bar&#39;s ``check`` name, or</span>
+<span class="sd">        ``&quot;from_scratch_ratio&quot;`` for the baseline bar. It can differ from the</span>
+<span class="sd">        field read, as ``extensivity_error_per_atom`` reads</span>
+<span class="sd">        ``max_error_per_atom``.</span>
+<span class="sd">    value : float | None</span>
+<span class="sd">        Measured value, or ``None`` when the measurement is missing. The</span>
+<span class="sd">        ``divergence`` row reports ``1.0`` when the stability series stopped</span>
+<span class="sd">        on a divergence and ``0.0`` when it never did, against a limit of</span>
+<span class="sd">        ``0.0``.</span>
+<span class="sd">    limit : float | None</span>
+<span class="sd">        Bar the value was compared against.</span>
+<span class="sd">    comparison : {&quot;&lt;=&quot;, &quot;&gt;=&quot;}</span>
+<span class="sd">        Direction the check passes in.</span>
+<span class="sd">    passed : bool</span>
+<span class="sd">        Whether the student cleared the bar.</span>
+<span class="sd">    detail : str</span>
+<span class="sd">        Why a check failed, when the reason is not the number itself.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">comparison</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span> <span class="s2">&quot;&gt;=&quot;</span><span class="p">]</span>
+    <span class="n">passed</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">detail</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+
+<div class="viewcode-block" id="AcceptanceCheck.to_dict">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AcceptanceCheck.html#nvalchemi.training.distillation.evaluation.AcceptanceCheck.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return every field as a plain dictionary.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StudentVerdict">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.StudentVerdict.html#nvalchemi.training.distillation.evaluation.StudentVerdict">[docs]</a>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">StudentVerdict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Outcome of every check applied to one student.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Student the verdict belongs to.</span>
+<span class="sd">    accepted : bool</span>
+<span class="sd">        ``True`` when every check passed. A student with no checks at all is</span>
+<span class="sd">        accepted, since no bar was asked for.</span>
+<span class="sd">    checks : tuple[AcceptanceCheck, ...]</span>
+<span class="sd">        Checks in the order they were applied.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">accepted</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">checks</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AcceptanceCheck</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+
+<div class="viewcode-block" id="StudentVerdict.to_dict">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.StudentVerdict.html#nvalchemi.training.distillation.evaluation.StudentVerdict.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the verdict and its checks as plain dictionaries.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;accepted&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">accepted</span><span class="p">,</span>
+            <span class="s2">&quot;checks&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">check</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">for</span> <span class="n">check</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">checks</span><span class="p">],</span>
+        <span class="p">}</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="AcceptanceReport">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AcceptanceReport.html#nvalchemi.training.distillation.evaluation.AcceptanceReport">[docs]</a>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AcceptanceReport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Verdicts, the student summary, and the exports a workflow logs.</span>
+
+<span class="sd">    The report is a final artifact rather than a stream, so it does not</span>
+<span class="sd">    implement the :class:`~nvalchemi.hooks.Reporter` protocol. Print it to a</span>
+<span class="sd">    :class:`rich.console.Console` for the dashboard view. Pass :meth:`scalars`</span>
+<span class="sd">    to a :class:`~nvalchemi.hooks.TensorBoardReporter`, or to any scalar sink,</span>
+<span class="sd">    for a durable record.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    thresholds : AcceptanceThresholds</span>
+<span class="sd">        Bars the verdicts were formed against.</span>
+<span class="sd">    evaluations : tuple[StudentEvaluation, ...]</span>
+<span class="sd">        Measurements the report was built from, in the order supplied.</span>
+<span class="sd">    verdicts : tuple[StudentVerdict, ...]</span>
+<span class="sd">        One verdict per evaluation, aligned with ``evaluations``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from rich.console import Console</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import (</span>
+<span class="sd">    ...     build_acceptance_report,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; report = build_acceptance_report(evaluations, thresholds)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; Console().print(report)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; report.accepted  # doctest: +SKIP</span>
+<span class="sd">    True</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">thresholds</span><span class="p">:</span> <span class="n">AcceptanceThresholds</span>
+    <span class="n">evaluations</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">StudentEvaluation</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">verdicts</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">StudentVerdict</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">accepted</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether every student cleared every bar it was given.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="n">verdict</span><span class="o">.</span><span class="n">accepted</span> <span class="k">for</span> <span class="n">verdict</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">verdicts</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AcceptanceReport.to_dict">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AcceptanceReport.html#nvalchemi.training.distillation.evaluation.AcceptanceReport.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the whole report as nested plain dictionaries.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;accepted&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">accepted</span><span class="p">,</span>
+            <span class="s2">&quot;thresholds&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">thresholds</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">exclude_none</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="s2">&quot;students&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="n">evaluation</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="o">|</span> <span class="p">{</span><span class="s2">&quot;verdict&quot;</span><span class="p">:</span> <span class="n">verdict</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()}</span>
+                <span class="k">for</span> <span class="n">evaluation</span><span class="p">,</span> <span class="n">verdict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">evaluations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">verdicts</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)</span>
+            <span class="p">],</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="AcceptanceReport.scalars">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AcceptanceReport.html#nvalchemi.training.distillation.evaluation.AcceptanceReport.scalars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">scalars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a flat ``{student/group/metric: value}`` map of every number.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, float]</span>
+<span class="sd">            Numeric metrics only, keyed for a scalar sink such as</span>
+<span class="sd">            :class:`~nvalchemi.hooks.TensorBoardReporter`. Verdicts appear as</span>
+<span class="sd">            ``&lt;student&gt;/accepted`` with value ``1.0`` or ``0.0``. A top-level</span>
+<span class="sd">            number such as ``num_parameters`` appears as</span>
+<span class="sd">            ``&lt;student&gt;/num_parameters``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">flat</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">evaluation</span><span class="p">,</span> <span class="n">verdict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">evaluations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">verdicts</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">flat</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">evaluation</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">/accepted&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">verdict</span><span class="o">.</span><span class="n">accepted</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">group</span><span class="p">,</span> <span class="n">metrics</span> <span class="ow">in</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+                        <span class="n">metrics</span><span class="p">,</span> <span class="nb">bool</span>
+                    <span class="p">):</span>
+                        <span class="n">flat</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">evaluation</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                        <span class="k">for</span> <span class="n">inner</span><span class="p">,</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="n">flat</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">evaluation</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">inner</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span>
+                                <span class="n">number</span>
+                            <span class="p">)</span>
+                    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+                        <span class="n">value</span><span class="p">,</span> <span class="nb">bool</span>
+                    <span class="p">):</span>
+                        <span class="n">flat</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">evaluation</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">flat</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__rich__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Group</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Render the verdict and summary tables as one renderable.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">Group</span><span class="p">(</span><span class="n">_verdict_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">verdicts</span><span class="p">),</span> <span class="n">_summary_table</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_format</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a compact cell for an optional number.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_MISSING</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">value</span><span class="si">:</span><span class="s2">.4g</span><span class="si">}</span><span class="s2">&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_finite</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether *value* is a number a bar can be decided from.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check</span><span class="p">(</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">comparison</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span> <span class="s2">&quot;&gt;=&quot;</span><span class="p">],</span>
+    <span class="n">detail</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">missing</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;not measured&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AcceptanceCheck</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the check for one bar, or ``None`` when no bar was set.</span>
+
+<span class="sd">    A missing measurement reports *missing*, a measured value carries *detail*,</span>
+<span class="sd">    and a non-finite value fails on ``&quot;not finite&quot;``: a NaN would read as an</span>
+<span class="sd">    ordinary miss, ``-inf`` would pass every ``max_*`` bar, and ``+inf`` every</span>
+<span class="sd">    ``min_*`` bar.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">limit</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_finite</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">AcceptanceCheck</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
+            <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">,</span>
+            <span class="n">comparison</span><span class="o">=</span><span class="n">comparison</span><span class="p">,</span>
+            <span class="n">passed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="n">missing</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;not finite&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">passed</span> <span class="o">=</span> <span class="n">value</span> <span class="o">&lt;=</span> <span class="n">limit</span> <span class="k">if</span> <span class="n">comparison</span> <span class="o">==</span> <span class="s2">&quot;&lt;=&quot;</span> <span class="k">else</span> <span class="n">value</span> <span class="o">&gt;=</span> <span class="n">limit</span>
+    <span class="k">return</span> <span class="n">AcceptanceCheck</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
+        <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">,</span>
+        <span class="n">comparison</span><span class="o">=</span><span class="n">comparison</span><span class="p">,</span>
+        <span class="n">passed</span><span class="o">=</span><span class="n">passed</span><span class="p">,</span>
+        <span class="n">detail</span><span class="o">=</span><span class="n">detail</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_baseline_check</span><span class="p">(</span>
+    <span class="n">evaluation</span><span class="p">:</span> <span class="n">StudentEvaluation</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AcceptanceCheck</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the from-scratch check: the student must match or beat its baseline.</span>
+
+<span class="sd">    The ratio is taken on ``energy_per_atom_mae``, ``forces_mae``, and</span>
+<span class="sd">    ``stress_mae``, whichever both carry, and the worst one is kept. A</span>
+<span class="sd">    baseline scored on a different number of graphs or atoms fails this</span>
+<span class="sd">    student&#39;s own check, not the report for the whole family. A baseline error</span>
+<span class="sd">    of exactly zero is unbeatable: a matching student ties at ``1.0``, and any</span>
+<span class="sd">    error fails at infinity. A non-finite error on either side yields no ratio</span>
+<span class="sd">    at all.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">limit</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">baseline</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">baseline_accuracy</span>
+    <span class="k">if</span> <span class="n">baseline</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">AcceptanceCheck</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;from_scratch_ratio&quot;</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">,</span>
+            <span class="n">comparison</span><span class="o">=</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span>
+            <span class="n">passed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;no from-scratch baseline supplied&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">student_workload</span> <span class="o">=</span> <span class="p">(</span><span class="n">evaluation</span><span class="o">.</span><span class="n">accuracy</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">accuracy</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">)</span>
+    <span class="n">baseline_workload</span> <span class="o">=</span> <span class="p">(</span><span class="n">baseline</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">baseline</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">student_workload</span> <span class="o">!=</span> <span class="n">baseline_workload</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">AcceptanceCheck</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;from_scratch_ratio&quot;</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">,</span>
+            <span class="n">comparison</span><span class="o">=</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span>
+            <span class="n">passed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;baseline scored </span><span class="si">{</span><span class="n">baseline_workload</span><span class="si">!r}</span><span class="s2"> against the student&#39;s &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">student_workload</span><span class="si">!r}</span><span class="s2"> as (graphs, atoms)&quot;</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+    <span class="n">ratios</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;energy_per_atom_mae&quot;</span><span class="p">,</span> <span class="s2">&quot;forces_mae&quot;</span><span class="p">,</span> <span class="s2">&quot;stress_mae&quot;</span><span class="p">):</span>
+        <span class="n">error</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">evaluation</span><span class="o">.</span><span class="n">accuracy</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span>
+        <span class="n">reference</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">baseline</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">error</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">reference</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_finite</span><span class="p">(</span><span class="n">error</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">_finite</span><span class="p">(</span><span class="n">reference</span><span class="p">):</span>
+            <span class="n">ratios</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">nan</span>
+        <span class="k">elif</span> <span class="n">reference</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">ratios</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="k">if</span> <span class="n">error</span> <span class="o">==</span> <span class="mf">0.0</span> <span class="k">else</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ratios</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">error</span> <span class="o">/</span> <span class="n">reference</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ratios</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">AcceptanceCheck</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;from_scratch_ratio&quot;</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">,</span>
+            <span class="n">comparison</span><span class="o">=</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span>
+            <span class="n">passed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;baseline shares no comparable accuracy metric&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">unusable</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">field</span> <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">ratio</span> <span class="ow">in</span> <span class="n">ratios</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">ratio</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">unusable</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">AcceptanceCheck</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;from_scratch_ratio&quot;</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span>
+            <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">,</span>
+            <span class="n">comparison</span><span class="o">=</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span>
+            <span class="n">passed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;no finite ratio for </span><span class="si">{</span><span class="n">unusable</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">worst</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">ratios</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">AcceptanceCheck</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;from_scratch_ratio&quot;</span><span class="p">,</span>
+        <span class="n">value</span><span class="o">=</span><span class="n">worst</span><span class="p">,</span>
+        <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">,</span>
+        <span class="n">comparison</span><span class="o">=</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span>
+        <span class="n">passed</span><span class="o">=</span><span class="n">worst</span> <span class="o">&lt;=</span> <span class="n">limit</span><span class="p">,</span>
+        <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;worst error ratio against the equal-size from-scratch student&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_divergence_check</span><span class="p">(</span>
+    <span class="n">evaluation</span><span class="p">:</span> <span class="n">StudentEvaluation</span><span class="p">,</span> <span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AcceptanceCheck</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the divergence check: a series that stopped on a divergence fails.</span>
+
+<span class="sd">    The flag is reported as a number so the row reads like any maximum: ``1.0``</span>
+<span class="sd">    when :class:`~nvalchemi.dynamics.hooks.StabilityMetrics` carry a</span>
+<span class="sd">    ``first_divergence_step`` and ``0.0`` when they do not, against a limit of</span>
+<span class="sd">    ``0.0``. Like every bar, it fails a student with no stability record.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">enabled</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">stability</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">stability</span>
+    <span class="k">if</span> <span class="n">stability</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">AcceptanceCheck</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;divergence&quot;</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">limit</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">comparison</span><span class="o">=</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span>
+            <span class="n">passed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;not measured&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="n">stability</span><span class="o">.</span><span class="n">first_divergence_step</span>
+    <span class="k">return</span> <span class="n">AcceptanceCheck</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;divergence&quot;</span><span class="p">,</span>
+        <span class="n">value</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">step</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="n">limit</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">comparison</span><span class="o">=</span><span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span>
+        <span class="n">passed</span><span class="o">=</span><span class="n">step</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;&quot;</span> <span class="k">if</span> <span class="n">step</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;a graph diverged at step </span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rdf_detail</span><span class="p">(</span><span class="n">comparison</span><span class="p">:</span> <span class="n">RDFComparison</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return which pair distribution an RDF bar was measured over.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">comparison</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">comparison</span><span class="o">.</span><span class="n">pair</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;species-blind total g(r)&quot;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;partial g(r) of atomic numbers </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">comparison</span><span class="o">.</span><span class="n">pair</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span><span class="n">thresholds</span><span class="p">:</span> <span class="n">AcceptanceThresholds</span><span class="p">,</span> <span class="n">bar</span><span class="p">:</span> <span class="n">AcceptanceBar</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the limit set for *bar*: its own field, else its ``extra`` entry.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">bar</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">_BUILTIN_BAR_FIELDS</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">thresholds</span><span class="p">,</span> <span class="n">bar</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">thresholds</span><span class="o">.</span><span class="n">extra</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">bar</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_family_metrics</span><span class="p">(</span><span class="n">evaluation</span><span class="p">:</span> <span class="n">StudentEvaluation</span><span class="p">,</span> <span class="n">family</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the measurement *family* names on *evaluation*, or ``None``.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">family</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">_EXTRA_FAMILY_PREFIX</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">extra</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">family</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">_EXTRA_FAMILY_PREFIX</span><span class="p">)</span> <span class="p">:])</span>
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">evaluation</span><span class="p">,</span> <span class="n">family</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_read</span><span class="p">(</span><span class="n">metrics</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">attribute</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return *attribute* off a typed measurement or out of a number map.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">metrics</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">attribute</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="n">attribute</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_student_checks</span><span class="p">(</span>
+    <span class="n">evaluation</span><span class="p">:</span> <span class="n">StudentEvaluation</span><span class="p">,</span>
+    <span class="n">thresholds</span><span class="p">:</span> <span class="n">AcceptanceThresholds</span><span class="p">,</span>
+    <span class="n">bars</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">AcceptanceBar</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AcceptanceCheck</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Apply every bar of *bars* that *thresholds* sets to one student.</span>
+
+<span class="sd">    Each bar reads its measurement through its first family. A bar absent from</span>
+<span class="sd">    *bars* is neither applied nor reported. A bar whose family was measured but</span>
+<span class="sd">    whose own number was not reports which quantity or timestep was missing.</span>
+<span class="sd">    Two built-in bars are formed by the report rather than read: the</span>
+<span class="sd">    from-scratch ratio, which :func:`_baseline_check` takes across two</span>
+<span class="sd">    families, and the divergence flag, which :func:`_divergence_check` reads</span>
+<span class="sd">    off the stability record.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">candidates</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">bar</span> <span class="ow">in</span> <span class="n">bars</span><span class="p">:</span>
+        <span class="n">limit</span> <span class="o">=</span> <span class="n">_limit</span><span class="p">(</span><span class="n">thresholds</span><span class="p">,</span> <span class="n">bar</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">bar</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">_FROM_SCRATCH_BAR</span><span class="p">:</span>
+            <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_baseline_check</span><span class="p">(</span><span class="n">evaluation</span><span class="p">,</span> <span class="n">limit</span><span class="p">))</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">bar</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">_DIVERGENCE_BAR</span><span class="p">:</span>
+            <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_divergence_check</span><span class="p">(</span><span class="n">evaluation</span><span class="p">,</span> <span class="nb">bool</span><span class="p">(</span><span class="n">limit</span><span class="p">)))</span>
+            <span class="k">continue</span>
+        <span class="n">family</span> <span class="o">=</span> <span class="n">bar</span><span class="o">.</span><span class="n">families</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">metrics</span> <span class="o">=</span> <span class="n">_family_metrics</span><span class="p">(</span><span class="n">evaluation</span><span class="p">,</span> <span class="n">family</span><span class="p">)</span>
+        <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">_check</span><span class="p">(</span>
+                <span class="n">bar</span><span class="o">.</span><span class="n">check</span><span class="p">,</span>
+                <span class="kc">None</span> <span class="k">if</span> <span class="n">metrics</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_read</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="n">bar</span><span class="o">.</span><span class="n">attribute</span> <span class="ow">or</span> <span class="n">bar</span><span class="o">.</span><span class="n">check</span><span class="p">),</span>
+                <span class="n">limit</span><span class="p">,</span>
+                <span class="n">bar</span><span class="o">.</span><span class="n">comparison</span><span class="p">,</span>
+                <span class="n">_rdf_detail</span><span class="p">(</span><span class="n">evaluation</span><span class="o">.</span><span class="n">rdf</span><span class="p">)</span> <span class="k">if</span> <span class="n">family</span> <span class="o">==</span> <span class="s2">&quot;rdf&quot;</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;not measured&quot;</span> <span class="k">if</span> <span class="n">metrics</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">bar</span><span class="o">.</span><span class="n">missing</span> <span class="ow">or</span> <span class="s2">&quot;not measured&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">check</span> <span class="k">for</span> <span class="n">check</span> <span class="ow">in</span> <span class="n">candidates</span> <span class="k">if</span> <span class="n">check</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_verdict_table</span><span class="p">(</span><span class="n">verdicts</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">StudentVerdict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Table</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the per-check verdict table.&quot;&quot;&quot;</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Acceptance&quot;</span><span class="p">,</span> <span class="n">box</span><span class="o">=</span><span class="n">box</span><span class="o">.</span><span class="n">SIMPLE_HEAD</span><span class="p">,</span> <span class="n">expand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;Student&quot;</span><span class="p">,</span> <span class="s2">&quot;Check&quot;</span><span class="p">,</span> <span class="s2">&quot;Value&quot;</span><span class="p">,</span> <span class="s2">&quot;Bar&quot;</span><span class="p">,</span> <span class="s2">&quot;Result&quot;</span><span class="p">):</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">verdict</span> <span class="ow">in</span> <span class="n">verdicts</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">verdict</span><span class="o">.</span><span class="n">checks</span><span class="p">:</span>
+            <span class="n">table</span><span class="o">.</span><span class="n">add_row</span><span class="p">(</span><span class="n">verdict</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;no bars set&quot;</span><span class="p">,</span> <span class="n">_MISSING</span><span class="p">,</span> <span class="n">_MISSING</span><span class="p">,</span> <span class="s2">&quot;ACCEPT&quot;</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">check</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">verdict</span><span class="o">.</span><span class="n">checks</span><span class="p">):</span>
+            <span class="n">table</span><span class="o">.</span><span class="n">add_row</span><span class="p">(</span>
+                <span class="n">verdict</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="n">check</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">check</span><span class="o">.</span><span class="n">detail</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">check</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">check</span><span class="o">.</span><span class="n">detail</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span>
+                <span class="n">_format</span><span class="p">(</span><span class="n">check</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">check</span><span class="o">.</span><span class="n">comparison</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">_format</span><span class="p">(</span><span class="n">check</span><span class="o">.</span><span class="n">limit</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;pass&quot;</span> <span class="k">if</span> <span class="n">check</span><span class="o">.</span><span class="n">passed</span> <span class="k">else</span> <span class="s2">&quot;FAIL&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="n">table</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_summary_table</span><span class="p">(</span><span class="n">report</span><span class="p">:</span> <span class="n">AcceptanceReport</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Table</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the one-row-per-student summary across the family.</span>
+
+<span class="sd">    The verdict column cannot wrap, so a narrow console abbreviates a header</span>
+<span class="sd">    rather than truncating the ``ACCEPT`` or ``REJECT`` the reader is looking</span>
+<span class="sd">    for.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Students&quot;</span><span class="p">,</span> <span class="n">box</span><span class="o">=</span><span class="n">box</span><span class="o">.</span><span class="n">SIMPLE_HEAD</span><span class="p">,</span> <span class="n">expand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;Student&quot;</span><span class="p">,</span> <span class="s2">&quot;Params&quot;</span><span class="p">,</span> <span class="s2">&quot;E/atom MAE&quot;</span><span class="p">,</span> <span class="s2">&quot;F MAE&quot;</span><span class="p">):</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+    <span class="n">table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="s2">&quot;Verdict&quot;</span><span class="p">,</span> <span class="n">no_wrap</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">evaluation</span><span class="p">,</span> <span class="n">verdict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">evaluations</span><span class="p">,</span> <span class="n">report</span><span class="o">.</span><span class="n">verdicts</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">add_row</span><span class="p">(</span>
+            <span class="n">evaluation</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">_MISSING</span>
+            <span class="k">if</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">num_parameters</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">evaluation</span><span class="o">.</span><span class="n">num_parameters</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">_format</span><span class="p">(</span><span class="n">evaluation</span><span class="o">.</span><span class="n">accuracy</span><span class="o">.</span><span class="n">energy_per_atom_mae</span><span class="p">),</span>
+            <span class="n">_format</span><span class="p">(</span><span class="n">evaluation</span><span class="o">.</span><span class="n">accuracy</span><span class="o">.</span><span class="n">forces_mae</span><span class="p">),</span>
+            <span class="s2">&quot;ACCEPT&quot;</span> <span class="k">if</span> <span class="n">verdict</span><span class="o">.</span><span class="n">accepted</span> <span class="k">else</span> <span class="s2">&quot;REJECT&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">table</span>
+
+
+<div class="viewcode-block" id="build_acceptance_report">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.build_acceptance_report.html#nvalchemi.training.distillation.evaluation.build_acceptance_report">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_acceptance_report</span><span class="p">(</span>
+    <span class="n">evaluations</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">StudentEvaluation</span><span class="p">],</span>
+    <span class="n">thresholds</span><span class="p">:</span> <span class="n">AcceptanceThresholds</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">bars</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">AcceptanceBar</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_BARS</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AcceptanceReport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Turn a family of student evaluations into verdicts.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    evaluations : Sequence[StudentEvaluation]</span>
+<span class="sd">        One evaluation per candidate student. Names must be unique, since they</span>
+<span class="sd">        key the report&#39;s exports.</span>
+<span class="sd">    thresholds : AcceptanceThresholds | None, optional</span>
+<span class="sd">        Bars to apply. Default ``None`` (no bars: every student is accepted and</span>
+<span class="sd">        the report is a comparison table).</span>
+<span class="sd">    bars : Sequence[AcceptanceBar], optional</span>
+<span class="sd">        Table of bars to apply. Extend :data:`DEFAULT_BARS` to gate a</span>
+<span class="sd">        measurement filed under ``StudentEvaluation.extra``. Default</span>
+<span class="sd">        :data:`DEFAULT_BARS`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    AcceptanceReport</span>
+<span class="sd">        Verdicts aligned with *evaluations*.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *evaluations* is empty, or two students share a name. If two</span>
+<span class="sd">        entries of *bars* share a name. If ``thresholds.extra`` sets a limit</span>
+<span class="sd">        for a bar that the table does not carry, or for a built-in bar that is</span>
+<span class="sd">        set through its own field. If the students were not all scored on the</span>
+<span class="sd">        same held-out set.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import (</span>
+<span class="sd">    ...     AcceptanceThresholds,</span>
+<span class="sd">    ...     StudentEvaluation,</span>
+<span class="sd">    ...     build_acceptance_report,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; report = build_acceptance_report(  # doctest: +SKIP</span>
+<span class="sd">    ...     [StudentEvaluation(name=&quot;student-s&quot;, accuracy=metrics)],</span>
+<span class="sd">    ...     AcceptanceThresholds(max_forces_mae=0.05),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; report.accepted  # doctest: +SKIP</span>
+<span class="sd">    True</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">evaluations</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;At least one student evaluation is required to report on.&quot;</span><span class="p">)</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">evaluation</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">evaluation</span> <span class="ow">in</span> <span class="n">evaluations</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">names</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Student names must be unique; got </span><span class="si">{</span><span class="n">names</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+    <span class="n">resolved</span> <span class="o">=</span> <span class="n">thresholds</span> <span class="k">if</span> <span class="n">thresholds</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">AcceptanceThresholds</span><span class="p">()</span>
+    <span class="n">bar_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">bar</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">bar</span> <span class="ow">in</span> <span class="n">bars</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">bar_names</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">bar_names</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Acceptance bar names must be unique; got </span><span class="si">{</span><span class="n">bar_names</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+    <span class="n">custom</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">bar_names</span><span class="p">)</span> <span class="o">-</span> <span class="n">_BUILTIN_BAR_FIELDS</span>
+    <span class="n">unplaced</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">resolved</span><span class="o">.</span><span class="n">extra</span><span class="p">)</span> <span class="o">-</span> <span class="n">custom</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">unplaced</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;AcceptanceThresholds.extra sets </span><span class="si">{</span><span class="n">unplaced</span><span class="si">!r}</span><span class="s2">, but the table applies &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;custom bars </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">custom</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> only; a built-in bar is set through &quot;</span>
+            <span class="s2">&quot;its own field, and a custom one needs its AcceptanceBar in bars.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">holdouts</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">(</span><span class="n">evaluation</span><span class="o">.</span><span class="n">accuracy</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">accuracy</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">evaluation</span> <span class="ow">in</span> <span class="n">evaluations</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">holdouts</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Students were scored on different holdouts </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">holdouts</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> as &quot;</span>
+            <span class="s2">&quot;(num_graphs, num_atoms). Errors are comparable only across students &quot;</span>
+            <span class="s2">&quot;scored on one holdout. Re-run evaluate_accuracy for every student &quot;</span>
+            <span class="s2">&quot;over the same held-out data.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">verdicts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">evaluation</span> <span class="ow">in</span> <span class="n">evaluations</span><span class="p">:</span>
+        <span class="n">checks</span> <span class="o">=</span> <span class="n">_student_checks</span><span class="p">(</span><span class="n">evaluation</span><span class="p">,</span> <span class="n">resolved</span><span class="p">,</span> <span class="n">bars</span><span class="p">)</span>
+        <span class="n">verdicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">StudentVerdict</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">evaluation</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="n">accepted</span><span class="o">=</span><span class="nb">all</span><span class="p">(</span><span class="n">check</span><span class="o">.</span><span class="n">passed</span> <span class="k">for</span> <span class="n">check</span> <span class="ow">in</span> <span class="n">checks</span><span class="p">),</span>
+                <span class="n">checks</span><span class="o">=</span><span class="n">checks</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">AcceptanceReport</span><span class="p">(</span>
+        <span class="n">thresholds</span><span class="o">=</span><span class="n">resolved</span><span class="p">,</span>
+        <span class="n">evaluations</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">evaluations</span><span class="p">),</span>
+        <span class="n">verdicts</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">verdicts</span><span class="p">),</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.evaluation.AccuracyQuantity
+===========================================================
+
+.. currentmodule:: nvalchemi.training.distillation.evaluation
+
+.. autodata:: AccuracyQuantity

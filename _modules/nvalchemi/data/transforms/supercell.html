@@ -1,0 +1,684 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.data.transforms.supercell &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/transforms/supercell';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.da...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.data.transforms.supercell</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Supercell construction with ASE ``repeat`` semantics for :class:`AtomicData`.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numbers</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Collection</span><span class="p">,</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.atomic_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;DEFAULT_EXTENSIVE_SYSTEM_KEYS&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DEFAULT_INTENSIVE_SYSTEM_KEYS&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;make_supercell&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">DEFAULT_EXTENSIVE_SYSTEM_KEYS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;charge&quot;</span><span class="p">,</span> <span class="s2">&quot;dipole&quot;</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;virial&quot;</span><span class="p">}</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;System-level fields a k-fold supercell carries k times over.&quot;&quot;&quot;</span>
+
+<span class="n">DEFAULT_INTENSIVE_SYSTEM_KEYS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;pbc&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">})</span>
+<span class="sd">&quot;&quot;&quot;System-level fields a supercell carries unchanged.&quot;&quot;&quot;</span>
+
+<span class="n">_DENSE_NEIGHBOR_KEYS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">,</span> <span class="s2">&quot;neighbor_matrix_shifts&quot;</span><span class="p">,</span> <span class="s2">&quot;num_neighbors&quot;</span><span class="p">}</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Node-level neighbor tensors whose indices point into the cell they were built on.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="make_supercell">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.transforms.make_supercell.html#nvalchemi.data.transforms.make_supercell">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">make_supercell</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span><span class="p">,</span>
+    <span class="n">repeats</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">extensive_keys</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_EXTENSIVE_SYSTEM_KEYS</span><span class="p">,</span>
+    <span class="n">intensive_keys</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_INTENSIVE_SYSTEM_KEYS</span><span class="p">,</span>
+    <span class="n">drop_keys</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return *data* tiled ``repeats`` times along each lattice vector.</span>
+
+<span class="sd">    The tiling follows :meth:`ase.Atoms.repeat`. Copies are laid out</span>
+<span class="sd">    copy-major, with the first lattice vector&#39;s index running slowest. Each</span>
+<span class="sd">    copy is offset by an integer combination of the lattice vectors, and the</span>
+<span class="sd">    cell is scaled along each axis. Node-level fields are repeated with the</span>
+<span class="sd">    positions, so every atom of a copy keeps the field value of the site it</span>
+<span class="sd">    came from. A system-level field is multiplied by the copy count when it is</span>
+<span class="sd">    in *extensive_keys*, carried unchanged when it is in *intensive_keys*, and</span>
+<span class="sd">    refused otherwise. An unclassified field is refused because a supercell</span>
+<span class="sd">    scored under a field that does not scale with it would report the mismatch</span>
+<span class="sd">    as the model&#39;s error. Edge-level fields, the dense neighbor tensors</span>
+<span class="sd">    (``neighbor_matrix``, ``neighbor_matrix_shifts``, ``num_neighbors``), and</span>
+<span class="sd">    any field in *drop_keys* are left out for the consumer to rebuild: a</span>
+<span class="sd">    neighbor index copied into another cell would still point into the first.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data : AtomicData</span>
+<span class="sd">        Periodic structure to replicate, left unmodified.</span>
+<span class="sd">    repeats : Sequence[int]</span>
+<span class="sd">        Three positive replication factors along the lattice vectors. An</span>
+<span class="sd">        integral float or a one-element tensor is accepted as a count; a</span>
+<span class="sd">        fractional value is refused rather than truncated.</span>
+<span class="sd">    extensive_keys : Collection[str], optional</span>
+<span class="sd">        System-level fields multiplied by the copy count. Default</span>
+<span class="sd">        :data:`DEFAULT_EXTENSIVE_SYSTEM_KEYS`.</span>
+<span class="sd">    intensive_keys : Collection[str], optional</span>
+<span class="sd">        System-level fields carried unchanged. Default</span>
+<span class="sd">        :data:`DEFAULT_INTENSIVE_SYSTEM_KEYS`.</span>
+<span class="sd">    drop_keys : Collection[str], optional</span>
+<span class="sd">        Node- or system-level fields left out of the supercell. Default</span>
+<span class="sd">        ``()``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    AtomicData</span>
+<span class="sd">        The supercell, carrying every field of *data* the tiling defines.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *repeats* is not three positive integers, if *data* carries no</span>
+<span class="sd">        cell, or if a system-level field is in neither *extensive_keys* nor</span>
+<span class="sd">        *intensive_keys* and not dropped.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import torch</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.data import AtomicData</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.data.transforms import make_supercell</span>
+<span class="sd">    &gt;&gt;&gt; data = AtomicData(</span>
+<span class="sd">    ...     positions=torch.zeros(1, 3),</span>
+<span class="sd">    ...     atomic_numbers=torch.tensor([18]),</span>
+<span class="sd">    ...     cell=torch.eye(3).unsqueeze(0) * 4.0,</span>
+<span class="sd">    ...     pbc=torch.tensor([[True, True, True]]),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; supercell = make_supercell(data, (2, 1, 1))</span>
+<span class="sd">    &gt;&gt;&gt; supercell.positions</span>
+<span class="sd">    tensor([[0., 0., 0.],</span>
+<span class="sd">            [4., 0., 0.]])</span>
+<span class="sd">    &gt;&gt;&gt; supercell.cell[0, 0]</span>
+<span class="sd">    tensor([8., 0., 0.])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">factors</span> <span class="o">=</span> <span class="n">_resolve_repeats</span><span class="p">(</span><span class="n">repeats</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">cell</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;A supercell needs a periodic structure; the data carries no cell.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">cell</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">factors</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">cell</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cell</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">offsets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">cell</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cell</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">@</span> <span class="n">cell</span>
+            <span class="k">for</span> <span class="n">image</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">product</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">count</span><span class="p">)</span> <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">factors</span><span class="p">))</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">copies</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">offsets</span><span class="p">)</span>
+    <span class="n">dropped</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">drop_keys</span><span class="p">)</span>
+    <span class="n">node_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">__node_keys__</span><span class="p">)</span> <span class="o">-</span> <span class="n">dropped</span> <span class="o">-</span> <span class="n">_DENSE_NEIGHBOR_KEYS</span>
+    <span class="n">system_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">__system_keys__</span><span class="p">)</span> <span class="o">-</span> <span class="n">dropped</span> <span class="o">-</span> <span class="p">{</span><span class="s2">&quot;cell&quot;</span><span class="p">}</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;positions&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="n">offsets</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+            <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;cell&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">cell</span> <span class="o">*</span> <span class="n">scale</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">node_keys</span> <span class="o">-</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">}):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">repeat</span><span class="p">((</span><span class="n">copies</span><span class="p">,)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">undefined</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">system_keys</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">extensive_keys</span><span class="p">:</span>
+            <span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span> <span class="o">*</span> <span class="n">copies</span>
+        <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">intensive_keys</span><span class="p">:</span>
+            <span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">undefined</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">undefined</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Replicating a structure carrying the system fields </span><span class="si">{</span><span class="n">undefined</span><span class="si">!r}</span><span class="s2"> is &quot;</span>
+            <span class="s2">&quot;not defined: name each in extensive_keys to multiply it by the copy &quot;</span>
+            <span class="s2">&quot;count, in intensive_keys to carry it unchanged, or in drop_keys to &quot;</span>
+            <span class="s2">&quot;leave it out of the supercell.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">declared</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">model_fields</span><span class="p">)</span>
+    <span class="n">supercell</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">fields</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">})</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span> <span class="o">-</span> <span class="n">declared</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">node_keys</span><span class="p">:</span>
+            <span class="n">supercell</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">supercell</span><span class="o">.</span><span class="n">add_system_property</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">supercell</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_repeats</span><span class="p">(</span><span class="n">repeats</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return *repeats* as three positive ints, refusing a fractional count.</span>
+
+<span class="sd">    The check runs before any conversion, so ``(1.5, 1, 1)`` is refused rather</span>
+<span class="sd">    than tiled as ``(1, 1, 1)``. A one-element tensor is read through</span>
+<span class="sd">    ``item()`` and an integral float is accepted.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">count</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">count</span> <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">repeats</span>
+    <span class="p">]</span>
+    <span class="n">integral</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span>
+        <span class="nb">isinstance</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">numbers</span><span class="o">.</span><span class="n">Real</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="nb">float</span><span class="p">(</span><span class="n">count</span><span class="p">)</span><span class="o">.</span><span class="n">is_integer</span><span class="p">()</span>
+        <span class="ow">and</span> <span class="n">count</span> <span class="o">&gt;=</span> <span class="mi">1</span>
+        <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">counts</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">integral</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;repeats must be three positive integers; got </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">repeats</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">counts</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">counts</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">counts</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

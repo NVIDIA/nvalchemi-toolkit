@@ -1,0 +1,6 @@
+﻿nvalchemi.distributed.collective\_error\_sync
+=============================================
+
+.. currentmodule:: nvalchemi.distributed
+
+.. autofunction:: collective_error_sync

@@ -1,0 +1,6 @@
+﻿nvalchemi.dynamics.hooks.kinetic\_energy\_per\_graph
+====================================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autofunction:: kinetic_energy_per_graph

@@ -357,16 +357,16 @@ Results — combined energy and temperature
 
       step     energy (eV)   temperature (K)
     ------------------------------------------
-         0       -303.1090            331.67
-        20       -303.0791            251.31
-        40       -303.0556            281.06
-        60       -303.0457            330.49
-        80       -303.0424            289.04
-       100       -303.0304            339.98
-       120       -303.0308            324.50
-       140       -303.0172            276.73
-       160       -303.0210            274.19
-       180       -302.9941            289.33
+         0       -303.1089            331.67
+        20       -303.0790            251.31
+        40       -303.0555            281.06
+        60       -303.0456            330.49
+        80       -303.0423            289.04
+       100       -303.0303            339.98
+       120       -303.0306            324.50
+       140       -303.0171            276.73
+       160       -303.0209            274.19
+       180       -302.9940            289.33
 
 
 
@@ -475,7 +475,7 @@ Optional plot — energy vs step
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.834 seconds)
+   **Total running time of the script:** (0 minutes 0.817 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_07_composable_model_composition.py:

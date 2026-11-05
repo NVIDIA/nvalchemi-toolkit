@@ -35,7 +35,7 @@ communication buffers:
              fontname="Helvetica", fontsize=11];
        edge [fontname="Helvetica", fontsize=10];
 
-       rank0 [label="Rank 0: FIRE\n(upstream)"];
+       rank0 [label="Rank 0: FIRE2\n(upstream)"];
        rank1 [label="Rank 1: Langevin\n(downstream + sink)"];
 
        rank0 -> rank1 [label="NCCL"];
@@ -56,7 +56,7 @@ Key concepts:
 Running the Examples
 --------------------
 
-**01 — Parallel FIRE → Langevin** (4 GPUs required):
+**01 — Parallel FIRE2 → Langevin** (4 GPUs required):
 
 .. code-block:: bash
 
@@ -78,7 +78,7 @@ Example Descriptions
 --------------------
 
 **01 — Distributed Pipeline**
-   Two independent FIRE → NVTLangevin sub-pipelines running on 4 GPUs.
+   Two independent FIRE2 → NVTLangevin sub-pipelines running on 4 GPUs.
    Demonstrates DistributedPipeline wiring, BufferConfig, and HostMemory sinks.
 
 **02 — Distributed Monitoring**
@@ -174,7 +174,7 @@ See ``benchmark/distributed/README.md``.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example orchestrates two independent FIRE → NVTLangevin pipelines running in parallel across 4 GPUs using DistributedPipeline.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example orchestrates two independent FIRE2 → NVTLangevin pipelines running in parallel across 4 GPUs using DistributedPipeline.">
 
 .. only:: html
 
@@ -185,13 +185,13 @@ See ``benchmark/distributed/README.md``.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</div>
+      <div class="sphx-glr-thumbnail-title">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Building on 01_distributed_pipeline, this example adds comprehensive observability to the FIRE → NVTLangevin topology:">
+    <div class="sphx-glr-thumbcontainer" tooltip="Building on 01_distributed_pipeline, this example adds comprehensive observability to the FIRE2 → NVTLangevin topology:">
 
 .. only:: html
 

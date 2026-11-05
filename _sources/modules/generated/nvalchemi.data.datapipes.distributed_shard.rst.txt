@@ -1,0 +1,6 @@
+﻿nvalchemi.data.datapipes.distributed\_shard
+===========================================
+
+.. currentmodule:: nvalchemi.data.datapipes
+
+.. autofunction:: distributed_shard

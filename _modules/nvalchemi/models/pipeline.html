@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.models.pipeline &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.models.pipeline &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/models/pipeline';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -452,7 +452,7 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
@@ -469,6 +469,11 @@ document.write(`
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hook</span><span class="p">,</span> <span class="n">NeighborListHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._derivatives</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DerivativeNotSupported</span><span class="p">,</span>
+    <span class="n">_DerivativeRequest</span><span class="p">,</span>
+    <span class="n">_temporary_model_config</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._ops.neighbor_filter</span><span class="w"> </span><span class="kn">import</span> <span class="n">prepare_neighbors_for_model</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">autograd_forces</span><span class="p">,</span>
@@ -1130,10 +1135,155 @@ document.write(`
                     <span class="n">new_active</span> <span class="o">-=</span> <span class="p">{</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}</span> <span class="o">-</span> <span class="n">direct</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_step_active_overrides</span><span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="n">step</span><span class="p">)]</span> <span class="o">=</span> <span class="n">new_active</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_copy_derivative_runtime_data</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">source</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">working</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Copy supplied pipeline neighbor state into a derivative snapshot.&quot;&quot;&quot;</span>
+        <span class="n">tensor_copies</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">copy_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="n">copied</span> <span class="o">=</span> <span class="n">tensor_copies</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">copied</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">copied</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="n">tensor_copies</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">copied</span>
+            <span class="k">return</span> <span class="n">copied</span>
+
+        <span class="n">sources</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_PIPELINE_NEIGHBOR_SOURCES_ATTR</span><span class="p">,</span> <span class="n">_MISSING</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sources</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">_MISSING</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">sources</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">working</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">_PIPELINE_NEIGHBOR_SOURCES_ATTR</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">working</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">_PIPELINE_NEIGHBOR_SOURCES_ATTR</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                    <span class="n">_NeighborSourceData</span><span class="p">(</span>
+                        <span class="n">source_id</span><span class="o">=</span><span class="n">source_data</span><span class="o">.</span><span class="n">source_id</span><span class="p">,</span>
+                        <span class="n">config</span><span class="o">=</span><span class="n">source_data</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span><span class="n">deep</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                        <span class="n">neighbor_matrix</span><span class="o">=</span><span class="n">copy_tensor</span><span class="p">(</span><span class="n">source_data</span><span class="o">.</span><span class="n">neighbor_matrix</span><span class="p">),</span>
+                        <span class="n">num_neighbors</span><span class="o">=</span><span class="n">copy_tensor</span><span class="p">(</span><span class="n">source_data</span><span class="o">.</span><span class="n">num_neighbors</span><span class="p">),</span>
+                        <span class="n">neighbor_matrix_shifts</span><span class="o">=</span><span class="n">copy_tensor</span><span class="p">(</span>
+                            <span class="n">source_data</span><span class="o">.</span><span class="n">neighbor_matrix_shifts</span>
+                        <span class="p">),</span>
+                        <span class="n">neighbor_list</span><span class="o">=</span><span class="n">copy_tensor</span><span class="p">(</span><span class="n">source_data</span><span class="o">.</span><span class="n">neighbor_list</span><span class="p">),</span>
+                        <span class="n">edge_ptr</span><span class="o">=</span><span class="n">copy_tensor</span><span class="p">(</span><span class="n">source_data</span><span class="o">.</span><span class="n">edge_ptr</span><span class="p">),</span>
+                        <span class="n">neighbor_list_shifts</span><span class="o">=</span><span class="n">copy_tensor</span><span class="p">(</span>
+                            <span class="n">source_data</span><span class="o">.</span><span class="n">neighbor_list_shifts</span>
+                        <span class="p">),</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">source_data</span> <span class="ow">in</span> <span class="n">sources</span>
+                <span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="n">_NEIGHBOR_ATTRS</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">attr</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span>
+            <span class="n">working</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">copy_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">value</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_derivative_plan</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build the flat dependency closure for connected pipeline energy.&quot;&quot;&quot;</span>
+        <span class="n">all_steps</span> <span class="o">=</span> <span class="p">[</span><span class="n">step</span> <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">groups</span> <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">group</span><span class="o">.</span><span class="n">steps</span><span class="p">]</span>
+        <span class="n">latest_producer</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">dependencies</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">all_steps</span><span class="p">:</span>
+            <span class="n">step_dependencies</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">input_key</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">required_inputs</span><span class="p">:</span>
+                <span class="n">producer</span> <span class="o">=</span> <span class="n">latest_producer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">input_key</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">producer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">step_dependencies</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">producer</span><span class="p">)</span>
+            <span class="n">dependencies</span><span class="p">[</span><span class="n">step</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">step_dependencies</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">output_key</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+                <span class="n">data_attr</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">wire</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">output_key</span><span class="p">,</span> <span class="n">output_key</span><span class="p">)</span>
+                <span class="n">latest_producer</span><span class="p">[</span><span class="n">data_attr</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">output_key</span><span class="p">)</span>
+
+        <span class="n">requested</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">pending</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">all_steps</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;energy&quot;</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+                <span class="n">requested</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
+                <span class="n">pending</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+
+        <span class="n">visited</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">while</span> <span class="n">pending</span><span class="p">:</span>
+            <span class="n">step</span> <span class="o">=</span> <span class="n">pending</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">visited</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">visited</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">producer</span><span class="p">,</span> <span class="n">output_key</span> <span class="ow">in</span> <span class="n">dependencies</span><span class="p">[</span><span class="n">step</span><span class="p">]:</span>
+                <span class="n">requested</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">producer</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">output_key</span><span class="p">)</span>
+                <span class="n">pending</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">producer</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">step</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">requested</span><span class="p">[</span><span class="n">step</span><span class="p">])</span> <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">all_steps</span> <span class="k">if</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">requested</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_derivative_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">_DerivativeRequest</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate one local derivative request across pipeline steps.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">execution</span> <span class="o">!=</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">DerivativeNotSupported</span><span class="p">(</span>
+                <span class="n">model_name</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                <span class="n">operation</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">operation</span><span class="p">,</span>
+                <span class="n">execution</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">execution</span><span class="p">,</span>
+                <span class="n">strategy</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span>
+                <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;distributed second-order derivatives are not supported&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">group_index</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">step_index</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">group</span><span class="o">.</span><span class="n">steps</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">PipelineModelWrapper</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="n">DerivativeNotSupported</span><span class="p">(</span>
+                        <span class="n">model_name</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                        <span class="n">operation</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">operation</span><span class="p">,</span>
+                        <span class="n">execution</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">execution</span><span class="p">,</span>
+                        <span class="n">strategy</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span>
+                        <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;nested PipelineModelWrapper at &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;group[</span><span class="si">{</span><span class="n">group_index</span><span class="si">}</span><span class="s2">].step[</span><span class="si">{</span><span class="n">step_index</span><span class="si">}</span><span class="s2">] does not support &quot;</span>
+                        <span class="s2">&quot;derivative requests; flatten the pipeline before requesting &quot;</span>
+                        <span class="s2">&quot;derivatives&quot;</span><span class="p">,</span>
+                    <span class="p">)</span>
+
+        <span class="n">plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_derivative_plan</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">plan</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">DerivativeNotSupported</span><span class="p">(</span>
+                <span class="n">model_name</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                <span class="n">operation</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">operation</span><span class="p">,</span>
+                <span class="n">execution</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">execution</span><span class="p">,</span>
+                <span class="n">strategy</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span>
+                <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;the pipeline has no energy-producing step&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">:</span>
+            <span class="n">child_request</span> <span class="o">=</span> <span class="n">_DerivativeRequest</span><span class="p">(</span>
+                <span class="n">operation</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">operation</span><span class="p">,</span>
+                <span class="n">execution</span><span class="o">=</span><span class="p">(</span>
+                    <span class="s2">&quot;distributed&quot;</span>
+                    <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">_dist_ctx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="k">else</span> <span class="n">request</span><span class="o">.</span><span class="n">execution</span>
+                <span class="p">),</span>
+                <span class="n">strategy</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">child_request</span><span class="o">.</span><span class="n">execution</span> <span class="o">!=</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">DerivativeNotSupported</span><span class="p">(</span>
+                    <span class="n">model_name</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                    <span class="n">operation</span><span class="o">=</span><span class="n">child_request</span><span class="o">.</span><span class="n">operation</span><span class="p">,</span>
+                    <span class="n">execution</span><span class="o">=</span><span class="n">child_request</span><span class="o">.</span><span class="n">execution</span><span class="p">,</span>
+                    <span class="n">strategy</span><span class="o">=</span><span class="n">child_request</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span>
+                    <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;distributed second-order derivatives are not supported&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">_validate_derivative_request</span><span class="p">(</span><span class="n">child_request</span><span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_call_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">step</span><span class="p">:</span> <span class="n">PipelineStep</span><span class="p">,</span>
         <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">active_outputs_override</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">object</span> <span class="o">=</span> <span class="n">_MISSING</span><span class="p">,</span>
+        <span class="n">gradient_keys_override</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">object</span> <span class="o">=</span> <span class="n">_MISSING</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Call a step&#39;s model, temporarily applying overrides.</span>
@@ -1170,25 +1320,27 @@ document.write(`
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_configure_sub_models</span><span class="p">()</span>
             <span class="n">step_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
-        <span class="n">override</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_active_overrides</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">step_id</span><span class="p">)</span>
+        <span class="n">configured_override</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_active_overrides</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">step_id</span><span class="p">)</span>
+        <span class="n">override</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">configured_override</span>
+            <span class="k">if</span> <span class="n">active_outputs_override</span> <span class="ow">is</span> <span class="n">_MISSING</span>
+            <span class="k">else</span> <span class="n">active_outputs_override</span>
+        <span class="p">)</span>
         <span class="n">neighbor_plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_neighbor_plans</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">step_id</span><span class="p">)</span>
 
         <span class="n">saved_neighbors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">saved_active</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-
         <span class="k">if</span> <span class="n">neighbor_plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">saved_neighbors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_step_neighbors</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">neighbor_plan</span><span class="p">)</span>
 
+        <span class="n">config_overrides</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="n">override</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">cfg</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span>
-            <span class="n">saved_active</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">active_outputs</span>
-            <span class="n">cfg</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="n">override</span>
-
+            <span class="n">config_overrides</span><span class="p">[</span><span class="s2">&quot;active_outputs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">override</span>
+        <span class="k">if</span> <span class="n">gradient_keys_override</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">_MISSING</span><span class="p">:</span>
+            <span class="n">config_overrides</span><span class="p">[</span><span class="s2">&quot;gradient_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">gradient_keys_override</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">_temporary_model_config</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">config_overrides</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">saved_active</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="n">saved_active</span>
             <span class="k">if</span> <span class="n">saved_neighbors</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_restore_step_neighbors</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">saved_neighbors</span><span class="p">)</span>
 
@@ -1219,7 +1371,7 @@ document.write(`
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="s2">&quot;PipelineModelWrapper: planned multiple neighbor-list sources, &quot;</span>
                     <span class="s2">&quot;but the batch has no captured pipeline neighbor sources. &quot;</span>
-                    <span class="s2">&quot;Ensure make_neighbor_hooks() hooks are registered.&quot;</span>
+                    <span class="s2">&quot;Run the pipeline&#39;s neighbor hooks on this batch before evaluation.&quot;</span>
                 <span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="n">sources</span><span class="p">:</span>
@@ -1227,8 +1379,8 @@ document.write(`
                 <span class="k">return</span> <span class="n">source</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
             <span class="s2">&quot;PipelineModelWrapper: missing neighbor source &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">plan</span><span class="o">.</span><span class="n">source_id</span><span class="si">}</span><span class="s2"> on batch. Ensure make_neighbor_hooks() hooks &quot;</span>
-            <span class="s2">&quot;are registered.&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">plan</span><span class="o">.</span><span class="n">source_id</span><span class="si">}</span><span class="s2"> on batch. Run the pipeline&#39;s neighbor hooks &quot;</span>
+            <span class="s2">&quot;on this batch before evaluation.&quot;</span>
         <span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
@@ -1318,6 +1470,7 @@ document.write(`
         <span class="n">step</span><span class="p">:</span> <span class="n">PipelineStep</span><span class="p">,</span>
         <span class="n">context</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">,</span> <span class="n">ModelOutputs</span><span class="p">],</span>
         <span class="n">data</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="n">AtomicData</span><span class="p">,</span>
+        <span class="n">runtime_writes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Write resolved upstream outputs onto *data* for this step&#39;s model.</span>
 
@@ -1335,10 +1488,26 @@ document.write(`
                     <span class="k">continue</span>
                 <span class="n">data_attr</span> <span class="o">=</span> <span class="n">ctx_step</span><span class="o">.</span><span class="n">wire</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">out_key</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">data_attr</span> <span class="ow">in</span> <span class="n">needed</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">runtime_writes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">data_attr</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">runtime_writes</span><span class="p">:</span>
+                        <span class="n">runtime_writes</span><span class="p">[</span><span class="n">data_attr</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                            <span class="n">data_attr</span><span class="p">,</span> <span class="n">_MISSING</span>
+                        <span class="p">)</span>
                     <span class="c1"># Use object.__setattr__ for wired intermediate</span>
                     <span class="c1"># values (e.g. charges [N]) that may not match the</span>
                     <span class="c1"># Batch system-group length validation.</span>
                     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">data_attr</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_restore_runtime_writes</span><span class="p">(</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="n">AtomicData</span><span class="p">,</span>
+        <span class="n">runtime_writes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore runtime attributes shadowed by derivative-time wiring.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">attr</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">runtime_writes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="n">_MISSING</span><span class="p">:</span>
+                <span class="n">data</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">attr</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Neighbor hook factory</span>
@@ -1393,6 +1562,68 @@ document.write(`
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Forward pass</span>
     <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_derivative_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute the flat pipeline as one connected total-energy graph.&quot;&quot;&quot;</span>
+        <span class="n">plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_derivative_plan</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">plan</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Pipeline derivative execution found no energy output&quot;</span><span class="p">)</span>
+
+        <span class="n">context</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">,</span> <span class="n">ModelOutputs</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">group_outputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ModelOutputs</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">runtime_writes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="p">:</span>
+                <span class="n">step_outputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ModelOutputs</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">group</span><span class="o">.</span><span class="n">steps</span><span class="p">:</span>
+                    <span class="n">requested</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">requested</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">continue</span>
+
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_inputs</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">runtime_writes</span><span class="p">)</span>
+                    <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call_step</span><span class="p">(</span>
+                        <span class="n">step</span><span class="p">,</span>
+                        <span class="n">data</span><span class="p">,</span>
+                        <span class="n">active_outputs_override</span><span class="o">=</span><span class="nb">set</span><span class="p">(</span><span class="n">requested</span><span class="p">),</span>
+                        <span class="n">gradient_keys_override</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">},</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> derivative pipeline step &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;returned </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">output</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, expected a mapping&quot;</span>
+                        <span class="p">)</span>
+                    <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">requested</span><span class="p">)</span> <span class="k">if</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span>
+                    <span class="p">]</span>
+                    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> derivative pipeline step &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;did not return required output(s): </span><span class="si">{</span><span class="n">missing</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+
+                    <span class="n">filtered</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
+                        <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">output</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">output</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">requested</span>
+                    <span class="p">)</span>
+                    <span class="n">step_outputs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">filtered</span><span class="p">)</span>
+                    <span class="n">context</span><span class="p">[</span><span class="n">step</span><span class="p">]</span> <span class="o">=</span> <span class="n">filtered</span>
+
+                <span class="k">if</span> <span class="n">step_outputs</span><span class="p">:</span>
+                    <span class="n">group_outputs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="n">sum_outputs</span><span class="p">(</span>
+                            <span class="o">*</span><span class="n">step_outputs</span><span class="p">,</span>
+                            <span class="n">additive_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">additive_keys</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+
+            <span class="n">result</span> <span class="o">=</span> <span class="n">sum_outputs</span><span class="p">(</span><span class="o">*</span><span class="n">group_outputs</span><span class="p">,</span> <span class="n">additive_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">additive_keys</span><span class="p">)</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">energy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Pipeline derivative execution did not produce total energy&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">energy</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_restore_runtime_writes</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">runtime_writes</span><span class="p">)</span>
 
 <div class="viewcode-block" id="PipelineModelWrapper.forward">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.pipeline.PipelineModelWrapper.html#nvalchemi.models.pipeline.PipelineModelWrapper.forward">[docs]</a>

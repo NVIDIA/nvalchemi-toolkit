@@ -1,0 +1,6 @@
+﻿nvalchemi.dynamics.mep.align\_batch\_positions
+==============================================
+
+.. currentmodule:: nvalchemi.dynamics.mep
+
+.. autofunction:: align_batch_positions

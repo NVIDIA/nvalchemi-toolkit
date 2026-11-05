@@ -1,0 +1,6 @@
+﻿nvalchemi.training.losses.reductions.masked\_mean
+=================================================
+
+.. currentmodule:: nvalchemi.training.losses.reductions
+
+.. autofunction:: masked_mean

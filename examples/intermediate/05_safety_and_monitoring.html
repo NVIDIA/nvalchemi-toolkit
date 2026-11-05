@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Defensive MD: Safety Hooks and Performance Monitoring &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Defensive MD: Safety Hooks and Performance Monitoring &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/intermediate/05_safety_and_monitoring';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Distributed Training: DDPHook with a Dummy MLP" href="06_ddp_mlp_training.html" />
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Intermediate Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -490,7 +501,7 @@ from bad initial geometries or extrapolation errors.</p></li>
 <li><p><a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html#nvalchemi.dynamics.hooks.EnergyDriftMonitorHook" title="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyDriftMonitorHook</span></code></a> — monitors the
 total energy drift in NVE simulations and warns or raises when it exceeds
 a threshold.  Drift indicates timestep or potential issues.</p></li>
-<li><p><a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.StageTimingHook.html#nvalchemi.dynamics.hooks.StageTimingHook" title="nvalchemi.dynamics.hooks.StageTimingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">StageTimingHook</span></code></a> — records wall-clock time
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">StageTimingHook</span></code> — records wall-clock time
 per hook stage and writes a CSV timing log.  Essential for identifying
 bottlenecks in the simulation loop.</p></li>
 </ul>
@@ -719,7 +730,7 @@ number, making it comparable across systems of different sizes and lengths.
 </section>
 <section id="stagetiminghook-timing-the-simulation-loop">
 <h2>StageTimingHook — timing the simulation loop<a class="headerlink" href="#stagetiminghook-timing-the-simulation-loop" title="Link to this heading">#</a></h2>
-<p><a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.StageTimingHook.html#nvalchemi.dynamics.hooks.StageTimingHook" title="nvalchemi.dynamics.hooks.StageTimingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">StageTimingHook</span></code></a> records wall-clock time at
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">StageTimingHook</span></code> records wall-clock time at
 each hook stage.  <code class="docutils literal notranslate"><span class="pre">profiled_stages=&quot;step&quot;</span></code> instruments only <code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code> and
 <code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code>, giving a clean per-step elapsed time without the overhead
 of timing every sub-stage.</p>
@@ -818,7 +829,7 @@ state when it fires.</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.636 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.717 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-intermediate-05-safety-and-monitoring-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/311840f41baf564742f2f1cf97a71e8f/05_safety_and_monitoring.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">05_safety_and_monitoring.ipynb</span></code></a></p>

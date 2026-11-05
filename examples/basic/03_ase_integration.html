@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>ASE Integration: Real Molecular Structures in nvalchemi-toolkit &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>ASE Integration: Real Molecular Structures in nvalchemi-toolkit &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,11 +55,11 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/basic/03_ase_integration';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Microcanonical (NVE) Molecular Dynamics" href="04_nve_energy_conservation.html" />
-    <link rel="prev" title="FIRE Geometry Optimization with Lennard-Jones Argon" href="02_geometry_optimization.html" />
+    <link rel="prev" title="FIRE2 Geometry Optimization with Lennard-Jones Argon" href="02_geometry_optimization.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Basic Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -481,9 +492,9 @@ workflow.  ASE provides a rich library of molecular and crystal builders,
 file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
 <code class="xref py py-class docutils literal notranslate"><span class="pre">ase.Atoms</span></code> objects via <code class="xref py py-meth docutils literal notranslate"><span class="pre">AtomicData.from_atoms()</span></code>.</p>
 <ul class="simple">
-<li><p><strong>Part 1</strong> — FIRE geometry optimization of rattled molecules (H2O, CH4,
+<li><p><strong>Part 1</strong> — FIRE2 geometry optimization of rattled molecules (H2O, CH4,
 CH3CH2OH).</p></li>
-<li><p><strong>Part 2</strong> — FusedStage (FIRE + NVT Langevin) on a Cu(111) slab with a CO
+<li><p><strong>Part 2</strong> — FusedStage (FIRE2 + NVT Langevin) on a Cu(111) slab with a CO
 adsorbate — a classic surface-science system.  Slab atoms are frozen with
 <a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a>.</p></li>
 </ul>
@@ -504,7 +515,7 @@ physically meaningful.  Replace it with a trained MLIP for real science.</p>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomCategory</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">NVTLangevin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span><span class="p">,</span> <span class="n">NVTLangevin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceHook</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">FreezeAtomsHook</span><span class="p">,</span> <span class="n">LoggingHook</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.demo</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModel</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a>
@@ -569,11 +580,11 @@ pre-allocated so <code class="docutils literal notranslate"><span class="pre">co
 </pre></div>
 </div>
 </section>
-<section id="part-1-fire-geometry-optimization-of-rattled-molecules">
-<h2>Part 1: FIRE Geometry Optimization of Rattled Molecules<a class="headerlink" href="#part-1-fire-geometry-optimization-of-rattled-molecules" title="Link to this heading">#</a></h2>
+<section id="part-1-fire2-geometry-optimization-of-rattled-molecules">
+<h2>Part 1: FIRE2 Geometry Optimization of Rattled Molecules<a class="headerlink" href="#part-1-fire2-geometry-optimization-of-rattled-molecules" title="Link to this heading">#</a></h2>
 <p>Build three molecules from the ASE G2 database, rattle them slightly so
-the optimizer has work to do, and relax them in a single batched FIRE run.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=== Part 1: FIRE Optimization — Rattled Molecules ===&quot;</span><span class="p">)</span>
+the optimizer has work to do, and relax them in a single batched FIRE2 run.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=== Part 1: FIRE2 Optimization — Rattled Molecules ===&quot;</span><span class="p">)</span>
 
 <span class="n">molecules</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">seed</span> <span class="ow">in</span> <span class="p">[(</span><span class="s2">&quot;H2O&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;CH4&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;CH3CH2OH&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)]:</span>
@@ -592,9 +603,9 @@ the optimizer has work to do, and relax them in a single batched FIRE run.</p>
 <span class="n">batch_opt</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list_opt</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Batch: </span><span class="si">{</span><span class="n">batch_opt</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2"> systems, </span><span class="si">{</span><span class="n">batch_opt</span><span class="o">.</span><span class="n">num_nodes</span><span class="si">}</span><span class="s2"> atoms total</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
 
-<span class="n">fire_opt</span> <span class="o">=</span> <span class="n">FIRE</span><span class="p">(</span>
+<span class="n">fire_opt</span> <span class="o">=</span> <span class="n">FIRE2</span><span class="p">(</span>
     <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-    <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
     <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="p">(</span>
         <span class="n">criteria</span><span class="o">=</span><span class="p">[</span>
@@ -607,7 +618,7 @@ the optimizer has work to do, and relax them in a single batched FIRE run.</p>
     <span class="n">fire_opt</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">log_hook</span><span class="p">)</span>
     <span class="n">batch_opt</span> <span class="o">=</span> <span class="n">fire_opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch_opt</span><span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Completed </span><span class="si">{</span><span class="n">fire_opt</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> FIRE steps. Log: 03_fire_opt.csv&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Completed </span><span class="si">{</span><span class="n">fire_opt</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> FIRE2 steps. Log: 03_fire_opt.csv&quot;</span><span class="p">)</span>
 
 <span class="n">relaxed_molecules</span> <span class="o">=</span> <span class="n">batch_to_atoms_list</span><span class="p">(</span><span class="n">batch_opt</span><span class="p">)</span>
 <span class="n">write</span><span class="p">(</span><span class="n">OUTPUT_DIR</span> <span class="o">/</span> <span class="s2">&quot;molecules_relaxed.xyz&quot;</span><span class="p">,</span> <span class="n">relaxed_molecules</span><span class="p">)</span>
@@ -616,7 +627,10 @@ the optimizer has work to do, and relax them in a single batched FIRE run.</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>=== Part 1: FIRE Optimization — Rattled Molecules ===
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>=== Part 1: FIRE2 Optimization — Rattled Molecules ===
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/ase/atoms.py:427: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.
+As an alternative, you can create a new view using np.reshape (with copy=False if needed).
+  a.shape = (-1,) + shape
   H2O: 3 atoms, rattled
   CH4: 5 atoms, rattled
   CH3CH2OH: 9 atoms, rattled
@@ -625,7 +639,7 @@ the optimizer has work to do, and relax them in a single batched FIRE run.</p>
 Batch: 3 systems, 17 atoms total
 
 
-Completed 1 FIRE steps. Log: 03_fire_opt.csv
+Completed 1 FIRE2 steps. Log: 03_fire_opt.csv
 Wrote 3 relaxed structures -&gt; 03_ase_integration_output/molecules_relaxed.xyz
 </pre></div>
 </div>
@@ -633,7 +647,7 @@ Wrote 3 relaxed structures -&gt; 03_ase_integration_output/molecules_relaxed.xyz
 <section id="part-2-fusedstage-surface-adsorbate-system-with-frozen-slab">
 <h2>Part 2: FusedStage — Surface + Adsorbate System with Frozen Slab<a class="headerlink" href="#part-2-fusedstage-surface-adsorbate-system-with-frozen-slab" title="Link to this heading">#</a></h2>
 <p>Build a Cu(111) slab with a CO molecule adsorbed on top.  This is a
-textbook surface-science setup: relax the adsorbate geometry with FIRE
+textbook surface-science setup: relax the adsorbate geometry with FIRE2
 (status 0), then run NVT Langevin MD at 300 K (status 1).</p>
 <p>The copper slab atoms are frozen using <a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a>,
 which preserves their positions across dynamics steps while the CO
@@ -687,7 +701,7 @@ marked with <code class="xref py py-attr docutils literal notranslate"><span cla
 <span class="n">n_free</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">batch_fused</span><span class="o">.</span><span class="n">atom_categories</span></a> <span class="o">==</span> <span class="n">AtomCategory</span><span class="o">.</span><span class="n">GAS</span><span class="o">.</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Frozen (slab): </span><span class="si">{</span><span class="n">n_frozen</span><span class="si">}</span><span class="s2"> atoms, Free (adsorbate): </span><span class="si">{</span><span class="n">n_free</span><span class="si">}</span><span class="s2"> atoms&quot;</span><span class="p">)</span>
 
-<span class="c1"># All systems start in the FIRE stage (status = 0).</span>
+<span class="c1"># All systems start in the FIRE2 stage (status = 0).</span>
 <span class="n">batch_fused</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">batch_fused</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">long</span></a><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span>
@@ -696,7 +710,7 @@ marked with <code class="xref py py-attr docutils literal notranslate"><span cla
 
 <span class="c1"># FreezeAtomsHook: keeps slab positions fixed, zeros their velocities and forces.</span>
 <span class="c1"># Both stages share the same hook instance so the snapshot/restore logic is</span>
-<span class="c1"># consistent across the FIRE -&gt; Langevin transition.</span>
+<span class="c1"># consistent across the FIRE2 -&gt; Langevin transition.</span>
 <span class="n">freeze_hook</span> <span class="o">=</span> <span class="n">FreezeAtomsHook</span><span class="p">()</span>
 
 <span class="c1"># Create LoggingHooks before the stage constructors so they can be passed via</span>
@@ -706,10 +720,10 @@ marked with <code class="xref py py-attr docutils literal notranslate"><span cla
     <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="s2">&quot;03_langevin_stage.csv&quot;</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span>
 <span class="p">)</span>
 
-<span class="c1"># FIRE sub-stage (relaxation) — only adsorbate atoms relax</span>
-<span class="n">fire_stage</span> <span class="o">=</span> <span class="n">FIRE</span><span class="p">(</span>
+<span class="c1"># FIRE2 sub-stage (relaxation) — only adsorbate atoms relax</span>
+<span class="n">fire_stage</span> <span class="o">=</span> <span class="n">FIRE2</span><span class="p">(</span>
     <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-    <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
     <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="p">(</span>
         <span class="n">criteria</span><span class="o">=</span><span class="p">[</span>
             <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;threshold&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">,</span> <span class="s2">&quot;reduce_op&quot;</span><span class="p">:</span> <span class="s2">&quot;norm&quot;</span><span class="p">,</span> <span class="s2">&quot;reduce_dims&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">}</span>
@@ -730,7 +744,7 @@ marked with <code class="xref py py-attr docutils literal notranslate"><span cla
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="c1"># Compose: status 0 → FIRE, status 1 → Langevin</span>
+<span class="c1"># Compose: status 0 → FIRE2, status 1 → Langevin</span>
 <span class="n">fused</span> <span class="o">=</span> <span class="n">fire_stage</span> <span class="o">+</span> <span class="n">langevin_stage</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Created: </span><span class="si">{</span><span class="n">fused</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
 
@@ -739,14 +753,14 @@ marked with <code class="xref py py-attr docutils literal notranslate"><span cla
     <span class="n">batch_fused</span> <span class="o">=</span> <span class="n">fused</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch_fused</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">n_fused_steps</span><span class="p">)</span>
 
 <span class="n">status_final</span> <span class="o">=</span> <span class="n">batch_fused</span><span class="o">.</span><span class="n">status</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Final status: </span><span class="si">{</span><span class="n">status_final</span><span class="si">}</span><span class="s2">  (0=FIRE, 1=Langevin)&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Final status: </span><span class="si">{</span><span class="n">status_final</span><span class="si">}</span><span class="s2">  (0=FIRE2, 1=Langevin)&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;FusedStage total steps: </span><span class="si">{</span><span class="n">fused</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
 <span class="n">final_systems</span> <span class="o">=</span> <span class="n">batch_to_atoms_list</span><span class="p">(</span><span class="n">batch_fused</span><span class="p">)</span>
 <span class="n">write</span><span class="p">(</span><span class="n">OUTPUT_DIR</span> <span class="o">/</span> <span class="s2">&quot;cu111_co_final.xyz&quot;</span><span class="p">,</span> <span class="n">final_systems</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wrote </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">final_systems</span><span class="p">)</span><span class="si">}</span><span class="s2"> final structures -&gt; </span><span class="si">{</span><span class="n">OUTPUT_DIR</span><span class="si">}</span><span class="s2">/cu111_co_final.xyz&quot;</span><span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">All output written to </span><span class="si">{</span><span class="n">OUTPUT_DIR</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="si">}</span><span class="s2">/&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">All output written to </span><span class="si">{</span><span class="n">OUTPUT_DIR</span><span class="si">}</span><span class="s2">/&quot;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Visualize with: ase gui 03_ase_integration_output/cu111_co_initial.xyz&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -754,25 +768,25 @@ marked with <code class="xref py py-attr docutils literal notranslate"><span cla
   System (seed=10): 14 atoms (12 slab + 2 adsorbate)
   System (seed=11): 14 atoms (12 slab + 2 adsorbate)
   System (seed=12): 14 atoms (12 slab + 2 adsorbate)
-/home/kelvin/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/ase/io/extxyz.py:318: UserWarning: Skipping unhashable information adsorbate_info
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/ase/io/extxyz.py:318: UserWarning: Skipping unhashable information adsorbate_info
   warnings.warn(&#39;Skipping unhashable information &#39;
   Wrote 3 initial slab+CO structures -&gt; 03_ase_integration_output/cu111_co_initial.xyz
   Frozen (slab): 36 atoms, Free (adsorbate): 6 atoms
 
 Batch: 3 systems, 42 atoms total
 
-Created: FusedStage(sub_stages=[0:FIRE, 1:NVTLangevin], entry_status=0, exit_status=2, compiled=False, step_count=0)
+Created: FusedStage(sub_stages=[0:FIRE2, 1:NVTLangevin], entry_status=0, exit_status=2, reprime_status_codes=set(), compiled=False, step_count=0)
 
 
-Final status: [2, 2, 2]  (0=FIRE, 1=Langevin)
-FusedStage total steps: 200
+Final status: [2, 2, 2]  (0=FIRE2, 1=Langevin)
+FusedStage total steps: 201
 Wrote 3 final structures -&gt; 03_ase_integration_output/cu111_co_final.xyz
 
-All output written to /home/kelvin/Repos/nvalchemi-toolkit/examples/basic/03_ase_integration_output/
+All output written to 03_ase_integration_output/
   Visualize with: ase gui 03_ase_integration_output/cu111_co_initial.xyz
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.473 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.853 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-basic-03-ase-integration-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/7063462bb22b6867917b690694f062d0/03_ase_integration.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">03_ase_integration.ipynb</span></code></a></p>
@@ -804,7 +818,7 @@ All output written to /home/kelvin/Repos/nvalchemi-toolkit/examples/basic/03_ase
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">FIRE Geometry Optimization with Lennard-Jones Argon</p>
+        <p class="prev-next-title">FIRE2 Geometry Optimization with Lennard-Jones Argon</p>
       </div>
     </a>
     <a class="right-next"
@@ -836,7 +850,7 @@ All output written to /home/kelvin/Repos/nvalchemi-toolkit/examples/basic/03_ase
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-model">Setup — model</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#atomicdata-from-atoms-ase-to-nvalchemi-conversion">AtomicData.from_atoms — ASE to nvalchemi conversion</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#part-1-fire-geometry-optimization-of-rattled-molecules">Part 1: FIRE Geometry Optimization of Rattled Molecules</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#part-1-fire2-geometry-optimization-of-rattled-molecules">Part 1: FIRE2 Geometry Optimization of Rattled Molecules</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#part-2-fusedstage-surface-adsorbate-system-with-frozen-slab">Part 2: FusedStage — Surface + Adsorbate System with Frozen Slab</a></li>
 </ul>
   </nav></div>

@@ -1,0 +1,6 @@
+﻿nvalchemi.data.transforms.make\_supercell
+=========================================
+
+.. currentmodule:: nvalchemi.data.transforms
+
+.. autofunction:: make_supercell

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Conventions &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Conventions &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -57,7 +57,7 @@
     <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/about/conventions';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Frequently Asked Questions" href="faq.html" />
@@ -385,6 +385,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../serialization.html">Serialization and Reproducibility</a></li>
@@ -392,9 +393,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../reporting.html">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -402,6 +406,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -468,6 +476,27 @@ document.write(`
   <section class="tex2jax_ignore mathjax_ignore" id="conventions">
 <span id="id1"></span><h1>Conventions<a class="headerlink" href="#conventions" title="Link to this heading">#</a></h1>
 <p>This page documents the project-wide sign conventions used by <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code>.</p>
+<section id="hessian">
+<h2>Hessian<a class="headerlink" href="#hessian" title="Link to this heading">#</a></h2>
+<p>Here, the Hessian is the matrix of second derivatives of total energy with
+respect to Cartesian positions:</p>
+<div class="math notranslate nohighlight">
+\[
+H_{ia,jb} = \frac{\partial^2 E}
+{\partial R_{ia}\,\partial R_{jb}}.
+\]</div>
+<p>Here <code class="docutils literal notranslate"><span class="pre">i</span></code> and <code class="docutils literal notranslate"><span class="pre">j</span></code> identify atoms, while <code class="docutils literal notranslate"><span class="pre">a</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code> identify Cartesian
+components. Dense Hessian blocks are stored with axes
+<code class="docutils literal notranslate"><span class="pre">[atom_out,</span> <span class="pre">atom_in,</span> <span class="pre">xyz_out,</span> <span class="pre">xyz_in]</span></code>, so entry <code class="docutils literal notranslate"><span class="pre">[i,</span> <span class="pre">j,</span> <span class="pre">a,</span> <span class="pre">b]</span></code> is
+<span class="math notranslate nohighlight">\(H_{ia,jb}\)</span>. In the default Toolkit unit system, the Hessian has units of
+<span class="math notranslate nohighlight">\(\mathrm{eV}/\mathrm{\AA}^2\)</span>.</p>
+<p>Forces use <span class="math notranslate nohighlight">\(F=-\partial E/\partial R\)</span>. Their directional Jacobian therefore has
+the opposite sign:</p>
+<div class="math notranslate nohighlight">
+\[
+\left(\frac{\partial F}{\partial R}\right)v = -Hv.
+\]</div>
+</section>
 <section id="virial">
 <h2>Virial<a class="headerlink" href="#virial" title="Link to this heading">#</a></h2>
 <p>The virial tensor is defined as the negative strain derivative of the energy:</p>
@@ -558,6 +587,7 @@ under periodic boundary conditions.” <em>J. Chem. Phys.</em> <strong>131</stro
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hessian">Hessian</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#virial">Virial</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stress">Stress</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pressure">Pressure</a></li>

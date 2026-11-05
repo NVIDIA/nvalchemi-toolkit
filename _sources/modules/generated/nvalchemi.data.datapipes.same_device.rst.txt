@@ -1,0 +1,6 @@
+﻿nvalchemi.data.datapipes.same\_device
+=====================================
+
+.. currentmodule:: nvalchemi.data.datapipes
+
+.. autofunction:: same_device

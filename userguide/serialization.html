@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Serialization and Reproducibility &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Serialization and Reproducibility &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,11 +55,11 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/serialization';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Hooks" href="hooks.html" />
-    <link rel="prev" title="Fine-Tuning Pretrained Models" href="finetuning.html" />
+    <link rel="prev" title="Distilling a Teacher Into a Student" href="distillation.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -556,13 +564,13 @@ up constantly in this domain, and four are registered out of the box:</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.dtype</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.dtype</span></code></a></p></td>
 <td><p>its string name, rehydrated behind an <code class="docutils literal notranslate"><span class="pre">isinstance</span></code> guard (i.e. a hostile string cannot smuggle arbitrary <code class="docutils literal notranslate"><span class="pre">torch.*</span></code> attributes through <code class="docutils literal notranslate"><span class="pre">getattr</span></code>)</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a></p></td>
 <td><p>its string form</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">{dtype,</span> <span class="pre">shape,</span> <span class="pre">data}</span></code> — a data structure, not a bytecode payload</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">type</span></code> (a class object)</p></td>
@@ -633,7 +641,7 @@ should validate what it is handed rather than trusting it — the value may well
 have come from a file somebody else wrote. It is also worth making
 <code class="docutils literal notranslate"><span class="pre">deserialize</span></code> tolerant of already-typed input (i.e. returning the value
 unchanged when it is <em>already</em> a <code class="docutils literal notranslate"><span class="pre">RadialBasis</span></code>), which is what the built-in
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a> handler does; it costs a line and saves you worrying
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.device</span></code></a> handler does; it costs a line and saves you worrying
 about which path called it.</p>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
@@ -670,9 +678,26 @@ architecture is left to you.)</p>
 <p>In that flow each model is asked for a spec in a fixed order of precedence, and
 which branch you land on determines how much care you need to take:</p>
 <figure class="align-default" id="id1">
-<div class="graphviz"><object data="../_images/graphviz-e3bf97e551bdc125530d204850885b1269a76dff.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">Spec resolution order</p></object></div>
-<figcaption>
+digraph spec_resolution {
+    rankdir=TB
+    node [shape=box style=&quot;rounded,filled&quot; fontsize=11]
+
+    start [label=&quot;model to serialize&quot;]
+    explicit [label=&quot;does it define\ncheckpoint_spec()?&quot;]
+    use_explicit [label=&quot;use the returned BaseSpec\n(trusted, no rebuild check)&quot; fillcolor=&quot;#26351d&quot;]
+    introspect [label=&quot;fall back to attribute\nintrospection&quot;, fillcolor=&quot;#183449&quot;]
+    validate [label=&quot;rebuild from the spec\nand verify the result&quot;, fillcolor=&quot;#4a3315&quot;]
+    ok [label=&quot;spec stored in checkpoint&quot; fillcolor=&quot;#26351d&quot;]
+    omit [label=&quot;UserWarning:\n'Omitting model spec'\n-&gt; save_checkpoint raises&quot; fillcolor=&quot;#4a1515&quot;]
+
+    start -&gt; explicit
+    explicit -&gt; use_explicit [label=&quot;yes&quot;]
+    explicit -&gt; introspect [label=&quot;no&quot;]
+    use_explicit -&gt; ok
+    introspect -&gt; validate
+    validate -&gt; ok [label=&quot;rebuild succeeds&quot;]
+    validate -&gt; omit [label=&quot;raises&quot;]
+}<figcaption>
 <p><span class="caption-text">Spec resolution for a model at checkpoint time.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
@@ -790,12 +815,12 @@ and the full save/load API.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="finetuning.html"
+       href="distillation.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Fine-Tuning Pretrained Models</p>
+        <p class="prev-next-title">Distilling a Teacher Into a Student</p>
       </div>
     </a>
     <a class="right-next"

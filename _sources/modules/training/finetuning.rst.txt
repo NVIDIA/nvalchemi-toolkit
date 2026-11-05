@@ -27,14 +27,12 @@ Strategy
 
    FineTuningStrategy
    FineTuningStrategy.from_pretrained_checkpoint
-   FineTuningStrategy.load_checkpoint
 
 Use ``FineTuningStrategy.load_checkpoint(...)`` to resume an interrupted run
 with saved optimizer state, scheduler state, counters, and serialized
 fine-tuning configuration. Use ``FineTuningStrategy.from_pretrained_checkpoint(...)``
 to start a new fine-tuning run whose model weights are initialized from an
 existing checkpoint; optimizer state, hooks, and counters do not carry over.
-See :ref:`finetuning_guide` for patterns and examples.
 
 
 Hooks
@@ -52,6 +50,8 @@ behavior; use :ref:`training-update-hooks` for batch-update policies.
 
    ModulePatchHook
    TrainableParameterHook
+   FineTuningSummaryHook
+   BaseFingerprintHook
 
 **ModulePatchHook**
 
@@ -60,3 +60,53 @@ behavior; use :ref:`training-update-hooks` for batch-update policies.
 **TrainableParameterHook**
 
 .. dataclass-table:: nvalchemi.training.hooks.TrainableParameterHook
+
+**FineTuningSummaryHook**
+
+.. dataclass-table:: nvalchemi.training.hooks.FineTuningSummaryHook
+
+**BaseFingerprintHook**
+
+.. dataclass-table:: nvalchemi.training.hooks.BaseFingerprintHook
+
+**LoRAHook**
+
+.. currentmodule:: nvalchemi.training.peft.lora_hook
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   LoRAHook
+
+.. dataclass-table:: nvalchemi.training.peft.lora_hook.LoRAHook
+
+
+PEFT helpers
+------------
+
+Configuration and utility APIs for parameter-efficient fine-tuning workflows.
+LoRA is the only PEFT method currently supported. Pass
+``peft_config=LoRAConfig(...)`` to ``FineTuningStrategy`` to train LoRA adapters
+and use ``load_peft_checkpoint_into_model(...)`` to load a trainable-state PEFT
+checkpoint into a compatible base model.
+
+.. currentmodule:: nvalchemi.training.peft
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   PeftMethodRegistration
+   register_peft_method
+   available_peft_methods
+   load_peft_checkpoint_into_model
+
+.. currentmodule:: nvalchemi.training.peft.lora
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   LoRAConfig
+   available_lora_wrappers

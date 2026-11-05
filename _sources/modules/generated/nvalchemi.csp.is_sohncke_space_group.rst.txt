@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.is\_sohncke\_space\_group
+=======================================
+
+.. currentmodule:: nvalchemi.csp
+
+.. autofunction:: is_sohncke_space_group

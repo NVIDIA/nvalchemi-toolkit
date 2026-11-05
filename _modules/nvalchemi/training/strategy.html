@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.training.strategy &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.training.strategy &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/strategy';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -468,6 +468,7 @@ document.write(`
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._serialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">_import_cls</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.level_storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">resolve_device</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributedManager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainContext</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hook</span>
@@ -512,6 +513,7 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">freeze_unconfigured_models</span><span class="p">,</span>
     <span class="n">move_to_devices</span><span class="p">,</span>
+    <span class="n">rehome_optimizer_state</span><span class="p">,</span>
     <span class="n">train_configured_models</span><span class="p">,</span>
 <span class="p">)</span>
 
@@ -797,8 +799,12 @@ document.write(`
 <span class="sd">    target. Every ``optimizer_configs`` key must name a model present in</span>
 <span class="sd">    ``models``, and each entry must contain at least one</span>
 <span class="sd">    :class:`OptimizerConfig`. ``devices`` must have length ``1`` or</span>
-<span class="sd">    ``len(models)``; named-model :meth:`run` currently supports a single shared</span>
-<span class="sd">    device only.</span>
+<span class="sd">    ``len(models)``. Named-model :meth:`run` stages one batch on</span>
+<span class="sd">    ``devices[0]``, so a per-model list must name the same device in every</span>
+<span class="sd">    entry, and a list naming distinct devices is refused. Entries are compared</span>
+<span class="sd">    after :func:`~nvalchemi.data.resolve_device` fills in the index of an</span>
+<span class="sd">    index-less ``cuda``, so ``cuda`` and ``cuda:0`` are one device on a</span>
+<span class="sd">    process whose current device is ``0``.</span>
 
 <span class="sd">    Use :meth:`to_spec_dict` / :meth:`from_spec_dict` for JSON-based save/load.</span>
 <span class="sd">    Optimizer configs, loss specs, devices, importable training functions, and</span>
@@ -902,8 +908,11 @@ document.write(`
     <span class="n">devices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
         <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)],</span>
         <span class="n">description</span><span class="o">=</span><span class="p">(</span>
-            <span class="s2">&quot;One device shared by all models, or one device per model for helper &quot;</span>
-            <span class="s2">&quot;placement. Named-model ``run`` currently supports one device only.&quot;</span>
+            <span class="s2">&quot;One device shared by all models, or one entry per model naming &quot;</span>
+            <span class="s2">&quot;that same device; named-model ``run`` stages its batch on the &quot;</span>
+            <span class="s2">&quot;first, so two distinct devices are refused at run time. An &quot;</span>
+            <span class="s2">&quot;index-less &#39;cuda&#39; is resolved to the process&#39;s current device &quot;</span>
+            <span class="s2">&quot;before the entries are compared.&quot;</span>
         <span class="p">),</span>
     <span class="p">)</span>
     <span class="n">distributed_manager</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">DistributedManager</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">SkipValidation</span><span class="p">()]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
@@ -1192,12 +1201,22 @@ document.write(`
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_replace_hooks_with_registry_validation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hooks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Hook</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Replace hook storage after validating each hook through the base registry.&quot;&quot;&quot;</span>
-        <span class="n">previous_hooks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Replace hook storage after validating hooks through the base registry.</span>
+
+<span class="sd">        Update-hook folding rebuilds the hook list after some hooks may already</span>
+<span class="sd">        have registered. Preserve those hooks by identity so one-time</span>
+<span class="sd">        registration-time activities such as those involving model mutation</span>
+<span class="sd">        are not replayed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">previous_hooks</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">)</span>
+        <span class="n">registered_hook_ids</span> <span class="o">=</span> <span class="p">{</span><span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span> <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">previous_hooks</span><span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">hooks</span><span class="p">:</span>
-                <span class="n">HookRegistryMixin</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span> <span class="ow">in</span> <span class="n">registered_hook_ids</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">HookRegistryMixin</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span> <span class="o">=</span> <span class="n">previous_hooks</span>
             <span class="k">raise</span>
@@ -1419,20 +1438,48 @@ document.write(`
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_dataloader</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_validate_runtime_devices</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise for runtime device layouts that cannot be executed.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">single_model_input</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise for runtime device layouts that cannot be executed.</span>
+
+<span class="sd">        ``training_fn(models, batch)`` receives one batch staged on</span>
+<span class="sd">        ``devices[0]``, so a per-model list is accepted only when every entry</span>
+<span class="sd">        names the same device. An index-less ``cuda`` means the process&#39;s</span>
+<span class="sd">        current device, which each data-parallel rank sets to its node-local</span>
+<span class="sd">        one, so entries are compared after</span>
+<span class="sd">        :func:`~nvalchemi.data.resolve_device` fills that index in:</span>
+<span class="sd">        ``[cuda, cuda:0]`` is one device on the rank whose current device is</span>
+<span class="sd">        ``0`` and two devices on every other rank. Without a CUDA runtime the</span>
+<span class="sd">        index cannot be resolved, and entries are compared as written.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">resolve</span> <span class="o">=</span> <span class="n">resolve_device</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">distinct</span> <span class="o">=</span> <span class="p">{</span><span class="n">resolve</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="k">for</span> <span class="n">device</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">single_model_input</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">distinct</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Named-model training with multiple devices is unsupported: &quot;</span>
-                <span class="s2">&quot;training_fn(models, batch) receives one batch on one device. &quot;</span>
-                <span class="s2">&quot;Use a single shared device or pass models=model for &quot;</span>
-                <span class="s2">&quot;single-model behavior.&quot;</span>
+                <span class="s2">&quot;Named-model training across distinct devices is unsupported: &quot;</span>
+                <span class="s2">&quot;training_fn(models, batch) receives one batch on devices[0], so &quot;</span>
+                <span class="s2">&quot;a model on another device cannot read it; got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">device</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">device</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">distinct</span><span class="p">)</span><span class="si">!r}</span><span class="s2">. An index-less &quot;</span>
+                <span class="s2">&quot;&#39;cuda&#39; resolves to this process&#39;s current device before the &quot;</span>
+                <span class="s2">&quot;comparison. Name one device for every model, or pass &quot;</span>
+                <span class="s2">&quot;models=model for single-model behavior.&quot;</span>
             <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_setup_runtime_optimizers</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rebuild</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="n">LRScheduler</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build or reuse flattened runtime optimizer/scheduler lists.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build or reuse flattened runtime optimizer/scheduler lists.</span>
+
+<span class="sd">        Reused optimizers are rehomed before they are handed back. A resumed</span>
+<span class="sd">        optimizer holds state placed where the parameters sat at</span>
+<span class="sd">        ``load_state_dict`` time, and every entry point moves the models onto</span>
+<span class="sd">        ``devices`` just before asking for the optimizers, so that state can</span>
+<span class="sd">        predate the move — in :meth:`run`, in :meth:`train_batch`, or after a</span>
+<span class="sd">        :class:`~nvalchemi.training.hooks.DDPHook` re-pins a rank. Rehoming is</span>
+<span class="sd">        idempotent and only touches tensors whose device differs from their</span>
+<span class="sd">        parameter&#39;s, so freshly built optimizers pay nothing for it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">rebuild</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime_optimizers</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">optimizer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimizers</span><span class="p">:</span>
+                <span class="n">rehome_optimizer_state</span><span class="p">(</span><span class="n">optimizer</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimizers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lr_schedulers</span>
 
         <span class="n">records</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">_RuntimeOptimizer</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -1796,9 +1843,9 @@ document.write(`
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If named-model training is configured with multiple devices, or if</span>
-<span class="sd">            the dataloader produces no batches before the configured target</span>
-<span class="sd">            step count is reached.</span>
+<span class="sd">            If named-model training is configured with more than one distinct</span>
+<span class="sd">            device, or if the dataloader produces no batches before the</span>
+<span class="sd">            configured target step count is reached.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">training_started</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">strategy_context</span> <span class="o">=</span> <span class="n">nullcontext</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_context_depth</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span>
@@ -1958,6 +2005,7 @@ document.write(`
         <span class="n">root_folder</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">checkpoint_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">save_trainable_state_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Save this strategy as a restartable checkpoint.</span>
 
@@ -1983,6 +2031,12 @@ document.write(`
 <span class="sd">        checkpoint_index : int, optional</span>
 <span class="sd">            Checkpoint index to write. ``-1`` auto-increments from the latest</span>
 <span class="sd">            manifest index, or starts at ``0`` when no manifest exists.</span>
+<span class="sd">        save_trainable_state_only : bool, optional</span>
+<span class="sd">            If ``True``, save optimizer-selected model parameters plus buffers</span>
+<span class="sd">            and restore model weights non-strictly. Use this only when untrained</span>
+<span class="sd">            model weights are reproducible from the saved model specs. Set</span>
+<span class="sd">            ``False`` otherwise.</span>
+<span class="sd">            Default ``False``.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -2005,6 +2059,7 @@ document.write(`
             <span class="n">root_folder</span><span class="p">,</span>
             <span class="n">checkpoint_index</span><span class="o">=</span><span class="n">checkpoint_index</span><span class="p">,</span>
             <span class="n">strategy</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+            <span class="n">save_trainable_state_only</span><span class="o">=</span><span class="n">save_trainable_state_only</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 
@@ -2063,10 +2118,12 @@ document.write(`
         <span class="n">checkpoint_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">map_location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
+        <span class="n">models</span><span class="p">:</span> <span class="n">strategy_validation</span><span class="o">.</span><span class="n">ModelInput</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">hooks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Hook</span> <span class="o">|</span> <span class="n">TrainingUpdateHook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">training_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">validators</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">CheckpointValidator</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">runtime_overrides</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TrainingStrategy</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Load a restartable strategy checkpoint.</span>
 
@@ -2084,6 +2141,11 @@ document.write(`
 <span class="sd">        map_location : str | torch.device | None, optional</span>
 <span class="sd">            Device override passed through to :func:`torch.load` and the</span>
 <span class="sd">            restored strategy metadata.</span>
+<span class="sd">        models : BaseModelMixin | dict[str, BaseModelMixin] | None, optional</span>
+<span class="sd">            Live models to restore the checkpoint&#39;s weights into, in place of</span>
+<span class="sd">            the ones the loader builds from the saved specs. Their names must</span>
+<span class="sd">            be exactly the checkpoint&#39;s; see</span>
+<span class="sd">            :func:`nvalchemi.training.load_checkpoint`. Default ``None``.</span>
 <span class="sd">        hooks : Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] | None, optional</span>
 <span class="sd">            Runtime hooks to attach to the restored strategy.</span>
 <span class="sd">        training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional</span>
@@ -2093,6 +2155,11 @@ document.write(`
 <span class="sd">        validators : Sequence[CheckpointValidator] | None, optional</span>
 <span class="sd">            Optional loaded-checkpoint validators forwarded to the lower-level</span>
 <span class="sd">            loader.</span>
+<span class="sd">        **runtime_overrides : Any</span>
+<span class="sd">            Runtime overrides: live objects that the saved spec cannot carry,</span>
+<span class="sd">            passed as extra keyword arguments and forwarded to the strategy</span>
+<span class="sd">            class&#39;s :meth:`from_spec_dict`. A subclass documents the ones it</span>
+<span class="sd">            accepts.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -2105,7 +2172,9 @@ document.write(`
 <span class="sd">        ValueError</span>
 <span class="sd">            If the checkpoint does not contain restartable strategy metadata.</span>
 <span class="sd">        TypeError</span>
-<span class="sd">            If the restored strategy is not an instance of ``cls``.</span>
+<span class="sd">            If the restored strategy is not an instance of ``cls``, or if a</span>
+<span class="sd">            runtime override reaches a ``from_spec_dict`` that does not</span>
+<span class="sd">            accept it.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training._checkpoint</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_checkpoint</span>
 
@@ -2116,6 +2185,8 @@ document.write(`
             <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
             <span class="n">training_fn</span><span class="o">=</span><span class="n">training_fn</span><span class="p">,</span>
             <span class="n">validators</span><span class="o">=</span><span class="n">validators</span><span class="p">,</span>
+            <span class="n">models</span><span class="o">=</span><span class="n">models</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">runtime_overrides</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loaded</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="ow">or</span> <span class="n">loaded</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;strategy&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -2141,6 +2212,7 @@ document.write(`
         <span class="n">hooks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Hook</span> <span class="o">|</span> <span class="n">TrainingUpdateHook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">training_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">runtime_overrides</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TrainingStrategy</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild a :class:`TrainingStrategy` from a :meth:`to_spec_dict` bundle.</span>
 
@@ -2155,12 +2227,23 @@ document.write(`
 <span class="sd">            auto-wrapped into a single orchestrator.</span>
 <span class="sd">        training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional</span>
 <span class="sd">            Runtime callable or dotted-path override.</span>
+<span class="sd">        **runtime_overrides : Any</span>
+<span class="sd">            Runtime overrides: live objects that a spec cannot carry, which</span>
+<span class="sd">            :meth:`load_checkpoint` and :meth:`from_checkpoint_dict` forward</span>
+<span class="sd">            here as extra keyword arguments. A subclass documents the ones it</span>
+<span class="sd">            accepts; the base class accepts none.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        TrainingStrategy</span>
 <span class="sd">            A freshly validated strategy ready to :meth:`run`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``runtime_overrides`` is not empty, naming the unexpected keys.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">strategy_spec</span><span class="o">.</span><span class="n">_refuse_runtime_overrides</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">runtime_overrides</span><span class="p">)</span>
         <span class="n">required</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;optimizer_configs&quot;</span><span class="p">,</span> <span class="s2">&quot;devices&quot;</span><span class="p">,</span> <span class="s2">&quot;loss_fn_spec&quot;</span><span class="p">)</span>
         <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">required</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">spec</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
@@ -2198,6 +2281,7 @@ document.write(`
         <span class="n">hooks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Hook</span> <span class="o">|</span> <span class="n">TrainingUpdateHook</span> <span class="o">|</span> <span class="n">TrainingUpdateOrchestrator</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">training_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">runtime_overrides</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TrainingStrategy</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild a strategy from checkpoint metadata.</span>
 
@@ -2212,11 +2296,21 @@ document.write(`
 <span class="sd">            Runtime hooks appended by the caller.</span>
 <span class="sd">        training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional</span>
 <span class="sd">            Runtime callable or dotted-path override.</span>
+<span class="sd">        **runtime_overrides : Any</span>
+<span class="sd">            Runtime overrides: live objects that a spec cannot carry, forwarded</span>
+<span class="sd">            as extra keyword arguments to the strategy class&#39;s</span>
+<span class="sd">            :meth:`from_spec_dict`. A subclass documents the ones it accepts.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        TrainingStrategy</span>
 <span class="sd">            A strategy with declarative fields and restart counters restored.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If a runtime override reaches a ``from_spec_dict`` that does not</span>
+<span class="sd">            accept it.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">strategy_cls</span> <span class="o">=</span> <span class="bp">cls</span>
         <span class="n">raw_strategy_cls</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;strategy_cls&quot;</span><span class="p">)</span>
@@ -2239,6 +2333,7 @@ document.write(`
             <span class="n">models</span><span class="o">=</span><span class="n">models</span><span class="p">,</span>
             <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
             <span class="n">training_fn</span><span class="o">=</span><span class="n">training_fn</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">runtime_overrides</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">runtime_state</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;runtime_state&quot;</span><span class="p">,</span> <span class="p">{})</span>
         <span class="k">if</span> <span class="n">runtime_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -2460,6 +2555,14 @@ document.write(`
 <span class="sd">            summary is returned on every rank. The summary is also stored on</span>
 <span class="sd">            :attr:`last_validation`.</span>
 
+<span class="sd">        Models are moved to :attr:`devices` first, so a standalone validation</span>
+<span class="sd">        pass on a freshly constructed strategy behaves like one taken during</span>
+<span class="sd">        :meth:`run`. The move is idempotent for models already in place. A</span>
+<span class="sd">        published :attr:`inference_model` that the configuration can select is</span>
+<span class="sd">        placed on ``devices[0]`` the same way :meth:`set_inference_model` places</span>
+<span class="sd">        it, so a slot filled before :attr:`devices` changed still meets batches</span>
+<span class="sd">        on the device they were moved to.</span>
+
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        RuntimeError</span>
@@ -2470,6 +2573,12 @@ document.write(`
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;TrainingStrategy.validate() requires a validation_config.&quot;</span>
             <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">models</span> <span class="o">=</span> <span class="n">move_to_devices</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">models</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inference_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">validation_config</span><span class="o">.</span><span class="n">use_ema</span> <span class="o">!=</span> <span class="s2">&quot;never&quot;</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inference_model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">with</span> <span class="n">_validation</span><span class="o">.</span><span class="n">ValidationLoop</span><span class="o">.</span><span class="n">from_training_strategy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">as</span> <span class="n">loop</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">last_validation</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
         <span class="c1"># Fire AFTER_VALIDATION while the summary is still live, before any</span>

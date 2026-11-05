@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.training._checkpoint &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.training._checkpoint &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/_checkpoint';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -507,6 +507,7 @@ document.write(`
     <span class="n">create_model_spec</span><span class="p">,</span>
     <span class="n">create_model_spec_from_json</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training._strategy_validation</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelInput</span><span class="p">,</span> <span class="n">_normalize_models</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_world_size</span>
 
 <span class="n">CheckpointValidator</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="kc">None</span><span class="p">]</span>
@@ -850,6 +851,119 @@ document.write(`
         <span class="n">name</span><span class="p">:</span> <span class="p">(</span><span class="n">_snapshot_state_dict</span><span class="p">(</span><span class="n">component</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()),</span> <span class="n">spec</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span> <span class="ow">in</span> <span class="n">components</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
     <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_filter_ema_hook_states_to_trainable_state</span><span class="p">(</span>
+    <span class="n">snapshot</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">trainable_names_by_model</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+    <span class="n">buffer_names_by_model</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Filter EMA averaged model state to trainable parameters plus buffers if EMA is enabled.&quot;&quot;&quot;</span>
+    <span class="n">hook_states</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;hook_states&quot;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hook_states</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">hook_states</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">str</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;nvalchemi.training.hooks.ema.EMAHook:&quot;</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">model_key</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model_key&quot;</span><span class="p">)</span>
+        <span class="n">averaged_state</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;averaged_model_state&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model_key</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">averaged_state</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">model_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">trainable_names_by_model</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="c1"># AveragedModel stores the wrapped model&#39;s state under the &quot;module.&quot; prefix</span>
+        <span class="n">parameter_keys</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;module.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">trainable_names_by_model</span><span class="p">[</span><span class="n">model_key</span><span class="p">]</span>
+        <span class="p">}</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">parameter_keys</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">averaged_state</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Cannot checkpoint missing EMA trainable parameter(s): </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Preserve persistent buffers that are present in the averaged model state</span>
+        <span class="n">buffer_keys</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;module.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">buffer_names_by_model</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">model_key</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span>
+            <span class="k">if</span> <span class="sa">f</span><span class="s2">&quot;module.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span> <span class="ow">in</span> <span class="n">averaged_state</span>
+        <span class="p">}</span>
+        <span class="n">keep_keys</span> <span class="o">=</span> <span class="n">parameter_keys</span> <span class="o">|</span> <span class="n">buffer_keys</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;averaged_model_state&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_snapshot_state_dict</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">averaged_state</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">keep_keys</span><span class="p">)}</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Partial EMA state must be restored non-strictly, like partial model state</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;averaged_model_state_load&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;partial&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_filter_snapshot_to_trainable_state</span><span class="p">(</span>
+    <span class="n">snapshot</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">error_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;CheckpointHook&quot;</span><span class="p">,</span>
+    <span class="n">warning_message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mutate a checkpoint snapshot to keep only optimizer-selected model state.</span>
+
+<span class="sd">    Models without selected parameters are kept with empty state so restore can</span>
+<span class="sd">    reconstruct them from spec while partial loading skips their weights.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">trainable_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;_optimizer_parameter_names&quot;</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span> <span class="ow">or</span> <span class="p">())</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">trainable_names</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">error_prefix</span><span class="si">}</span><span class="s2"> selected no trainable parameters. Ensure trainable &quot;</span>
+            <span class="s2">&quot;parameter filters have been configured before checkpointing.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">warning_message</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">warning_message</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+
+    <span class="n">filtered_models</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">trainable_names_by_model</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">buffer_names_by_model</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">model_name</span><span class="p">,</span> <span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span> <span class="ow">in</span> <span class="n">snapshot</span><span class="p">[</span><span class="s2">&quot;models&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">prefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="n">model_trainable_names</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">trainable_names</span>
+            <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span>
+        <span class="p">}</span>
+
+        <span class="c1"># Persistent buffers are required alongside selected parameters for partial restore</span>
+        <span class="n">live_model</span> <span class="o">=</span> <span class="n">_checkpoint_model</span><span class="p">(</span><span class="n">workflow</span><span class="o">.</span><span class="n">models</span><span class="p">[</span><span class="n">model_name</span><span class="p">])</span>
+        <span class="n">buffers</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">_buffer</span> <span class="ow">in</span> <span class="n">live_model</span><span class="o">.</span><span class="n">named_buffers</span><span class="p">()</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">state_dict</span>
+        <span class="p">}</span>
+        <span class="n">trainable_names_by_model</span><span class="p">[</span><span class="n">model_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_trainable_names</span>
+        <span class="n">buffer_names_by_model</span><span class="p">[</span><span class="n">model_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">buffers</span>
+
+        <span class="c1"># Reject stale optimizer metadata</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">model_trainable_names</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">state_dict</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Cannot checkpoint missing trainable parameter(s): </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Collate trainable states</span>
+        <span class="n">selected_state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">model_trainable_names</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="n">selected_state</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">buffers</span><span class="p">)})</span>
+        <span class="n">filtered_models</span><span class="p">[</span><span class="n">model_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">_snapshot_state_dict</span><span class="p">(</span><span class="n">selected_state</span><span class="p">),</span>
+            <span class="n">spec</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">snapshot</span><span class="p">[</span><span class="s2">&quot;models&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">filtered_models</span>
+    <span class="n">_filter_ema_hook_states_to_trainable_state</span><span class="p">(</span>
+        <span class="n">snapshot</span><span class="p">,</span>
+        <span class="n">trainable_names_by_model</span><span class="p">,</span>
+        <span class="n">buffer_names_by_model</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># Mark model state as partial so model can be restored non-strictly in load_checkpoint.</span>
+    <span class="n">snapshot</span><span class="p">[</span><span class="s2">&quot;strategy_metadata&quot;</span><span class="p">][</span><span class="s2">&quot;model_state_load&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;partial&quot;</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_hook_state_key</span><span class="p">(</span><span class="n">hook</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">occurrence</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -1543,6 +1657,28 @@ document.write(`
     <span class="k">return</span> <span class="n">optimizers</span><span class="p">,</span> <span class="n">schedulers</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_load_partial_model_state</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+    <span class="n">weights</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load partial model state while rejecting unconsumed saved keys.&quot;&quot;&quot;</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">unexpected_keys</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;Partial model state contains unexpected tensor keys for model &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">model_name</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">unexpected_keys</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="c1"># Sanity-check that keys present in the partial state are not reported missing.</span>
+    <span class="n">missing_saved_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span> <span class="o">&amp;</span> <span class="nb">set</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">missing_keys</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">missing_saved_keys</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;Partial model state tensor keys were not loaded for model &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">model_name</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing_saved_keys</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_restore_checkpoint_into_strategy</span><span class="p">(</span>
     <span class="n">root</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
     <span class="n">manifest</span><span class="p">:</span> <span class="n">CheckpointManifest</span><span class="p">,</span>
@@ -1577,7 +1713,13 @@ document.write(`
             <span class="n">weights_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">map_location</span><span class="o">=</span><span class="n">map_location</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">strategy_metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">strategy_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model_state_load&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;partial&quot;</span>
+        <span class="p">):</span>
+            <span class="n">_load_partial_model_state</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">model_name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
         <span class="n">spec_path</span> <span class="o">=</span> <span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;models&quot;</span> <span class="o">/</span> <span class="n">name</span> <span class="o">/</span> <span class="s2">&quot;spec.json&quot;</span>
         <span class="n">spec</span> <span class="o">=</span> <span class="n">_load_spec</span><span class="p">(</span><span class="n">spec_path</span><span class="p">)</span> <span class="k">if</span> <span class="n">spec_path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="n">loaded_models</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
@@ -1715,7 +1857,14 @@ document.write(`
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a local MACE checkpoint through :class:`MACEWrapper`.&quot;&quot;&quot;</span>
     <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">adapter_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
-    <span class="n">allowed</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;model_name&quot;</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;enable_cueq&quot;</span><span class="p">,</span> <span class="s2">&quot;compile_model&quot;</span><span class="p">,</span> <span class="s2">&quot;compile_kwargs&quot;</span><span class="p">}</span>
+    <span class="n">allowed</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;model_name&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dtype&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;enable_cueq&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;compile_model&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;compile_kwargs&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;train&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
     <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-</span> <span class="n">allowed</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown MACE adapter option(s): </span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
@@ -1730,6 +1879,7 @@ document.write(`
     <span class="n">dtype</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">enable_cueq</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;enable_cueq&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="n">compile_model</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;compile_model&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">train</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
     <span class="n">compile_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;compile_kwargs&quot;</span><span class="p">,</span> <span class="p">{})</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">compile_kwargs</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;MACE adapter option &#39;compile_kwargs&#39; must be a mapping.&quot;</span><span class="p">)</span>
@@ -1750,6 +1900,7 @@ document.write(`
         <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
         <span class="n">enable_cueq</span><span class="o">=</span><span class="n">enable_cueq</span><span class="p">,</span>
         <span class="n">compile_model</span><span class="o">=</span><span class="n">compile_model</span><span class="p">,</span>
+        <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">,</span>
         <span class="o">**</span><span class="nb">dict</span><span class="p">(</span><span class="n">compile_kwargs</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="p">{</span>
@@ -1795,6 +1946,21 @@ document.write(`
     <span class="n">metadata</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">strategy_metadata</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">map_location</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;devices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">map_location</span><span class="p">))]</span>
+    <span class="k">return</span> <span class="n">metadata</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_with_live_strategy_devices</span><span class="p">(</span>
+    <span class="n">strategy_metadata</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">devices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return strategy metadata whose devices are the live strategy&#39;s own.</span>
+
+<span class="sd">    A live restore stages weights through ``map_location`` and then re-homes</span>
+<span class="sd">    every model onto the strategy&#39;s ``devices``, so the strategy decides where</span>
+<span class="sd">    the restored objects end up and the returned metadata has to say so.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">strategy_metadata</span><span class="p">)</span>
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;devices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="k">for</span> <span class="n">device</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">metadata</span>
 
 
@@ -1848,6 +2014,7 @@ document.write(`
     <span class="n">associations</span><span class="p">:</span> <span class="n">_Associations</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">checkpoint_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
     <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">save_trainable_state_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Save a checkpoint with a manifest.</span>
 
@@ -1879,6 +2046,10 @@ document.write(`
 <span class="sd">        from the manifest&#39;s last index, or starts at ``0``.</span>
 <span class="sd">    strategy</span>
 <span class="sd">        Optional training strategy to save as a restartable checkpoint.</span>
+<span class="sd">    save_trainable_state_only</span>
+<span class="sd">        If ``True``, save optimizer-selected model parameters plus buffers</span>
+<span class="sd">        and mark model state as partial for non-strict restore. Requires</span>
+<span class="sd">        ``strategy``.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -1907,12 +2078,33 @@ document.write(`
     <span class="k">if</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="n">TrainingStrategy</span><span class="p">):</span>
         <span class="n">strategy</span> <span class="o">=</span> <span class="n">models</span>
         <span class="n">models</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">save_trainable_state_only</span> <span class="ow">and</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;save_trainable_state_only=True requires strategy checkpointing.&quot;</span>
+        <span class="p">)</span>
     <span class="k">if</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">strategy</span><span class="p">,</span> <span class="n">TrainingStrategy</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                 <span class="s2">&quot;strategy must be a TrainingStrategy instance; got &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">strategy</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
+        <span class="k">if</span> <span class="n">save_trainable_state_only</span><span class="p">:</span>
+            <span class="n">snapshot</span> <span class="o">=</span> <span class="n">_create_checkpoint_snapshot</span><span class="p">(</span>
+                <span class="n">root</span><span class="p">,</span>
+                <span class="n">checkpoint_index</span><span class="o">=</span><span class="n">checkpoint_index</span><span class="p">,</span>
+                <span class="n">strategy</span><span class="o">=</span><span class="n">strategy</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">_filter_snapshot_to_trainable_state</span><span class="p">(</span>
+                <span class="n">snapshot</span><span class="p">,</span>
+                <span class="n">strategy</span><span class="p">,</span>
+                <span class="n">warning_message</span><span class="o">=</span><span class="p">(</span>
+                    <span class="s2">&quot;Saving a checkpoint with save_trainable_state_only=True &quot;</span>
+                    <span class="s2">&quot;stores only optimizer-selected parameters and buffers. &quot;</span>
+                    <span class="s2">&quot;Restoring this checkpoint requires the saved model spec &quot;</span>
+                    <span class="s2">&quot;to reconstruct the exact base model weights.&quot;</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">_write_checkpoint_snapshot</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">)</span>
         <span class="p">(</span>
             <span class="n">models</span><span class="p">,</span>
             <span class="n">optimizers</span><span class="p">,</span>
@@ -1970,6 +2162,35 @@ document.write(`
 
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_caller_models</span><span class="p">(</span>
+    <span class="n">models</span><span class="p">:</span> <span class="n">ModelInput</span><span class="p">,</span> <span class="n">saved</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">single_model_input</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelInput</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return *models* once their names are exactly the checkpoint&#39;s *saved* ones.</span>
+
+<span class="sd">    A single model stands for a checkpoint whose one model is ``&quot;main&quot;``. The</span>
+<span class="sd">    weights are loaded by name, so a name the checkpoint lacks would stay</span>
+<span class="sd">    unweighted and a saved name with no caller object would be rebuilt from</span>
+<span class="sd">    its spec beside the caller&#39;s, neither of which a caller supplying models</span>
+<span class="sd">    means. The result takes the shape the checkpoint recorded in</span>
+<span class="sd">    *single_model_input*, so a bare model and ``{&quot;main&quot;: model}`` restore the</span>
+<span class="sd">    same call mode the strategy was saved with; a legacy checkpoint that</span>
+<span class="sd">    recorded none leaves the caller&#39;s shape as given.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">named</span> <span class="o">=</span> <span class="n">_normalize_models</span><span class="p">(</span><span class="n">models</span><span class="p">)</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">named</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">names</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span><span class="n">saved</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;load_checkpoint: models must name exactly the checkpoint&#39;s models &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">saved</span><span class="p">)</span><span class="si">!r}</span><span class="s2">; got </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">names</span><span class="p">)</span><span class="si">!r}</span><span class="s2">. Pass one live model per &quot;</span>
+            <span class="s2">&quot;saved name, or leave models unset to rebuild them from the saved specs.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">single_model_input</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">named</span><span class="p">[</span><span class="s2">&quot;main&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">single_model_input</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">named</span>
+    <span class="k">return</span> <span class="n">models</span>
+
+
 <div class="viewcode-block" id="load_checkpoint">
 <a class="viewcode-back" href="../../../modules/training/generated/nvalchemi.training.load_checkpoint.html#nvalchemi.training.load_checkpoint">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">load_checkpoint</span><span class="p">(</span>
@@ -1984,6 +2205,8 @@ document.write(`
     <span class="n">hooks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">training_fn</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">models</span><span class="p">:</span> <span class="n">ModelInput</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">runtime_overrides</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CheckpointManifest</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a multi-component checkpoint written by :func:`save_checkpoint`.</span>
 
@@ -2005,7 +2228,10 @@ document.write(`
 <span class="sd">        each loaded model is additionally moved via</span>
 <span class="sd">        ``model.to(map_location)``. Optimizers and schedulers have their</span>
 <span class="sd">        state placed by ``torch.load`` alone (they lack a standard</span>
-<span class="sd">        ``.to()`` API).</span>
+<span class="sd">        ``.to()`` API). With ``strategy`` it only stages the load: the live</span>
+<span class="sd">        strategy&#39;s ``devices`` still decide where the restored models and</span>
+<span class="sd">        optimizer state come to rest, and the returned ``strategy_metadata``</span>
+<span class="sd">        reports those devices rather than ``map_location``.</span>
 <span class="sd">    model_names</span>
 <span class="sd">        If given, load only the models with these names together with the</span>
 <span class="sd">        optimizers and schedulers wired to them through</span>
@@ -2034,6 +2260,21 @@ document.write(`
 <span class="sd">        This mode restores model, optimizer, scheduler, runtime-counter, and</span>
 <span class="sd">        checkpointable hook state into the live objects instead of rebuilding</span>
 <span class="sd">        models from saved specs.</span>
+<span class="sd">    models</span>
+<span class="sd">        Live models to restore the checkpoint&#39;s weights into, in place of the</span>
+<span class="sd">        ones the loader builds from the saved specs: a single model for a</span>
+<span class="sd">        checkpoint whose one model is ``&quot;main&quot;``, or a mapping whose names</span>
+<span class="sd">        are exactly ``manifest.models``. Like ``runtime_overrides``, accepted</span>
+<span class="sd">        only when the saved strategy is rebuilt from its metadata. A caller</span>
+<span class="sd">        whose other objects already hold the models, such as a propagator</span>
+<span class="sd">        built around the student it trains, passes them here so the weights</span>
+<span class="sd">        land in those very objects.</span>
+<span class="sd">    **runtime_overrides</span>
+<span class="sd">        Runtime overrides: live objects that a saved spec cannot carry, passed</span>
+<span class="sd">        as extra keyword arguments. They are forwarded to the strategy class&#39;s</span>
+<span class="sd">        ``from_spec_dict`` when a saved strategy is rebuilt from its metadata,</span>
+<span class="sd">        and a subclass documents the ones it accepts. They are refused in the</span>
+<span class="sd">        modes that rebuild no strategy.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -2053,8 +2294,14 @@ document.write(`
 <span class="sd">    KeyError</span>
 <span class="sd">        If any name in ``model_names`` does not appear in</span>
 <span class="sd">        ``manifest.models``.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``models`` does not name exactly the models in ``manifest.models``.</span>
 <span class="sd">    RuntimeError</span>
 <span class="sd">        If a model spec does not build an :class:`~torch.nn.Module`.</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``runtime_overrides`` or ``models`` are given but no strategy is</span>
+<span class="sd">        rebuilt from metadata, or if a runtime override reaches a</span>
+<span class="sd">        ``from_spec_dict`` that does not accept it.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -2077,6 +2324,18 @@ document.write(`
 <span class="sd">        result = load_checkpoint(&quot;runs/kd&quot;, model_names={&quot;teacher&quot;, &quot;student&quot;})</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">root_folder</span><span class="p">)</span>
+    <span class="n">supplied</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">runtime_overrides</span><span class="p">)</span> <span class="o">+</span> <span class="p">([</span><span class="s2">&quot;models&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">models</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[])</span>
+    <span class="k">if</span> <span class="n">supplied</span> <span class="ow">and</span> <span class="p">(</span>
+        <span class="n">adapter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">model_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;load_checkpoint: got runtime overrides </span><span class="si">{</span><span class="n">supplied</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="s2">&quot;but this load rebuilds no strategy, so nothing receives them. An &quot;</span>
+            <span class="s2">&quot;adapter load, a live strategy restore, and a partial model_names &quot;</span>
+            <span class="s2">&quot;load all leave the strategy class&#39;s from_spec_dict uncalled. Drop &quot;</span>
+            <span class="s2">&quot;the overrides, or load without adapter, strategy, and model_names &quot;</span>
+            <span class="s2">&quot;so the saved strategy is rebuilt from its metadata.&quot;</span>
+        <span class="p">)</span>
     <span class="k">if</span> <span class="n">adapter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">strategy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;load_checkpoint does not support strategy with adapter.&quot;</span><span class="p">)</span>
@@ -2114,17 +2373,20 @@ document.write(`
                 <span class="s2">&quot;load_checkpoint(strategy=...) restores the complete live strategy; &quot;</span>
                 <span class="s2">&quot;model_names is not supported in this mode.&quot;</span>
             <span class="p">)</span>
+        <span class="c1"># A live restore targets the live strategy, not the recorded device.</span>
         <span class="n">loaded</span> <span class="o">=</span> <span class="n">_restore_checkpoint_into_strategy</span><span class="p">(</span>
             <span class="n">root</span><span class="p">,</span>
             <span class="n">manifest</span><span class="p">,</span>
             <span class="n">checkpoint_index</span><span class="o">=</span><span class="n">checkpoint_index</span><span class="p">,</span>
             <span class="n">strategy</span><span class="o">=</span><span class="n">strategy</span><span class="p">,</span>
             <span class="n">strategy_metadata</span><span class="o">=</span><span class="n">strategy_metadata</span><span class="p">,</span>
-            <span class="n">map_location</span><span class="o">=</span><span class="n">load_location</span><span class="p">,</span>
+            <span class="n">map_location</span><span class="o">=</span><span class="p">(</span>
+                <span class="n">load_location</span> <span class="k">if</span> <span class="n">map_location</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">strategy</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="p">),</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">strategy_metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">loaded</span><span class="p">[</span><span class="s2">&quot;strategy_metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_with_strategy_device_override</span><span class="p">(</span>
-                <span class="n">strategy_metadata</span><span class="p">,</span> <span class="n">map_location</span>
+            <span class="n">loaded</span><span class="p">[</span><span class="s2">&quot;strategy_metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_with_live_strategy_devices</span><span class="p">(</span>
+                <span class="n">strategy_metadata</span><span class="p">,</span> <span class="n">strategy</span><span class="o">.</span><span class="n">devices</span>
             <span class="p">)</span>
         <span class="n">_run_validators</span><span class="p">(</span><span class="n">loaded</span><span class="p">,</span> <span class="n">validators</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">loaded</span>
@@ -2134,20 +2396,27 @@ document.write(`
     <span class="k">if</span> <span class="n">strategy_metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">model_names</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.strategy</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingStrategy</span>
 
-        <span class="c1"># Build models from specs without loading weights.</span>
-        <span class="n">unweighted_models</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">name</span><span class="p">:</span> <span class="n">_build_model_from_checkpoint_spec</span><span class="p">(</span>
-                <span class="n">root</span><span class="p">,</span>
-                <span class="n">name</span><span class="p">,</span>
-                <span class="n">load_location</span><span class="o">=</span><span class="n">load_location</span><span class="p">,</span>
-            <span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">manifest</span><span class="o">.</span><span class="n">models</span>
-        <span class="p">}</span>
-        <span class="n">loaded_strategy_models</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">unweighted_models</span>
-        <span class="k">if</span> <span class="n">strategy_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;single_model_input&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="nb">set</span><span class="p">(</span>
-            <span class="n">unweighted_models</span>
-        <span class="p">)</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;main&quot;</span><span class="p">}:</span>
-            <span class="n">loaded_strategy_models</span> <span class="o">=</span> <span class="n">unweighted_models</span><span class="p">[</span><span class="s2">&quot;main&quot;</span><span class="p">]</span>
+        <span class="c1"># Build models from specs without loading weights, unless the caller</span>
+        <span class="c1"># supplied the objects the weights are to land in.</span>
+        <span class="n">loaded_strategy_models</span><span class="p">:</span> <span class="n">Any</span>
+        <span class="k">if</span> <span class="n">models</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">loaded_strategy_models</span> <span class="o">=</span> <span class="n">_caller_models</span><span class="p">(</span>
+                <span class="n">models</span><span class="p">,</span> <span class="n">manifest</span><span class="o">.</span><span class="n">models</span><span class="p">,</span> <span class="n">strategy_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;single_model_input&quot;</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">unweighted_models</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="n">_build_model_from_checkpoint_spec</span><span class="p">(</span>
+                    <span class="n">root</span><span class="p">,</span>
+                    <span class="n">name</span><span class="p">,</span>
+                    <span class="n">load_location</span><span class="o">=</span><span class="n">load_location</span><span class="p">,</span>
+                <span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">manifest</span><span class="o">.</span><span class="n">models</span>
+            <span class="p">}</span>
+            <span class="n">loaded_strategy_models</span> <span class="o">=</span> <span class="n">unweighted_models</span>
+            <span class="k">if</span> <span class="n">strategy_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;single_model_input&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="nb">set</span><span class="p">(</span>
+                <span class="n">unweighted_models</span>
+            <span class="p">)</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;main&quot;</span><span class="p">}:</span>
+                <span class="n">loaded_strategy_models</span> <span class="o">=</span> <span class="n">unweighted_models</span><span class="p">[</span><span class="s2">&quot;main&quot;</span><span class="p">]</span>
 
         <span class="c1"># Reconstruct the strategy and run registration-time hooks.</span>
         <span class="n">runtime_strategy_metadata</span> <span class="o">=</span> <span class="n">_with_strategy_device_override</span><span class="p">(</span>
@@ -2158,6 +2427,7 @@ document.write(`
             <span class="n">models</span><span class="o">=</span><span class="n">loaded_strategy_models</span><span class="p">,</span>
             <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>  <span class="c1"># extra user-supplied runtime hooks</span>
             <span class="n">training_fn</span><span class="o">=</span><span class="n">training_fn</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">runtime_overrides</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="c1"># Load model weights and optimizer/scheduler/runtime state.</span>
@@ -2176,6 +2446,14 @@ document.write(`
     <span class="c1"># Path 3: component-level loads: either the checkpoint has no strategy</span>
     <span class="c1"># metadata, or ``model_names`` requested a partial load from a strategy</span>
     <span class="c1"># checkpoint. Partial loads do not reconstruct strategy hooks.</span>
+    <span class="k">if</span> <span class="n">supplied</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;load_checkpoint: got runtime overrides </span><span class="si">{</span><span class="n">supplied</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="s2">&quot;but this checkpoint carries no strategy metadata, so no strategy is &quot;</span>
+            <span class="s2">&quot;rebuilt and nothing receives them. Drop the overrides, or load a &quot;</span>
+            <span class="s2">&quot;checkpoint saved with a strategy so its class&#39;s from_spec_dict is &quot;</span>
+            <span class="s2">&quot;called.&quot;</span>
+        <span class="p">)</span>
     <span class="c1"># Determine what models to load.</span>
     <span class="n">selected_models</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">manifest</span><span class="o">.</span><span class="n">models</span><span class="p">)</span> <span class="k">if</span> <span class="n">model_names</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">set</span><span class="p">(</span><span class="n">model_names</span><span class="p">)</span>
     <span class="n">unknown</span> <span class="o">=</span> <span class="n">selected_models</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">manifest</span><span class="o">.</span><span class="n">models</span><span class="p">)</span>

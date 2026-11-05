@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemiops.torch.interactions.electrostatics.ewald &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemiops.torch.interactions.electrostatics.ewald &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemiops/torch/interactions/electrostatics/ewald';</script>
-    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -511,9 +511,6 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.interactions.electrostatics._ewald_real_chain</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">real_space_cell_connect</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.interactions.electrostatics._ewald_recip_chain</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">_recip_ksum_energy_torch</span><span class="p">,</span>
-<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.interactions.electrostatics._registration</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">ensure_electrostatics_ops_registered</span><span class="p">,</span>
 <span class="p">)</span>
@@ -527,12 +524,14 @@ document.write(`
     <span class="n">_InjectCachedEvalGrad</span><span class="p">,</span>
     <span class="n">_InjectCachedEvalGradWithFallback</span><span class="p">,</span>
     <span class="n">_InjectChargeGrad</span><span class="p">,</span>
+    <span class="n">_is_static_single_system</span><span class="p">,</span>
     <span class="n">_reduce_atom_energy</span><span class="p">,</span>
     <span class="n">_unpack_electrostatic_outputs</span><span class="p">,</span>
     <span class="n">_validate_energy_reduction</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.interactions.electrostatics.k_vectors</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">generate_k_vectors_ewald_summation</span><span class="p">,</span>
+    <span class="n">k_vectors_from_miller_indices</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.interactions.electrostatics.parameters</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">estimate_ewald_parameters</span><span class="p">,</span>
@@ -544,6 +543,7 @@ document.write(`
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;ewald_real_space&quot;</span><span class="p">,</span>
     <span class="s2">&quot;ewald_reciprocal_space&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ewald_reciprocal_space_from_miller_indices&quot;</span><span class="p">,</span>
     <span class="s2">&quot;ewald_summation&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
@@ -594,7 +594,7 @@ document.write(`
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;alpha must be float or torch.Tensor, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_prepare_cell</span><span class="p">(</span><span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_prepare_cell</span><span class="p">(</span><span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">SymInt</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Ensure cell is 3D (B, 3, 3) and return number of systems.</span>
 
 <span class="sd">    Parameters</span>
@@ -606,12 +606,41 @@ document.write(`
 <span class="sd">    -------</span>
 <span class="sd">    cell : torch.Tensor, shape (B, 3, 3)</span>
 <span class="sd">        Cell with batch dimension.</span>
-<span class="sd">    num_systems : int</span>
+<span class="sd">    num_systems : int or torch.SymInt</span>
 <span class="sd">        Number of systems (B).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
         <span class="n">cell</span> <span class="o">=</span> <span class="n">cell</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">cell</span><span class="p">,</span> <span class="n">cell</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_ewald_topology_inputs</span><span class="p">(</span>
+    <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">k_vectors</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">k_cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">miller_bounds</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">miller_indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate that full Ewald receives one reciprocal-topology source.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">k_vectors</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">miller_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;k_vectors cannot be combined with miller_indices&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">miller_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">k_cutoff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">miller_bounds</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">k_vectors</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;miller_indices cannot be combined with k_vectors, k_cutoff, or &quot;</span>
+                <span class="s2">&quot;miller_bounds&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">miller_indices</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">miller_indices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;miller_indices must have shape (K, 3)&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">miller_indices</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">int8</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">int16</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+        <span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;miller_indices must have a signed integer dtype&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">miller_indices</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cell and miller_indices must be on the same device&quot;</span><span class="p">)</span>
 
 
 <span class="c1">###########################################################################################</span>
@@ -641,7 +670,7 @@ document.write(`
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_atom_ranges</span><span class="p">(</span>
-    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">num_systems</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">num_systems</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">SymInt</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-system [start, end) atom index ranges from a sorted ``batch_idx``.</span>
 
@@ -649,14 +678,9 @@ document.write(`
 <span class="sd">    (the existing batched-Ewald contract); ``atom_start``/``atom_end`` are int32.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">device</span> <span class="o">=</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">device</span>
-    <span class="k">if</span> <span class="n">num_systems</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">_is_static_single_system</span><span class="p">(</span><span class="n">num_systems</span><span class="p">):</span>
         <span class="n">starts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-        <span class="n">ends</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
-            <span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
-            <span class="n">batch_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
-            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="n">ends</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">1</span><span class="p">,),</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">starts</span><span class="p">,</span> <span class="n">ends</span>
 
     <span class="n">counts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_systems</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
@@ -982,37 +1006,6 @@ document.write(`
     <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_reciprocal_system_energy_torch</span><span class="p">(</span>
-    <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-    <span class="n">charges</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-    <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-    <span class="n">k_vectors_2d</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-    <span class="n">alpha</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">num_systems</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return pure-Torch reciprocal system energies for terminal facades.&quot;&quot;&quot;</span>
-    <span class="n">cell_3d</span> <span class="o">=</span> <span class="n">cell</span> <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="n">cell</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-    <span class="n">volume</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">cell_3d</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">ksum</span> <span class="o">=</span> <span class="n">_recip_ksum_energy_torch</span><span class="p">(</span>
-        <span class="n">positions</span><span class="p">,</span>
-        <span class="n">charges</span><span class="p">,</span>
-        <span class="n">k_vectors_2d</span><span class="p">,</span>
-        <span class="n">volume</span><span class="p">,</span>
-        <span class="n">alpha</span><span class="p">,</span>
-        <span class="n">batch_idx</span><span class="p">,</span>
-        <span class="n">num_systems</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">energy</span> <span class="o">=</span> <span class="n">_apply_reciprocal_corrections</span><span class="p">(</span>
-        <span class="n">ksum</span><span class="p">,</span>
-        <span class="n">charges</span><span class="p">,</span>
-        <span class="n">volume</span><span class="p">,</span>
-        <span class="n">alpha</span><span class="p">,</span>
-        <span class="n">batch_idx</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">_reduce_atom_energy</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_systems</span><span class="p">)</span>
-
-
 <span class="k">def</span><span class="w"> </span><span class="nf">_reciprocal_space_energy</span><span class="p">(</span>
     <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">charges</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -1023,7 +1016,6 @@ document.write(`
     <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">max_atoms_per_system</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">energy_reduction</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;atom&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;atom&quot;</span><span class="p">,</span>
-    <span class="n">preserve_k_vector_grad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-atom reciprocal-space Ewald energy, connected to autograd via the chain.</span>
 
@@ -1117,44 +1109,8 @@ document.write(`
         <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">e_ksum</span><span class="p">),</span> <span class="n">charges</span><span class="p">,</span> <span class="n">volume</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">batch_idx</span>
     <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_system_fallback</span><span class="p">(</span>
-        <span class="n">p</span><span class="p">,</span>
-        <span class="n">q</span><span class="p">,</span>
-        <span class="n">c</span><span class="p">,</span>
-        <span class="n">fallback_batch_idx</span><span class="p">,</span>
-        <span class="n">fallback_k_vectors</span><span class="p">,</span>
-        <span class="n">fallback_alpha</span><span class="p">,</span>
-    <span class="p">):</span>
-        <span class="k">return</span> <span class="n">_reciprocal_system_energy_torch</span><span class="p">(</span>
-            <span class="n">p</span><span class="p">,</span>
-            <span class="n">q</span><span class="p">,</span>
-            <span class="n">c</span><span class="p">,</span>
-            <span class="n">fallback_k_vectors</span><span class="p">,</span>
-            <span class="n">fallback_alpha</span><span class="p">,</span>
-            <span class="n">fallback_batch_idx</span><span class="p">,</span>
-            <span class="n">num_systems</span><span class="p">,</span>
-        <span class="p">)</span>
-
     <span class="k">if</span> <span class="n">energy_reduction</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span> <span class="ow">and</span> <span class="n">cell</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">preserve_k_vector_grad</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">_reduce_atom_energy</span><span class="p">(</span><span class="n">e_ksum</span> <span class="o">+</span> <span class="n">correction</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_systems</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">_InjectCachedEvalGradWithFallback</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">e_ksum</span> <span class="o">+</span> <span class="n">correction</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span>
-            <span class="n">positions</span><span class="p">,</span>
-            <span class="n">charges</span><span class="p">,</span>
-            <span class="n">cell</span><span class="p">,</span>
-            <span class="kc">None</span><span class="p">,</span>
-            <span class="kc">None</span><span class="p">,</span>
-            <span class="kc">None</span><span class="p">,</span>
-            <span class="n">batch_idx</span><span class="p">,</span>
-            <span class="n">_system_fallback</span><span class="p">,</span>
-            <span class="s2">&quot;system&quot;</span><span class="p">,</span>
-            <span class="n">num_systems</span><span class="p">,</span>
-            <span class="kc">True</span><span class="p">,</span>
-            <span class="kc">True</span><span class="p">,</span>
-            <span class="n">k_vectors_2d</span><span class="p">,</span>
-            <span class="n">alpha</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_reduce_atom_energy</span><span class="p">(</span><span class="n">e_ksum</span> <span class="o">+</span> <span class="n">correction</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_systems</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="p">(</span>
         <span class="n">energy_reduction</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span>
@@ -1291,7 +1247,7 @@ document.write(`
 
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">_validate_energy_reduction</span><span class="p">(</span><span class="n">energy_reduction</span><span class="p">)</span>
-    <span class="n">num_systems</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cell</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="mi">1</span>
+    <span class="n">num_systems</span> <span class="o">=</span> <span class="n">cell</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="mi">1</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_select_energy</span><span class="p">(</span><span class="n">energy</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">energy_reduction</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span>
@@ -1659,11 +1615,10 @@ document.write(`
 <span class="sd">        Unit cell matrices.</span>
 <span class="sd">    k_vectors : torch.Tensor</span>
 <span class="sd">        Reciprocal lattice vectors. Shape (K, 3) for single system, (B, K, 3) for batch.</span>
-<span class="sd">        When both ``cell`` and ``k_vectors`` require gradients, the supplied</span>
-<span class="sd">        k-vector graph is preserved. Physical strain derivatives require vectors</span>
-<span class="sd">        generated from the same differentiable cell. Non-differentiable vectors,</span>
-<span class="sd">        and grad-bearing leaf vectors without a cell edge, are fixed Cartesian</span>
-<span class="sd">        metadata for cell derivatives.</span>
+<span class="sd">        If these vectors are computed from the differentiated ``cell`` without</span>
+<span class="sd">        detaching them, autograd follows that graph edge. A precomputed or</span>
+<span class="sd">        detached tensor has no cell edge and is fixed with respect to the cell</span>
+<span class="sd">        derivative.</span>
 <span class="sd">    alpha : torch.Tensor, shape (1,) or (B,)</span>
 <span class="sd">        Ewald splitting parameter(s).</span>
 <span class="sd">    batch_idx : torch.Tensor, shape (N,), optional</span>
@@ -1716,10 +1671,10 @@ document.write(`
 <span class="sd">    Energies are always float64 for numerical stability during accumulation.</span>
 <span class="sd">    Forces, virial, and charge gradients match the input dtype (float32 or float64).</span>
 <span class="sd">    For eager execution, a differentiable ``cell`` paired with fixed Cartesian</span>
-<span class="sd">    ``k_vectors`` emits a warning because its cell derivative is not the physical</span>
-<span class="sd">    Ewald strain virial. This advisory warning is suppressed under</span>
-<span class="sd">    ``torch.compile``. Generate vectors from the differentiable cell with fixed</span>
-<span class="sd">    Miller bounds for physical strain derivatives.</span>
+<span class="sd">    ``k_vectors`` emits a warning because its cell derivative omits the</span>
+<span class="sd">    reciprocal-vector dependence. This advisory warning is suppressed under</span>
+<span class="sd">    ``torch.compile``. A component cell derivative holds positions fixed; for a</span>
+<span class="sd">    homogeneous-strain derivative, deform positions and cell together.</span>
 
 <span class="sd">    When ``charges`` is a non-leaf tensor that may depend on ``positions``</span>
 <span class="sd">    (:math:`q = q(R)`), ordinary first-order losses may use cached partial</span>
@@ -1762,11 +1717,47 @@ document.write(`
         <span class="n">compute_virial</span><span class="o">=</span><span class="n">compute_virial</span><span class="p">,</span>
         <span class="n">hybrid_forces</span><span class="o">=</span><span class="n">hybrid_forces</span><span class="p">,</span>
         <span class="n">allow_cell_grad_with_k_vectors</span><span class="o">=</span><span class="n">allow_cell_grad_with_k_vectors</span><span class="p">,</span>
-        <span class="n">preserve_k_vector_grad</span><span class="o">=</span><span class="n">allow_cell_grad_with_k_vectors</span><span class="p">,</span>
         <span class="n">max_atoms_per_system</span><span class="o">=</span><span class="n">max_atoms_per_system</span><span class="p">,</span>
         <span class="n">energy_reduction</span><span class="o">=</span><span class="n">energy_reduction</span><span class="p">,</span>
     <span class="p">)</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">ewald_reciprocal_space_from_miller_indices</span><span class="p">(</span>
+    <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">charges</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">miller_indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">compute_forces</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">compute_charge_gradients</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">compute_virial</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">hybrid_forces</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">max_atoms_per_system</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">energy_reduction</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;atom&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;atom&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the reciprocal component from retained Miller indices.</span>
+
+<span class="sd">    Materializes Cartesian vectors from the supplied ``cell``, then delegates</span>
+<span class="sd">    to :func:`ewald_reciprocal_space`. Direct outputs, return order,</span>
+<span class="sd">    deprecation behavior, and energy reduction match that component.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">ewald_reciprocal_space</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+        <span class="n">charges</span><span class="o">=</span><span class="n">charges</span><span class="p">,</span>
+        <span class="n">cell</span><span class="o">=</span><span class="n">cell</span><span class="p">,</span>
+        <span class="n">k_vectors</span><span class="o">=</span><span class="n">k_vectors_from_miller_indices</span><span class="p">(</span><span class="n">cell</span><span class="p">,</span> <span class="n">miller_indices</span><span class="p">),</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
+        <span class="n">batch_idx</span><span class="o">=</span><span class="n">batch_idx</span><span class="p">,</span>
+        <span class="n">compute_forces</span><span class="o">=</span><span class="n">compute_forces</span><span class="p">,</span>
+        <span class="n">compute_charge_gradients</span><span class="o">=</span><span class="n">compute_charge_gradients</span><span class="p">,</span>
+        <span class="n">compute_virial</span><span class="o">=</span><span class="n">compute_virial</span><span class="p">,</span>
+        <span class="n">hybrid_forces</span><span class="o">=</span><span class="n">hybrid_forces</span><span class="p">,</span>
+        <span class="n">max_atoms_per_system</span><span class="o">=</span><span class="n">max_atoms_per_system</span><span class="p">,</span>
+        <span class="n">energy_reduction</span><span class="o">=</span><span class="n">energy_reduction</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_ewald_reciprocal_space</span><span class="p">(</span>
@@ -1781,7 +1772,6 @@ document.write(`
     <span class="n">compute_virial</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">hybrid_forces</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">allow_cell_grad_with_k_vectors</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="n">preserve_k_vector_grad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">max_atoms_per_system</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">energy_reduction</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;atom&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;atom&quot;</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
@@ -1824,7 +1814,9 @@ document.write(`
             <span class="n">k_vectors_2d</span> <span class="o">=</span> <span class="n">k_vectors</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">k_vectors_2d</span> <span class="o">=</span> <span class="n">k_vectors</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-    <span class="n">num_systems</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">k_vectors_2d</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">num_systems</span> <span class="o">=</span> <span class="n">k_vectors_2d</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">alpha</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">num_systems</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_select_energy</span><span class="p">(</span><span class="n">energy</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">energy_reduction</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span>
@@ -1985,7 +1977,6 @@ document.write(`
         <span class="n">batch_idx</span><span class="o">=</span><span class="n">batch_idx</span><span class="p">,</span>
         <span class="n">max_atoms_per_system</span><span class="o">=</span><span class="n">max_atoms_per_system</span><span class="p">,</span>
         <span class="n">energy_reduction</span><span class="o">=</span><span class="n">energy_reduction</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">want_direct</span> <span class="k">else</span> <span class="s2">&quot;atom&quot;</span><span class="p">,</span>
-        <span class="n">preserve_k_vector_grad</span><span class="o">=</span><span class="n">preserve_k_vector_grad</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">want_direct</span><span class="p">:</span>
@@ -2031,46 +2022,8 @@ document.write(`
             <span class="n">k_vectors_2d</span><span class="o">=</span><span class="n">k_vectors_2d</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">energy_reduction</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span> <span class="ow">and</span> <span class="n">cell</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">preserve_k_vector_grad</span><span class="p">:</span>
-            <span class="n">energies</span> <span class="o">=</span> <span class="n">_select_energy</span><span class="p">(</span><span class="n">energies</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-
-            <span class="k">def</span><span class="w"> </span><span class="nf">_system_fallback</span><span class="p">(</span>
-                <span class="n">p</span><span class="p">,</span>
-                <span class="n">q</span><span class="p">,</span>
-                <span class="n">c</span><span class="p">,</span>
-                <span class="n">fallback_batch_idx</span><span class="p">,</span>
-                <span class="n">fallback_k_vectors</span><span class="p">,</span>
-                <span class="n">fallback_alpha</span><span class="p">,</span>
-            <span class="p">):</span>
-                <span class="k">return</span> <span class="n">_reciprocal_system_energy_torch</span><span class="p">(</span>
-                    <span class="n">p</span><span class="p">,</span>
-                    <span class="n">q</span><span class="p">,</span>
-                    <span class="n">c</span><span class="p">,</span>
-                    <span class="n">fallback_k_vectors</span><span class="p">,</span>
-                    <span class="n">fallback_alpha</span><span class="p">,</span>
-                    <span class="n">fallback_batch_idx</span><span class="p">,</span>
-                    <span class="n">num_systems</span><span class="p">,</span>
-                <span class="p">)</span>
-
-            <span class="n">energies</span> <span class="o">=</span> <span class="n">_InjectCachedEvalGradWithFallback</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-                <span class="n">energies</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span>
-                <span class="n">positions</span><span class="p">,</span>
-                <span class="n">charges</span><span class="p">,</span>
-                <span class="n">cell</span><span class="p">,</span>
-                <span class="kc">None</span><span class="p">,</span>
-                <span class="kc">None</span><span class="p">,</span>
-                <span class="kc">None</span><span class="p">,</span>
-                <span class="n">batch_idx</span><span class="p">,</span>
-                <span class="n">_system_fallback</span><span class="p">,</span>
-                <span class="s2">&quot;system&quot;</span><span class="p">,</span>
-                <span class="n">num_systems</span><span class="p">,</span>
-                <span class="kc">True</span><span class="p">,</span>
-                <span class="kc">True</span><span class="p">,</span>
-                <span class="n">k_vectors_2d</span><span class="p">,</span>
-                <span class="n">alpha</span><span class="p">,</span>
-            <span class="p">)</span>
+    <span class="k">if</span> <span class="n">energy_reduction</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span> <span class="ow">and</span> <span class="n">cell</span><span class="o">.</span><span class="n">requires_grad</span> <span class="ow">and</span> <span class="n">want_direct</span><span class="p">:</span>
+        <span class="n">energies</span> <span class="o">=</span> <span class="n">_select_energy</span><span class="p">(</span><span class="n">energies</span><span class="p">)</span>
     <span class="k">elif</span> <span class="p">(</span>
         <span class="ow">not</span> <span class="n">cell</span><span class="o">.</span><span class="n">requires_grad</span>
         <span class="ow">and</span> <span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">requires_grad</span> <span class="ow">or</span> <span class="n">charges</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">)</span>
@@ -2124,6 +2077,7 @@ document.write(`
     <span class="n">slab_correction</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">miller_bounds</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">miller_indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">max_atoms_per_system</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">energy_reduction</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;atom&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;atom&quot;</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
@@ -2131,6 +2085,9 @@ document.write(`
 
 <span class="sd">    Computes total Coulomb energy by combining real-space and reciprocal-space</span>
 <span class="sd">    contributions with self-energy and background corrections.</span>
+<span class="sd">    Supply explicit ``k_vectors`` as fixed metadata, retained</span>
+<span class="sd">    ``miller_indices`` to materialize vectors from the current cell, or neither</span>
+<span class="sd">    to generate vectors from ``k_cutoff`` and optional ``miller_bounds``.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -2143,17 +2100,18 @@ document.write(`
 <span class="sd">    alpha : float, torch.Tensor, or None, default=None</span>
 <span class="sd">        Ewald splitting parameter. Auto-estimated if None.</span>
 <span class="sd">    k_vectors : torch.Tensor, optional</span>
-<span class="sd">        Pre-computed reciprocal lattice vectors for fixed-cell reuse.</span>
-<span class="sd">        Caller-supplied vectors are static metadata assumed to correspond to the</span>
-<span class="sd">        current ``cell``; cache-generation derivatives are not recovered. For</span>
-<span class="sd">        physical cell/strain derivatives, omit ``k_vectors`` so vectors are</span>
-<span class="sd">        regenerated from the differentiable ``cell``.</span>
+<span class="sd">        Explicit reciprocal vectors, treated as fixed metadata. When omitted,</span>
+<span class="sd">        vectors are generated from ``k_cutoff`` or materialized from</span>
+<span class="sd">        ``miller_indices``.</span>
 <span class="sd">    k_cutoff : float, optional</span>
-<span class="sd">        K-space cutoff for generating k_vectors.</span>
+<span class="sd">        Reciprocal cutoff used only when generating vectors internally.</span>
 <span class="sd">    miller_bounds : tuple[int, int, int] or torch.Tensor, optional, keyword-only</span>
-<span class="sd">        Precomputed Miller-index half-bounds used when ``k_vectors`` is not</span>
-<span class="sd">        supplied. Passing Python integer bounds avoids deriving range sizes from</span>
-<span class="sd">        device tensors inside regenerated-k-vector loops.</span>
+<span class="sd">        Miller half-bounds used with internally generated vectors. Ignored when</span>
+<span class="sd">        explicit ``k_vectors`` are supplied for compatibility.</span>
+<span class="sd">    miller_indices : torch.Tensor, optional, keyword-only</span>
+<span class="sd">        Caller-retained signed integer topology of shape ``(K, 3)``. Full Ewald</span>
+<span class="sd">        materializes vectors from the current ``cell``. Do not combine it with</span>
+<span class="sd">        ``k_vectors``, ``k_cutoff``, or ``miller_bounds``.</span>
 <span class="sd">    max_atoms_per_system : int, optional, keyword-only</span>
 <span class="sd">        Maximum number of atoms in any single system when ``batch_idx`` is</span>
 <span class="sd">        provided. See :func:`ewald_reciprocal_space` for the sync-free launch</span>
@@ -2275,6 +2233,13 @@ document.write(`
 <span class="sd">        ... )</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">_validate_energy_reduction</span><span class="p">(</span><span class="n">energy_reduction</span><span class="p">)</span>
+    <span class="n">_validate_ewald_topology_inputs</span><span class="p">(</span>
+        <span class="n">cell</span><span class="p">,</span>
+        <span class="n">k_vectors</span><span class="p">,</span>
+        <span class="n">k_cutoff</span><span class="p">,</span>
+        <span class="n">miller_bounds</span><span class="p">,</span>
+        <span class="n">miller_indices</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="k">if</span> <span class="n">compute_forces</span> <span class="ow">or</span> <span class="n">compute_virial</span> <span class="ow">or</span> <span class="n">compute_charge_gradients</span> <span class="ow">or</span> <span class="n">hybrid_forces</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">is_compiling</span><span class="p">():</span>
             <span class="n">_compiled_direct_output_deprecation_signal</span><span class="p">(</span><span class="s2">&quot;ewald_summation&quot;</span><span class="p">)</span>
@@ -2291,11 +2256,13 @@ document.write(`
 
     <span class="n">cell</span><span class="p">,</span> <span class="n">num_systems</span> <span class="o">=</span> <span class="n">_prepare_cell</span><span class="p">(</span><span class="n">cell</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">alpha</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="n">k_cutoff</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">k_vectors</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">alpha</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span>
+        <span class="n">k_cutoff</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">k_vectors</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">miller_indices</span> <span class="ow">is</span> <span class="kc">None</span>
+    <span class="p">):</span>
         <span class="n">params</span> <span class="o">=</span> <span class="n">estimate_ewald_parameters</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">accuracy</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">alpha</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">alpha</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">alpha</span>
-        <span class="k">if</span> <span class="n">k_cutoff</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">k_cutoff</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">miller_indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">k_cutoff</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">reciprocal_space_cutoff</span>
 
     <span class="n">alpha_tensor</span> <span class="o">=</span> <span class="n">_detach_setup_tensor</span><span class="p">(</span>
@@ -2303,7 +2270,9 @@ document.write(`
     <span class="p">)</span>
 
     <span class="n">generated_k_vectors</span> <span class="o">=</span> <span class="n">k_vectors</span> <span class="ow">is</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">k_vectors</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">miller_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">k_vectors</span> <span class="o">=</span> <span class="n">k_vectors_from_miller_indices</span><span class="p">(</span><span class="n">cell</span><span class="p">,</span> <span class="n">miller_indices</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">k_vectors</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">k_vectors</span> <span class="o">=</span> <span class="n">generate_k_vectors_ewald_summation</span><span class="p">(</span>
             <span class="n">cell</span><span class="p">,</span> <span class="n">k_cutoff</span><span class="p">,</span> <span class="n">miller_bounds</span><span class="o">=</span><span class="n">miller_bounds</span>
         <span class="p">)</span>

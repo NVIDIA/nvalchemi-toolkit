@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Optimization and Integrators &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Optimization and Integrators &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,10 +55,10 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/dynamics_simulations';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Data Sinks" href="dynamics_sinks.html" />
+    <link rel="next" title="Reaction Paths and NEB" href="dynamics_mep.html" />
     <link rel="prev" title="Dynamics: Optimization and Molecular Dynamics" href="dynamics.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -475,24 +483,25 @@ overview — they generally differ only in what <code class="docutils literal no
 <section id="geometry-optimization">
 <h2>Geometry optimization<a class="headerlink" href="#geometry-optimization" title="Link to this heading">#</a></h2>
 <p>Geometry optimization finds the nearest local energy minimum by iteratively moving
-atoms downhill on the potential energy surface. The toolkit provides the <strong>FIRE</strong>
-(Fast Inertial Relaxation Engine) algorithm in two variants.</p>
+atoms downhill on the potential energy surface. The toolkit provides the <strong>FIRE2</strong>
+(Fast Inertial Relaxation Engine, improved variant) algorithm and the quasi-Newton
+<strong>L-BFGS</strong>, each with fixed- and variable-cell variants.</p>
 <section id="fixed-cell-optimization">
 <h3>Fixed-cell optimization<a class="headerlink" href="#fixed-cell-optimization" title="Link to this heading">#</a></h3>
-<p><code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE</span></code> optimizes atomic positions
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FIRE2.html#nvalchemi.dynamics.FIRE2" title="nvalchemi.dynamics.optimizers.fire2.FIRE2"><code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE2</span></code></a> optimizes atomic positions
 while keeping the simulation cell fixed:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
 
-<span class="k">with</span> <span class="n">FIRE</span><span class="p">(</span>
+<span class="k">with</span> <span class="n">FIRE2</span><span class="p">(</span>
     <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
     <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>           <span class="c1"># initial timestep (femtoseconds)</span>
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
-    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)],</span>
+    <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">),</span>
 <span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
     <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>FIRE uses an adaptive timestep and velocity mixing: when the system is moving
+<p>FIRE2 uses an adaptive timestep and velocity mixing: when the system is moving
 downhill (forces aligned with velocities), the timestep grows and velocities are
 biased toward the force direction. When the system overshoots, the timestep shrinks
 and velocities are zeroed. This makes it robust across a wide range of systems
@@ -500,18 +509,18 @@ without manual tuning.</p>
 </section>
 <section id="variable-cell-optimization">
 <h3>Variable-cell optimization<a class="headerlink" href="#variable-cell-optimization" title="Link to this heading">#</a></h3>
-<p><code class="xref py py-class docutils literal notranslate"><span class="pre">FIREVariableCell</span></code> extends FIRE to
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FIRE2VariableCell.html#nvalchemi.dynamics.FIRE2VariableCell" title="nvalchemi.dynamics.optimizers.fire2.FIRE2VariableCell"><code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE2VariableCell</span></code></a> extends FIRE2 to
 simultaneously optimize both atomic positions and the simulation cell. This is
 useful for finding equilibrium crystal structures where the lattice parameters are
 not known a priori:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.optimizers.fire</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIREVariableCell</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.optimizers.fire2</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2VariableCell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceHook</span>
 
-<span class="k">with</span> <span class="n">FIREVariableCell</span><span class="p">(</span>
+<span class="k">with</span> <span class="n">FIRE2VariableCell</span><span class="p">(</span>
     <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
     <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
-    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)],</span>
+    <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">),</span>
 <span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
     <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 </pre></div>
@@ -520,11 +529,72 @@ not known a priori:</p>
 pressure. The model must return tensile-positive <code class="docutils literal notranslate"><span class="pre">stress</span></code> in addition
 to <code class="docutils literal notranslate"><span class="pre">forces</span></code>.</p>
 </section>
+<section id="l-bfgs">
+<h3>L-BFGS<a class="headerlink" href="#l-bfgs" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.LBFGS.html#nvalchemi.dynamics.LBFGS" title="nvalchemi.dynamics.optimizers.lbfgs.LBFGS"><code class="xref py py-class docutils literal notranslate"><span class="pre">LBFGS</span></code></a> and
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.LBFGSVariableCell.html#nvalchemi.dynamics.LBFGSVariableCell" title="nvalchemi.dynamics.optimizers.lbfgs.LBFGSVariableCell"><code class="xref py py-class docutils literal notranslate"><span class="pre">LBFGSVariableCell</span></code></a> are drop-in
+alternatives to FIRE2: one force evaluation per step, usually far fewer steps.</p>
+<p>Each L-BFGS step also launches noticeably more Warp kernels than a FIRE2 step
+(the two-loop recursion iterates over <code class="docutils literal notranslate"><span class="pre">history_size</span></code> in Python), so its
+per-step overhead is higher. With an expensive model forward pass this is
+negligible next to fewer total steps, but with a cheap model — like the LJ
+model in the examples — the per-step overhead can outweigh the reduction in
+step count, making L-BFGS slower in wall-clock time despite converging in
+fewer steps. Prefer FIRE2 when the model is cheap and steps are many;
+L-BFGS wins when the model forward pass dominates step cost.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.optimizers</span><span class="w"> </span><span class="kn">import</span> <span class="n">LBFGS</span>
+
+<span class="k">with</span> <span class="n">LBFGS</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">history_size</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>     <span class="c1"># stored curvature pairs</span>
+    <span class="n">maxstep</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>        <span class="c1"># largest displacement per step (angstroms)</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">),</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
+    <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Fixed-cell <code class="docutils literal notranslate"><span class="pre">LBFGS(by_group=True)</span></code> updates each graph group as one unit, sharing
+curvature history and step scaling. Set groups with
+<code class="docutils literal notranslate"><span class="pre">batch.set_group_layout(group_idx)</span></code> and use <code class="docutils literal notranslate"><span class="pre">by_group=True</span></code> on any convergence
+hook. Grouped sampling/refill and variable-cell grouping are unsupported.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LBFGSVariableCell</span></code> needs tensile-positive <code class="docutils literal notranslate"><span class="pre">stress</span></code> and aligned cells: a cell
+is “aligned” when it is lower-triangular (<code class="docutils literal notranslate"><span class="pre">a</span></code> along x, <code class="docutils literal notranslate"><span class="pre">b</span></code> in the xy-plane; see
+<code class="xref py py-class docutils literal notranslate"><span class="pre">AlignCellHook</span></code>). On admission (and again
+on refill, for a system newly added to an inflight batch), the optimizer
+validates the incoming cell and snapshots it as that system’s reference
+chart — raising a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> right there if it isn’t lower-triangular.
+This check runs only at admission/refill, not on every step: once a system
+is running, nothing re-validates its cell before <code class="docutils literal notranslate"><span class="pre">pre_update</span></code>, so a cell
+that drifts out of alignment afterward (no <code class="docutils literal notranslate"><span class="pre">AlignCellHook</span></code>, or one with
+<code class="docutils literal notranslate"><span class="pre">frequency</span></code> other than 1) is silently used against a now-stale reference
+chart instead of raising. Install <code class="docutils literal notranslate"><span class="pre">AlignCellHook()</span></code> (<code class="docutils literal notranslate"><span class="pre">frequency=1</span></code>), as for
+<code class="docutils literal notranslate"><span class="pre">FIRE2VariableCell</span></code>, on the optimizer or its <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> so every step’s
+cell is re-aligned <em>before</em> it would otherwise drift — this is what keeps
+the contract true in practice, not a runtime guard that enforces it.</p></li>
+<li><p>Do not edit positions between steps (e.g. <code class="docutils literal notranslate"><span class="pre">WrapPeriodicHook</span></code>); L-BFGS builds
+its quasi-Newton direction from <code class="docutils literal notranslate"><span class="pre">s</span> <span class="pre">=</span> <span class="pre">x_k</span> <span class="pre">-</span> <span class="pre">x_{k-1}</span></code>, so any out-of-band edit
+(such as wrapping coordinates back into the cell) introduces a spurious jump
+that is not the optimizer’s own displacement and corrupts the stored
+curvature pairs. <code class="docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code> is supported because it restores frozen
+atoms to the same position every step, so their contribution to <code class="docutils literal notranslate"><span class="pre">s</span></code> is
+always zero rather than a fictitious jump.</p></li>
+<li><p>The first step after admission moves the largest-force atom by at most <code class="docutils literal notranslate"><span class="pre">maxstep</span></code>.</p></li>
+<li><p>The cell reference is captured when a system is admitted. Under <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>, a
+system entering the stage later keeps it; this stays correct but can take more
+steps if another stage has since changed the cell shape.</p></li>
+</ul>
+<p>Both variable-cell optimizers accept <code class="docutils literal notranslate"><span class="pre">cell_force_scale</span></code> (default 1.0; larger moves
+the cell less). <code class="docutils literal notranslate"><span class="pre">FIRE2VariableCell</span></code> reads it every step; <code class="docutils literal notranslate"><span class="pre">LBFGSVariableCell</span></code> fixes
+it, like <code class="docutils literal notranslate"><span class="pre">history_size</span></code>, when state is allocated.</p>
+</section>
 <section id="choosing-between-fixed-and-variable-cell">
 <h3>Choosing between fixed and variable cell<a class="headerlink" href="#choosing-between-fixed-and-variable-cell" title="Link to this heading">#</a></h3>
-<p>Use fixed-cell FIRE when the cell is known (e.g. a bulk crystal at experimental
+<p>Use fixed-cell FIRE2 when the cell is known (e.g. a bulk crystal at experimental
 lattice parameters, or a molecule in vacuum where the cell is just a bounding box).
-Use variable-cell FIRE when the equilibrium cell shape or volume is unknown, such as
+Use variable-cell FIRE2 when the equilibrium cell shape or volume is unknown, such as
 when screening candidate crystal structures or computing equations of state.</p>
 </section>
 </section>
@@ -535,7 +605,7 @@ the trajectory of a system at finite temperature. The toolkit provides integrato
 for three standard ensembles.</p>
 <section id="nve-energy-conservation">
 <h3>NVE: energy conservation<a class="headerlink" href="#nve-energy-conservation" title="Link to this heading">#</a></h3>
-<p><code class="xref py py-class docutils literal notranslate"><span class="pre">NVE</span></code> uses the Velocity Verlet
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.NVE.html#nvalchemi.dynamics.NVE" title="nvalchemi.dynamics.integrators.nve.NVE"><code class="xref py py-class docutils literal notranslate"><span class="pre">NVE</span></code></a> uses the Velocity Verlet
 algorithm — a symplectic integrator that conserves total energy in the
 microcanonical ensemble:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVE</span>
@@ -550,7 +620,7 @@ field is likely too noisy for the chosen timestep.</p>
 </section>
 <section id="nvt-constant-temperature">
 <h3>NVT: constant temperature<a class="headerlink" href="#nvt-constant-temperature" title="Link to this heading">#</a></h3>
-<p><code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code> implements the
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.NVTLangevin.html#nvalchemi.dynamics.NVTLangevin" title="nvalchemi.dynamics.integrators.nvt_langevin.NVTLangevin"><code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code></a> implements the
 BAOAB Langevin splitting scheme, which samples the canonical (NVT) ensemble exactly
 — the thermostat does not introduce systematic bias:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVTLangevin</span>
@@ -571,7 +641,7 @@ thermalises quickly but damps real dynamics.</p>
 </section>
 <section id="npt-constant-pressure">
 <h3>NPT: constant pressure<a class="headerlink" href="#npt-constant-pressure" title="Link to this heading">#</a></h3>
-<p><code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code> uses the
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.NPT.html#nvalchemi.dynamics.NPT" title="nvalchemi.dynamics.integrators.npt.NPT"><code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code></a> uses the
 Martyna–Tobias–Klein (MTK) barostat with Nose–Hoover chains to sample the
 isothermal-isobaric ensemble. Both the atomic positions and the simulation cell
 evolve:</p>
@@ -668,7 +738,7 @@ Velocity Verlet implementation that is useful as a template:</p>
 <p class="admonition-title">Important</p>
 <p>The demo <code class="docutils literal notranslate"><span class="pre">DemoDynamics</span></code> class is intended for debugging and pedagogy
 only. Do not use this class for production runs, and instead, see the
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NVE</span></code> class instead.</p>
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.NVE.html#nvalchemi.dynamics.NVE" title="nvalchemi.dynamics.integrators.nve.NVE"><code class="xref py py-class docutils literal notranslate"><span class="pre">NVE</span></code></a> class instead.</p>
 </div>
 </section>
 <section id="data-flow-through-a-step">
@@ -743,6 +813,8 @@ contract and the <code class="docutils literal notranslate"><span class="pre">Ho
 loop and multi-stage pipelines.</p></li>
 <li><p><strong>Hooks</strong>: The <a class="reference internal" href="hooks.html#hooks-guide"><span class="std std-ref">Hooks guide</span></a> covers convergence criteria,
 logging, and snapshots.</p></li>
+<li><p><strong>Reaction paths</strong>: <a class="reference internal" href="dynamics_mep.html#dynamics-mep-guide"><span class="std std-ref">Reaction Paths and NEB</span></a> runs batched
+nudged elastic band calculations with a configurable optimizer.</p></li>
 <li><p><strong>Examples</strong>: <code class="docutils literal notranslate"><span class="pre">basic/02_geometry_optimization.py</span></code> demonstrates a complete relaxation
 workflow.</p></li>
 </ul>
@@ -769,11 +841,11 @@ workflow.</p></li>
       </div>
     </a>
     <a class="right-next"
-       href="dynamics_sinks.html"
+       href="dynamics_mep.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Data Sinks</p>
+        <p class="prev-next-title">Reaction Paths and NEB</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -798,6 +870,7 @@ workflow.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#geometry-optimization">Geometry optimization</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fixed-cell-optimization">Fixed-cell optimization</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#variable-cell-optimization">Variable-cell optimization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#l-bfgs">L-BFGS</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-between-fixed-and-variable-cell">Choosing between fixed and variable cell</a></li>
 </ul>
 </li>

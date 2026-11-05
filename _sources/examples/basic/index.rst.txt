@@ -10,10 +10,11 @@ familiar with tools like ASE.  Each script focuses on one feature set
 and runs end-to-end on a single GPU in under 60 seconds.
 
 **01 — Data Structures**: AtomicData and Batch API.
-**02 — Geometry Optimization**: FIRE optimizer with NeighborListHook and ConvergenceHook.
+**02 — Geometry Optimization**: FIRE2 optimizer with NeighborListHook and ConvergenceHook.
 **03 — ASE Integration**: Loading ASE structures, FreezeAtomsHook on a surface system.
 **04 — NVE MD**: Microcanonical dynamics, WrapPeriodicHook, EnergyDriftMonitorHook.
 **05 — NVT MD**: Langevin thermostat, thermalization, LoggingHook to CSV.
+**06 — L-BFGS Optimization**: LBFGS as a drop-in for FIRE2, relaxing a batch of argon clusters.
 
 
 
@@ -42,7 +43,7 @@ and runs end-to-end on a single GPU in under 60 seconds.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE algorithm on a batch of argon clusters described by the Lennard-Jones potential.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE2 algorithm on a batch of argon clusters described by the Lennard-Jones potential.">
 
 .. only:: html
 
@@ -53,7 +54,7 @@ and runs end-to-end on a single GPU in under 60 seconds.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">FIRE Geometry Optimization with Lennard-Jones Argon</div>
+      <div class="sphx-glr-thumbnail-title">FIRE2 Geometry Optimization with Lennard-Jones Argon</div>
     </div>
 
 
@@ -108,6 +109,23 @@ and runs end-to-end on a single GPU in under 60 seconds.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="LBFGS is a drop-in alternative to FIRE2: same constructor shape, same hooks, same convergence criterion, one force evaluation per step.  It builds a quasi-Newton direction from the last history_size position/force differences, so it usually needs far fewer steps.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_06_geometry_optimization_lbfgs_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/06_geometry_optimization_lbfgs`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">L-BFGS Geometry Optimization with Lennard-Jones Argon</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -123,4 +141,5 @@ and runs end-to-end on a single GPU in under 60 seconds.
    /examples/basic/03_ase_integration
    /examples/basic/04_nve_energy_conservation
    /examples/basic/05_nvt_langevin
+   /examples/basic/06_geometry_optimization_lbfgs
 

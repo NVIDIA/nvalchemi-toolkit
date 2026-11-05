@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.dynamics.hooks.monitors &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.dynamics.hooks.monitors &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/hooks/monitors';</script>
-    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -428,23 +428,43 @@ document.write(`
 
 <span class="sd">Provides :class:`EnergyDriftMonitorHook`, which tracks cumulative</span>
 <span class="sd">energy drift over time and can warn or halt the simulation if the</span>
-<span class="sd">drift exceeds a configurable threshold.</span>
+<span class="sd">drift exceeds a configurable threshold, and :class:`StabilityMonitor`,</span>
+<span class="sd">which records the whole energy and momentum series of a run and reports</span>
+<span class="sd">its conservation metrics once the run is over.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._serialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">MeasurementRecord</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">kinetic_energy_per_graph</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_FS_PER_NS</span><span class="p">,</span> <span class="n">kinetic_energy_per_graph</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks.safety</span><span class="w"> </span><span class="kn">import</span> <span class="n">nonfinite_graph_mask</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;EnergyDriftMonitorHook&quot;</span><span class="p">]</span>
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Bool</span><span class="p">,</span> <span class="n">Float</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;EnergyDriftMonitorHook&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;StabilityMetrics&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;StabilityMonitor&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;total_momentum&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">_SAMPLED_FIELDS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <span class="s2">&quot;atomic_masses&quot;</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Batch fields every recorded stability sample is formed from.&quot;&quot;&quot;</span>
+
+<span class="n">_AGGREGATES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;max&quot;</span><span class="p">,</span> <span class="s2">&quot;mean&quot;</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Reductions across graphs a stability figure can be reported with.&quot;&quot;&quot;</span>
 
 
 <div class="viewcode-block" id="EnergyDriftMonitorHook">
@@ -548,10 +568,11 @@ document.write(`
 <span class="sd">      hook to be registered before the batch is available.</span>
 <span class="sd">    * For batched simulations, drift is computed **per graph** and the</span>
 <span class="sd">      maximum drift across all graphs is compared to the threshold.</span>
+<span class="sd">    * Status-filtered and inflight dynamics are not yet supported. Their</span>
+<span class="sd">      reference energies and elapsed steps must be tracked per system rather</span>
+<span class="sd">      than by batch position.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="EnergyDriftMonitorHook.__init__">
-<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html#nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -567,8 +588,7 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">metric</span> <span class="o">=</span> <span class="n">metric</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">action</span> <span class="o">=</span> <span class="n">action</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">include_kinetic</span> <span class="o">=</span> <span class="n">include_kinetic</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_reference_total_energy</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reference_total_energy</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_check_drift</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">global_rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -634,7 +654,415 @@ document.write(`
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check energy drift against the configured threshold.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">active_graph_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;EnergyDriftMonitorHook does not yet support status-filtered &quot;</span>
+                <span class="s2">&quot;or inflight dynamics because reference energies and elapsed &quot;</span>
+                <span class="s2">&quot;steps must be tracked per system.&quot;</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_drift</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">global_rank</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="total_momentum">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.total_momentum.html#nvalchemi.dynamics.hooks.total_momentum">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">total_momentum</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G 3&quot;</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the total linear momentum of each graph.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    batch : Batch</span>
+<span class="sd">        Batch carrying ``velocities`` and ``atomic_masses``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Float[torch.Tensor, &quot;G 3&quot;]</span>
+<span class="sd">        Mass-weighted velocity sum per graph, in the batch&#39;s own units.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.dynamics.hooks import total_momentum</span>
+<span class="sd">    &gt;&gt;&gt; total_momentum(batch).shape  # doctest: +SKIP</span>
+<span class="sd">    torch.Size([2, 3])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">momentum</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">atomic_masses</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="n">momentum</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">total</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">momentum</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="StabilityMetrics">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.StabilityMetrics.html#nvalchemi.dynamics.hooks.StabilityMetrics">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StabilityMetrics</span><span class="p">(</span><span class="n">MeasurementRecord</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Conservation diagnostics of one trajectory.</span>
+
+<span class="sd">    By default, every figure is reported for the worst graph in the batch,</span>
+<span class="sd">    matching :class:`EnergyDriftMonitorHook`. When the monitor was built with</span>
+<span class="sd">    ``aggregate=&quot;mean&quot;``, each is the mean over graphs instead. The</span>
+<span class="sd">    per-nanosecond rate is the slope of a least-squares fit through every</span>
+<span class="sd">    sample, not an endpoint difference, so a noisy series is not scored on</span>
+<span class="sd">    whichever two samples bracket it. Because it is a slope, the rate reads</span>
+<span class="sd">    zero for an excursion that is symmetric about the window. Read it together</span>
+<span class="sd">    with ``energy_fluctuation_per_atom``, the RMS residual about the same fit,</span>
+<span class="sd">    and with ``max_energy_excursion_per_atom``. A drift no larger than the</span>
+<span class="sd">    fluctuation is a line fitted through an oscillation. Both drift figures</span>
+<span class="sd">    include whatever transient the series starts with. A frame that is not</span>
+<span class="sd">    equilibrated under the propagated potential relaxes during the run, and</span>
+<span class="sd">    the fit reports that relaxation as drift. Give :class:`StabilityMonitor` a</span>
+<span class="sd">    ``warmup_steps`` window that covers the relaxation.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    num_samples : int</span>
+<span class="sd">        Recorded samples, after any discarded warmup.</span>
+<span class="sd">    first_step, last_step : int</span>
+<span class="sd">        Step counts of the first and last sample.</span>
+<span class="sd">    energy_drift_per_atom : float</span>
+<span class="sd">        ``|E(t_end) - E(t_0)| / N`` of the worst graph, or the mean over graphs</span>
+<span class="sd">        under ``aggregate=&quot;mean&quot;``.</span>
+<span class="sd">    energy_drift_per_atom_per_step : float</span>
+<span class="sd">        The same figure divided by the elapsed steps.</span>
+<span class="sd">    energy_drift_per_atom_per_ns : float | None</span>
+<span class="sd">        Fitted drift rate in eV/atom/ns of the worst graph, or the mean over</span>
+<span class="sd">        graphs under ``aggregate=&quot;mean&quot;``. ``None`` when the monitor was given</span>
+<span class="sd">        no timestep.</span>
+<span class="sd">    max_momentum_drift : float</span>
+<span class="sd">        Largest deviation of a graph&#39;s total momentum from its initial value,</span>
+<span class="sd">        for the worst graph or as the mean over graphs under</span>
+<span class="sd">        ``aggregate=&quot;mean&quot;``.</span>
+<span class="sd">    timestep_fs : float | None</span>
+<span class="sd">        Timestep the rates were derived with.</span>
+<span class="sd">    energy_fluctuation_per_atom : float | None</span>
+<span class="sd">        RMS residual of a graph&#39;s per-atom energy about the fitted line, for the</span>
+<span class="sd">        worst graph or as the mean over graphs under ``aggregate=&quot;mean&quot;``.</span>
+<span class="sd">        ``None`` only when rebuilt from an export written before this field</span>
+<span class="sd">        existed.</span>
+<span class="sd">    max_energy_excursion_per_atom : float | None</span>
+<span class="sd">        Largest ``|E(t) - E(t_0)| / N`` a graph reached, for the worst graph or</span>
+<span class="sd">        as the mean over graphs under ``aggregate=&quot;mean&quot;``. ``None`` only when</span>
+<span class="sd">        rebuilt from an older export.</span>
+<span class="sd">    first_divergence_step : int | None</span>
+<span class="sd">        Step count of the first firing at which the monitor&#39;s divergence</span>
+<span class="sd">        predicate flagged a graph. The series stopped at that step. ``None``</span>
+<span class="sd">        when no graph diverged.</span>
+<span class="sd">    aggregate : Literal[&quot;max&quot;, &quot;mean&quot;]</span>
+<span class="sd">        Reduction across graphs used to form the drift, fluctuation,</span>
+<span class="sd">        excursion, and momentum figures.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">first_step</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">last_step</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">energy_drift_per_atom</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">energy_drift_per_atom_per_step</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">energy_drift_per_atom_per_ns</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">max_momentum_drift</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">timestep_fs</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">energy_fluctuation_per_atom</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_energy_excursion_per_atom</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">first_divergence_step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">aggregate</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;max&quot;</span><span class="p">,</span> <span class="s2">&quot;mean&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;max&quot;</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_composition</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">counts</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the signature a per-graph series has to keep to stay comparable.</span>
+
+<span class="sd">    Atom counts alone miss an inflight refill that replaces graduated systems</span>
+<span class="sd">    with new systems of the same size. The signature therefore includes</span>
+<span class="sd">    ``system_id`` when the batch carries it.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">identity</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;system_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">identity</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">counts</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">counts</span><span class="p">,</span> <span class="n">identity</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)])</span>
+
+
+<div class="viewcode-block" id="StabilityMonitor">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.StabilityMonitor.html#nvalchemi.dynamics.hooks.StabilityMonitor">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StabilityMonitor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Dynamics hook recording energy and momentum along a trajectory.</span>
+
+<span class="sd">    A *stability monitor* records the total energy and momentum of a</span>
+<span class="sd">    trajectory and reports how well the run conserves them. Register it on a</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.base.BaseDynamics` run like any observation</span>
+<span class="sd">    hook, then call :meth:`metrics` once the run is over. Unlike</span>
+<span class="sd">    :class:`EnergyDriftMonitorHook`, which compares one live value against a</span>
+<span class="sd">    threshold, this hook keeps the whole series on the host as float64, one</span>
+<span class="sd">    small tensor per firing. For a long run, raise ``frequency`` rather than</span>
+<span class="sd">    record every step.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    frequency : int, optional</span>
+<span class="sd">        Record every ``frequency`` steps. The dynamics hook registry applies</span>
+<span class="sd">        this gating. Default ``1``.</span>
+<span class="sd">    stage : Enum, optional</span>
+<span class="sd">        Stage to record at. Default</span>
+<span class="sd">        :attr:`~nvalchemi.dynamics.base.DynamicsStage.AFTER_STEP`.</span>
+<span class="sd">    timestep_fs : float | None, optional</span>
+<span class="sd">        Integration timestep in femtoseconds, which turns per-step drift into a</span>
+<span class="sd">        per-nanosecond rate. Default ``None``.</span>
+<span class="sd">    include_kinetic : bool, optional</span>
+<span class="sd">        Add the kinetic energy to the potential energy before measuring drift.</span>
+<span class="sd">        This is what makes the metric meaningful for NVE. Default ``True``.</span>
+<span class="sd">    warmup_steps : int, optional</span>
+<span class="sd">        Discard every firing before this step count, as read from the</span>
+<span class="sd">        propagator&#39;s own step counter. A run seeded from frames that are not</span>
+<span class="sd">        equilibria of the propagated potential needs this equilibration</span>
+<span class="sd">        window, because a fit that includes the relaxation reports it as</span>
+<span class="sd">        drift. Default ``0``.</span>
+<span class="sd">    divergence : Callable[[Batch], Bool[Tensor, &quot;G&quot;]] | None, optional</span>
+<span class="sd">        Predicate that flags the graphs that have diverged, evaluated at every</span>
+<span class="sd">        firing after the warmup. The first firing that flags any graph is</span>
+<span class="sd">        recorded as ``first_divergence_step`` and stops the series, so the</span>
+<span class="sd">        metrics describe the trajectory up to the divergence. Default ``None``</span>
+<span class="sd">        (:func:`~nvalchemi.dynamics.hooks.nonfinite_graph_mask`, which flags</span>
+<span class="sd">        a non-finite position or force).</span>
+<span class="sd">    aggregate : {&quot;max&quot;, &quot;mean&quot;}, optional</span>
+<span class="sd">        Reduction across graphs for the drift, fluctuation, excursion, and</span>
+<span class="sd">        momentum figures: the worst graph, or the mean over graphs. Default</span>
+<span class="sd">        ``&quot;max&quot;``.</span>
+<span class="sd">    stop_on_composition_change : bool, optional</span>
+<span class="sd">        Stop recording with a warning when the ``system_id`` in a slot changes</span>
+<span class="sd">        while the batch keeps its shape. That is what an inflight refill with</span>
+<span class="sd">        an equal-size system looks like. ``False`` keeps recording through</span>
+<span class="sd">        such a refill. A change in the batch&#39;s graph count or per-graph atom</span>
+<span class="sd">        counts always stops the series, because the per-graph arrays could no</span>
+<span class="sd">        longer be stacked. Default ``True``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``aggregate`` is not one of the two reductions.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.dynamics.hooks import StabilityMonitor</span>
+<span class="sd">    &gt;&gt;&gt; monitor = StabilityMonitor(frequency=10, timestep_fs=1.0, warmup_steps=100)</span>
+<span class="sd">    &gt;&gt;&gt; dynamics.register_hook(monitor)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; dynamics.run(batch)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; monitor.metrics().energy_drift_per_atom_per_ns  # doctest: +SKIP</span>
+<span class="sd">    0.0042</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Every sample is formed from the batch&#39;s own ``energy``, ``velocities``, and</span>
+<span class="sd">    ``atomic_masses``. A batch built from geometry alone gains its ``energy``</span>
+<span class="sd">    on the propagator&#39;s first</span>
+<span class="sd">    :meth:`~nvalchemi.dynamics.base.BaseDynamics.compute`, which allocates the</span>
+<span class="sd">    output fields the batch arrived without, so a firing inside a run always</span>
+<span class="sd">    finds one. A batch fired outside a run has no model outputs and is refused.</span>
+
+<span class="sd">    Momentum is conserved only by an integrator that conserves it. Under a</span>
+<span class="sd">    stochastic thermostat, ``max_momentum_drift`` describes the bath, and no</span>
+<span class="sd">    acceptance bar should be set on it.</span>
+
+<span class="sd">    Recording stops with a warning as soon as the batch composition changes.</span>
+<span class="sd">    A change means a different graph count, different per-graph atom counts,</span>
+<span class="sd">    or a different ``system_id`` in the slots (unless</span>
+<span class="sd">    ``stop_on_composition_change`` is off). A propagator that graduates</span>
+<span class="sd">    systems mid-run is therefore scored on the segment before the first</span>
+<span class="sd">    graduation. A sampler-seeded batch carries ``status``, so its dispatches</span>
+<span class="sd">    come with an ``active_graph_mask``; the monitor records as long as that</span>
+<span class="sd">    mask keeps every graph active. Like :class:`EnergyDriftMonitorHook`, it</span>
+<span class="sd">    does not yet support a dispatch in which some graphs are inactive, whose</span>
+<span class="sd">    per-graph series would have to be tracked per system.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span>
+        <span class="n">timestep_fs</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">include_kinetic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">warmup_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">divergence</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">],</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">aggregate</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;max&quot;</span><span class="p">,</span> <span class="s2">&quot;mean&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;max&quot;</span><span class="p">,</span>
+        <span class="n">stop_on_composition_change</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">aggregate</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_AGGREGATES</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;aggregate must be one of </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_AGGREGATES</span><span class="p">)</span><span class="si">!r}</span><span class="s2">; got </span><span class="si">{</span><span class="n">aggregate</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">timestep_fs</span> <span class="o">=</span> <span class="n">timestep_fs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_kinetic</span> <span class="o">=</span> <span class="n">include_kinetic</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">warmup_steps</span> <span class="o">=</span> <span class="n">warmup_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">divergence</span> <span class="o">=</span> <span class="n">nonfinite_graph_mask</span> <span class="k">if</span> <span class="n">divergence</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">divergence</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">aggregate</span> <span class="o">=</span> <span class="n">aggregate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stop_on_composition_change</span> <span class="o">=</span> <span class="n">stop_on_composition_change</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_energies</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_momenta</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_num_nodes</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_composition</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_first_divergence_step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_record</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Append one sample of the batch&#39;s total energy and momentum.</span>
+
+<span class="sd">        A firing inside the warmup window is dropped whole, so the composition</span>
+<span class="sd">        the series is fingerprinted against is the one it starts recording at.</span>
+<span class="sd">        A firing at which any graph diverged records the step and ends the</span>
+<span class="sd">        series without a sample. Every sample is copied off the batch, since</span>
+<span class="sd">        the propagator writes its next energy into the same buffer in place.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the batch is missing a field the sample is formed from.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="ow">or</span> <span class="n">step_count</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">warmup_steps</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">divergence</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_first_divergence_step</span> <span class="o">=</span> <span class="n">step_count</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_SAMPLED_FIELDS</span> <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;StabilityMonitor cannot sample a batch carrying no </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;A batch fired outside a run has no model outputs; register the &quot;</span>
+                <span class="s2">&quot;monitor on the propagator.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">composition</span> <span class="o">=</span> <span class="n">_composition</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">counts</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_composition</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_num_nodes</span> <span class="o">=</span> <span class="n">counts</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_composition</span> <span class="o">=</span> <span class="n">composition</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">composition</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_composition</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">stop_on_composition_change</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_nodes</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">same_counts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_nodes</span><span class="p">)</span>
+            <span class="n">change</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;the </span><span class="si">{</span><span class="n">counts</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> systems were replaced by others of the same &quot;</span>
+                <span class="s2">&quot;atom counts&quot;</span>
+                <span class="k">if</span> <span class="n">same_counts</span>
+                <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;the batch went from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_nodes</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> graphs of &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">size</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">size</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">_num_nodes</span><span class="p">]</span><span class="si">}</span><span class="s2"> atoms to &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">counts</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">size</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">size</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">counts</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="n">remedy</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="s2">&quot; Pass stop_on_composition_change=False to keep recording through &quot;</span>
+                <span class="s2">&quot;a refill that preserves the atom counts.&quot;</span>
+                <span class="k">if</span> <span class="n">same_counts</span>
+                <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+            <span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;StabilityMonitor stopped recording: </span><span class="si">{</span><span class="n">change</span><span class="si">}</span><span class="s2">, so the per-graph &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;series would no longer describe the same systems.</span><span class="si">{</span><span class="n">remedy</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_kinetic</span><span class="p">:</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">energy</span> <span class="o">+</span> <span class="n">kinetic_energy_per_graph</span><span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="p">,</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">atomic_masses</span><span class="p">,</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step_count</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_energies</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_momenta</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">total_momentum</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: ARG002</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Record the state the propagator has just resolved.</span>
+
+<span class="sd">        A batch that carries ``status`` arrives with an ``active_graph_mask``</span>
+<span class="sd">        even when every graph is active, so only a mask that leaves some graph</span>
+<span class="sd">        out is refused: the series would then describe a changing subset of</span>
+<span class="sd">        systems.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">active_graph_mask</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">all</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;StabilityMonitor does not yet support status-filtered or inflight &quot;</span>
+                <span class="s2">&quot;dynamics in which some graphs are inactive, because the energy &quot;</span>
+                <span class="s2">&quot;and momentum series must be tracked per system.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">)</span>
+
+<div class="viewcode-block" id="StabilityMonitor.metrics">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.StabilityMonitor.html#nvalchemi.dynamics.hooks.StabilityMonitor.metrics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StabilityMetrics</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the drift and conservation metrics of the recorded series.</span>
+
+<span class="sd">        The call stacks the recorded samples and fits a rate over them. It</span>
+<span class="sd">        refuses a series too short to fit. Call it once the run is over; a call</span>
+<span class="sd">        made mid-run scores only the segment recorded so far.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        StabilityMetrics</span>
+<span class="sd">            Metrics over every recorded sample.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If fewer than two samples were recorded, or if every sample landed</span>
+<span class="sd">            on the same step so no rate can be formed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_nodes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;StabilityMonitor needs at least two recorded samples to measure &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;drift; got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">)</span><span class="si">}</span><span class="s2">. Run the dynamics with the monitor &quot;</span>
+                <span class="s2">&quot;registered, and check that neither &#39;frequency&#39; nor &#39;warmup_steps&#39; &quot;</span>
+                <span class="s2">&quot;is longer than the run.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">elapsed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">elapsed</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Recorded samples span no steps; got step counts &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">!r}</span><span class="s2"> to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">per_atom</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_energies</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_nodes</span>
+        <span class="n">drift</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_across_graphs</span><span class="p">((</span><span class="n">per_atom</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">per_atom</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">abs</span><span class="p">())</span>
+        <span class="n">momenta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_momenta</span><span class="p">)</span>
+        <span class="n">steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">centered</span> <span class="o">=</span> <span class="n">steps</span> <span class="o">-</span> <span class="n">steps</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="n">deviation</span> <span class="o">=</span> <span class="n">per_atom</span> <span class="o">-</span> <span class="n">per_atom</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">slope</span> <span class="o">=</span> <span class="p">(</span><span class="n">centered</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">deviation</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">centered</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">residual</span> <span class="o">=</span> <span class="n">deviation</span> <span class="o">-</span> <span class="n">centered</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">slope</span>
+        <span class="n">rate</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="kc">None</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">timestep_fs</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_across_graphs</span><span class="p">((</span><span class="n">slope</span> <span class="o">*</span> <span class="n">_FS_PER_NS</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">timestep_fs</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">())</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">StabilityMetrics</span><span class="p">(</span>
+            <span class="n">num_samples</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">),</span>
+            <span class="n">first_step</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">last_step</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">energy_drift_per_atom</span><span class="o">=</span><span class="n">drift</span><span class="p">,</span>
+            <span class="n">energy_drift_per_atom_per_step</span><span class="o">=</span><span class="n">drift</span> <span class="o">/</span> <span class="n">elapsed</span><span class="p">,</span>
+            <span class="n">energy_drift_per_atom_per_ns</span><span class="o">=</span><span class="n">rate</span><span class="p">,</span>
+            <span class="n">max_momentum_drift</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_across_graphs</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">momenta</span> <span class="o">-</span> <span class="n">momenta</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="p">),</span>
+            <span class="n">timestep_fs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timestep_fs</span><span class="p">,</span>
+            <span class="n">energy_fluctuation_per_atom</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_across_graphs</span><span class="p">(</span>
+                <span class="n">residual</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+            <span class="p">),</span>
+            <span class="n">max_energy_excursion_per_atom</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_across_graphs</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">per_atom</span> <span class="o">-</span> <span class="n">per_atom</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="p">),</span>
+            <span class="n">first_divergence_step</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_first_divergence_step</span><span class="p">,</span>
+            <span class="n">aggregate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">aggregate</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_across_graphs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reduce one figure per graph to the number the monitor reports.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">aggregate</span> <span class="o">==</span> <span class="s2">&quot;max&quot;</span> <span class="k">else</span> <span class="n">values</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span></div>
 
 </pre></div>
 

@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.evaluation.evaluate\_accuracy
+=============================================================
+
+.. currentmodule:: nvalchemi.training.distillation.evaluation
+
+.. autofunction:: evaluate_accuracy

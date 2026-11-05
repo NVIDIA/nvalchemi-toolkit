@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.evaluation.extensivity\_error
+=============================================================
+
+.. currentmodule:: nvalchemi.training.distillation.evaluation
+
+.. autofunction:: extensivity_error

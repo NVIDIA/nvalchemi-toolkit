@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Fine-Tuning Pretrained Models &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Fine-Tuning Pretrained Models &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,10 +55,10 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/finetuning';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Serialization and Reproducibility" href="serialization.html" />
+    <link rel="next" title="Distilling a Teacher Into a Student" href="distillation.html" />
     <link rel="prev" title="Losses" href="losses.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -718,7 +726,8 @@ validation set can go a long way toward mitigating this.</p>
 <p>The loss and training function conventions here are the same as in regular
 training — see <a class="reference internal" href="losses.html#losses-guide"><span class="std std-ref">Losses</span></a> and <a class="reference internal" href="training.html#training-guide"><span class="std std-ref">Training</span></a> for details on
 operator-composed losses, <code class="docutils literal notranslate"><span class="pre">dtype_policy</span></code>, and how <code class="docutils literal notranslate"><span class="pre">default_training_fn</span></code> maps
-output keys.</p>
+output keys. For regular fine-tuning, leave <code class="docutils literal notranslate"><span class="pre">peft_config=None</span></code>. Parameter-efficient
+fine-tuning will be discussed later in the LoRA section.</p>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>If your pretrained model comes from an existing <code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit</span></code> checkpoint,
@@ -891,6 +900,9 @@ replacement declaratively — this keeps the patch serializable through
 <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> subclass, including ones defined in your own codebase; the spec
 stores the fully-qualified class path and constructor arguments, so custom
 architectures serialize exactly like built-in ones.</p>
+<p>Patched modules are trainable by default, so you do not need to repeat their
+parameter names in <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>. Use <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code> only when you
+also want to opt in additional, non-patched parameters from the pretrained base.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_model_spec</span>
@@ -905,7 +917,6 @@ architectures serialize exactly like built-in ones.</p>
         <span class="p">),</span>
     <span class="p">},</span>
     <span class="n">freeze_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.*&quot;</span><span class="p">,),</span>
-    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,),</span>
     <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
         <span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">,</span>
         <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">1e-3</span><span class="p">},</span>
@@ -945,8 +956,8 @@ consume:</p>
             <span class="n">out_features</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
         <span class="p">),</span>
     <span class="p">},</span>
-    <span class="c1"># only have the newly added head trainable</span>
-    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.band_gap_head.*&quot;</span><span class="p">,),</span>
+    <span class="c1"># keep the pretrained base frozen; the patched head is trainable by default</span>
+    <span class="n">freeze_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.*&quot;</span><span class="p">,),</span>
     <span class="n">training_fn</span><span class="o">=</span><span class="n">train_energy_and_band_gap</span><span class="p">,</span>
     <span class="c1"># add an MSE loss based on the band gap</span>
     <span class="n">loss_fn</span><span class="o">=</span><span class="p">(</span>
@@ -964,8 +975,9 @@ and readout heads to obtain the energy and band gap values. The loss function
 is then composed of the regular <a class="reference internal" href="../modules/training/generated/nvalchemi.training.EnergyMSELoss.html#nvalchemi.training.EnergyMSELoss" title="nvalchemi.training.losses.terms.EnergyMSELoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyMSELoss</span></code></a>
 and a custom (fictitious) <code class="docutils literal notranslate"><span class="pre">YourMSELoss</span></code> to compute against the band gap and provide
 the key/value mapping out of the returned predictions dictionary from the training
-function. By specifying the <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>, only the new band gap head will
-receive weight updates from the optimizer.</p>
+function. The pretrained base is frozen by <code class="docutils literal notranslate"><span class="pre">freeze_patterns</span></code>, while the new
+band gap head remains trainable because patched modules are trainable by
+default.</p>
 </section>
 <section id="adding-or-replacing-an-embedding-table">
 <h3>Adding or replacing an embedding table<a class="headerlink" href="#adding-or-replacing-an-embedding-table" title="Link to this heading">#</a></h3>
@@ -988,10 +1000,7 @@ output heads:</p>
         <span class="p">),</span>
     <span class="p">},</span>
     <span class="n">freeze_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.*&quot;</span><span class="p">,),</span>
-    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span>
-        <span class="s2">&quot;main.model.atomic_embedding.*&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,</span>
-    <span class="p">),</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.readout.*&quot;</span><span class="p">,),</span>
     <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
         <span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">,</span>
         <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">5e-4</span><span class="p">},</span>
@@ -1015,7 +1024,7 @@ replacement yourself and pass the live module instance directly:</p>
 <span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
     <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
     <span class="n">module_patches</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;main.model.atomic_embedding&quot;</span><span class="p">:</span> <span class="n">replacement</span><span class="p">},</span>
-    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.atomic_embedding.*&quot;</span><span class="p">,),</span>
+    <span class="n">freeze_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.*&quot;</span><span class="p">,),</span>
     <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span><span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">),</span>
     <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
     <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">(),</span>
@@ -1069,6 +1078,296 @@ teacher-student workflows where the student’s backbone and head are trained at
 different rates: split the student’s parameters across two optimizer groups using
 the <a class="reference internal" href="training.html#training-guide"><span class="std std-ref">Training</span></a> parameter-group API, or run separate strategies in
 sequence via <code class="docutils literal notranslate"><span class="pre">from_pretrained_checkpoint</span></code>.</p>
+</section>
+<section id="lora-fine-tuning">
+<h3>LoRA fine-tuning<a class="headerlink" href="#lora-fine-tuning" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/training/generated/nvalchemi.training.FineTuningStrategy.html#nvalchemi.training.FineTuningStrategy" title="nvalchemi.training.FineTuningStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code></a> also supports
+parameter-efficient fine-tuning through <code class="docutils literal notranslate"><span class="pre">peft_config</span></code>; LoRA is the only
+supported PEFT method right now. Pass
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.peft.lora.LoRAConfig.html#nvalchemi.training.peft.lora.LoRAConfig" title="nvalchemi.training.peft.lora.LoRAConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoRAConfig</span></code></a> to inject low-rank LoRA adapters
+into selected modules before optimizer construction. The pretrained base is
+frozen by default, and the optimizer sees only adapter parameters plus any
+module patches or explicit extra parameters you opt in with
+<code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>.</p>
+<p>This is useful when the pretrained model is large, the target dataset is
+relatively small, or you want to keep the base model reusable while shipping a
+small domain-specific adapter. Full-model fine-tuning gives the optimizer the
+most freedom; LoRA trades some of that flexibility for lower memory use, fewer
+trainable parameters, and smaller checkpoint or adapter artifacts.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">NeighborListHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">EnergyMSELoss</span><span class="p">,</span>
+    <span class="n">FineTuningStrategy</span><span class="p">,</span>
+    <span class="n">ForceMSELoss</span><span class="p">,</span>
+    <span class="n">OptimizerConfig</span><span class="p">,</span>
+    <span class="n">TrainingStage</span><span class="p">,</span>
+    <span class="n">ValidationConfig</span><span class="p">,</span>
+    <span class="n">default_training_fn</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.lora</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoRAConfig</span>
+
+<span class="n">pretrained_model</span> <span class="o">=</span> <span class="n">load_my_pretrained_model</span><span class="p">()</span>
+<span class="n">train_loader</span> <span class="o">=</span> <span class="n">make_my_batch_loader</span><span class="p">()</span>
+<span class="n">validation_loader</span> <span class="o">=</span> <span class="n">make_my_validation_loader</span><span class="p">()</span>
+
+<span class="n">loss_fn</span> <span class="o">=</span> <span class="n">EnergyMSELoss</span><span class="p">()</span> <span class="o">+</span> <span class="n">ForceMSELoss</span><span class="p">(</span><span class="n">normalize_by_atom_count</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">loss_fn</span><span class="o">.</span><span class="n">dtype_policy</span> <span class="o">=</span> <span class="s2">&quot;prediction_to_target&quot;</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
+        <span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">,</span>
+        <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">3e-4</span><span class="p">,</span> <span class="s2">&quot;weight_decay&quot;</span><span class="p">:</span> <span class="mf">1e-6</span><span class="p">},</span>
+    <span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span><span class="p">,</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">2_000</span><span class="p">,</span>
+    <span class="n">devices</span><span class="o">=</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">)],</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">NeighborListHook</span><span class="p">(</span>
+            <span class="n">pretrained_model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">,</span>
+            <span class="n">stage</span><span class="o">=</span><span class="n">TrainingStage</span><span class="o">.</span><span class="n">BEFORE_FORWARD</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">],</span>
+    <span class="n">validation_config</span><span class="o">=</span><span class="n">ValidationConfig</span><span class="p">(</span>
+        <span class="n">validation_data</span><span class="o">=</span><span class="n">validation_loader</span><span class="p">,</span>
+        <span class="n">validation_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+        <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span><span class="p">,</span>
+        <span class="n">every_n_steps</span><span class="o">=</span><span class="mi">250</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">peft_config</span><span class="o">=</span><span class="n">LoRAConfig</span><span class="p">(</span>
+        <span class="n">lora_target_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.interactions.*.linear*&quot;</span><span class="p">,),</span>
+        <span class="n">rank</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">lora_dropout</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>LoRA target patterns match module names, not parameter names. They use the same
+shell-style glob syntax as <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>, but they are matched against
+<code class="docutils literal notranslate"><span class="pre">named_modules()</span></code> output with the model key prepended. A single model passed as
+<code class="docutils literal notranslate"><span class="pre">models=pretrained_model</span></code> is stored under <code class="docutils literal notranslate"><span class="pre">&quot;main&quot;</span></code>, so target names start with
+<code class="docutils literal notranslate"><span class="pre">main.</span></code>. For multi-model workflows, use the keys from your model dictionary.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">pretrained_model</span><span class="o">.</span><span class="n">named_modules</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;main.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Use the printed names to choose targets that the current model actually
+contains. Exact names such as <code class="docutils literal notranslate"><span class="pre">&quot;main.model.projection&quot;</span></code> are accepted, and globs
+such as <code class="docutils literal notranslate"><span class="pre">&quot;main.model.*projection&quot;</span></code> can select related modules. Patterns that
+match no modules raise an error before training begins.</p>
+<section id="how-lora-is-applied">
+<h4>How LoRA is applied<a class="headerlink" href="#how-lora-is-applied" title="Link to this heading">#</a></h4>
+<p>LoRA injection happens before optimizer construction. When <code class="docutils literal notranslate"><span class="pre">peft_config</span></code> is
+provided, <code class="docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code> prepends PEFT registration hooks before user
+hooks. When <code class="docutils literal notranslate"><span class="pre">compute_base_fingerprints=True</span></code>, the default, this starts with
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.BaseFingerprintHook.html#nvalchemi.training.hooks.BaseFingerprintHook" title="nvalchemi.training.hooks.BaseFingerprintHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseFingerprintHook</span></code></a>, which records
+base-model fingerprints before adapters mutate the model. For LoRA, PEFT setup
+then includes
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.peft.lora_hook.LoRAHook.html#nvalchemi.training.peft.lora_hook.LoRAHook" title="nvalchemi.training.peft.lora_hook.LoRAHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoRAHook</span></code></a>, which registers built-in and
+custom LoRA wrappers, then applies adapters to modules whose model-prefixed
+names match the target patterns. For each match, the LoRA registry selects the
+wrapper registered for that layer class.</p>
+<p>Each wrapper replaces the base layer with a module containing the frozen original
+layer and trainable low-rank adapter parameters. The net adapter weights start at zero,
+so the wrapped model initially matches the base model. Training optimizes only
+LoRA parameters, module patches, and explicit <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>. Mergeable
+wrappers can later fold the learned update back into the base layer for inference
+or export.</p>
+<p>The public wrapper classes are available from <code class="docutils literal notranslate"><span class="pre">nvalchemi.training.peft.lora</span></code>:</p>
+<ul class="simple">
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.training.peft.lora.LoRALinear</span></code> for <code class="docutils literal notranslate"><span class="pre">torch.nn.Linear</span></code>
+layers.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nvalchemi.training.peft.lora.TransformerEngineLoRALinear</span></code> for
+<code class="docutils literal notranslate"><span class="pre">transformer_engine.pytorch.Linear</span></code> layers when Transformer Engine is
+installed.</p></li>
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.training.peft.lora.EquivariantLoRALinear</span></code> for
+<code class="docutils literal notranslate"><span class="pre">e3nn.o3.Linear</span></code> layers.</p></li>
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.training.peft.lora.CuEquivarianceLoRALinear</span></code> for
+<code class="docutils literal notranslate"><span class="pre">cuequivariance_torch.operations.linear.Linear</span></code> layers.</p></li>
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.training.peft.lora.E3NNFullyConnectedLoRALayer</span></code> for
+<code class="docutils literal notranslate"><span class="pre">e3nn.nn._fc._Layer</span></code> scalar fully connected layers.</p></li>
+</ul>
+<p>Inspect the active layer-to-wrapper pairs with
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.peft.lora.available_lora_wrappers.html#nvalchemi.training.peft.lora.available_lora_wrappers" title="nvalchemi.training.peft.lora.available_lora_wrappers"><code class="xref py py-func docutils literal notranslate"><span class="pre">available_lora_wrappers()</span></code></a>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.lora</span><span class="w"> </span><span class="kn">import</span> <span class="n">available_lora_wrappers</span>
+
+<span class="k">for</span> <span class="n">layer_cls</span><span class="p">,</span> <span class="n">wrapper_cls</span> <span class="ow">in</span> <span class="n">available_lora_wrappers</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">layer_cls</span><span class="p">,</span> <span class="s2">&quot;-&gt;&quot;</span><span class="p">,</span> <span class="n">wrapper_cls</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>To support a custom layer type, write a wrapper module that implements the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.training.peft.lora.LoRALayer</span></code> interface, then register that
+wrapper for the base layer class through
+<code class="docutils literal notranslate"><span class="pre">LoRAConfig(wrapper_registrations=...)</span></code>. Each registration is a pair of
+<code class="docutils literal notranslate"><span class="pre">(LoRAWrappableLayer,</span> <span class="pre">LoRAWrapper)</span></code>: when LoRA finds an instance of the base class
+matching your target patterns, it replaces that layer with your wrapper. The
+strategy register these pairs immediately before adapter injection, so target
+patterns can select the custom layer in the same constructor call. Registrations
+are temporary: the process-wide registry is restored after injection.</p>
+<p>A custom wrapper may replace an existing or built-in wrapper for the duration
+of injection, with a <code class="docutils literal notranslate"><span class="pre">UserWarning</span></code>. Attempting to assign two different wrappers
+to the same layer class in <code class="docutils literal notranslate"><span class="pre">LoRAConfig</span></code> will raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> during
+configuration validation.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">FineTuningStrategy</span><span class="p">,</span> <span class="n">OptimizerConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.lora</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoRAConfig</span><span class="p">,</span> <span class="n">LoRALayer</span><span class="p">,</span> <span class="n">LoRAWrapperRegistrations</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyBlock</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="o">...</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyBlockLoRA</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">LoRALayer</span><span class="p">):</span>
+    <span class="n">mergeable</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_layer</span><span class="p">:</span> <span class="n">MyBlock</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dropout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">init</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span> <span class="o">=</span> <span class="n">base_layer</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+            <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">/</span> <span class="n">rank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="c1"># Define trainable LoRA parameters or submodules here. Initialize the</span>
+        <span class="c1"># LoRA residual to zero.</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Return base_layer(...) plus the LoRA residual when enabled.</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">merge_into_base</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Fold the LoRA delta into base_layer for merged inference.</span>
+        <span class="o">...</span>
+
+
+<span class="n">custom_lora_wrappers</span><span class="p">:</span> <span class="n">LoRAWrapperRegistrations</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">(</span><span class="n">MyBlock</span><span class="p">,</span> <span class="n">MyBlockLoRA</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">peft_config</span><span class="o">=</span><span class="n">LoRAConfig</span><span class="p">(</span>
+        <span class="n">lora_target_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.custom_blocks.*&quot;</span><span class="p">,),</span>
+        <span class="n">wrapper_registrations</span><span class="o">=</span><span class="n">custom_lora_wrappers</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span><span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">(),</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">1_000</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>If the strategy must round-trip through <code class="docutils literal notranslate"><span class="pre">to_spec_dict()</span></code> or restart from a
+serialized checkpoint recipe, define custom layer and wrapper classes in
+importable modules rather than in a notebook cell or local function. The recipe
+stores class paths for <code class="docutils literal notranslate"><span class="pre">wrapper_registrations</span></code>, so those paths must be
+importable when the strategy is rebuilt.</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">peft_config</span></code> is provided, LoRA freezes the pretrained base by default, so
+<code class="docutils literal notranslate"><span class="pre">freeze_patterns</span></code> must stay empty. LoRA adapters and <code class="docutils literal notranslate"><span class="pre">module_patches</span></code> are
+trainable automatically. As in regular fine-tuning, use <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>
+to select any additional existing model parameters you also want to update.</p>
+<p>For example, this strategy trains the LoRA adapters, the patched auxiliary
+projection, and one explicitly selected base projection.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">FineTuningStrategy</span><span class="p">,</span> <span class="n">create_model_spec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.lora</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoRAConfig</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">module_patches</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;main.model.aux_projection&quot;</span><span class="p">:</span> <span class="n">create_model_spec</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">,</span>
+            <span class="n">in_features</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+            <span class="n">out_features</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">},</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.projection.*&quot;</span><span class="p">,),</span>
+    <span class="n">peft_config</span><span class="o">=</span><span class="n">LoRAConfig</span><span class="p">(</span>
+        <span class="n">lora_target_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.interactions.*.linear*&quot;</span><span class="p">,),</span>
+    <span class="p">),</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span><span class="n">optimizer_cls</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">),</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">EnergyMSELoss</span><span class="p">(),</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">1_000</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The complete intermediate example
+<code class="docutils literal notranslate"><span class="pre">examples/intermediate/08_lora_finetuning.py</span></code> shows a MACE workflow that
+downloads the LPSC dataset, fits reference energies, inspects LoRA target
+candidates, trains adapters, writes a trainable-state PEFT checkpoint, and
+loads the PEFT checkpoint back into a fresh base model.</p>
+</section>
+</section>
+<section id="adding-a-peft-method">
+<h3>Adding a PEFT method<a class="headerlink" href="#adding-a-peft-method" title="Link to this heading">#</a></h3>
+<p>A PEFT provider must supply all five arguments required by
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.peft.register_peft_method.html#nvalchemi.training.peft.register_peft_method" title="nvalchemi.training.peft.register_peft_method"><code class="xref py py-func docutils literal notranslate"><span class="pre">register_peft_method()</span></code></a>. Together, these inputs
+are the complete registry contract for a method:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">method</span></code>: a unique, stable string stored in serialized strategy and checkpoint
+metadata.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">config_cls</span></code>: a <code class="docutils literal notranslate"><span class="pre">PeftConfig</span></code> subclass whose frozen <code class="docutils literal notranslate"><span class="pre">peft_method</span></code> literal matches
+<code class="docutils literal notranslate"><span class="pre">method</span></code>. Its <code class="docutils literal notranslate"><span class="pre">to_spec_dict()</span></code> result must be JSON-safe; add Pydantic serializers
+or validators for class objects and other Python-only fields.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">build_peft_setup_hooks</span></code>: a callable that accepts the validated config and
+strategy mapping, checks model-dependent restrictions, and returns hooks that
+install the PEFT structure before optimizer construction.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">apply_peft_from_checkpoint_metadata</span></code>: a callable that accepts the base model,
+serialized strategy metadata, model name, and optional import-path validator.
+It must rebuild the saved config and recreate the PEFT module structure before
+weights are loaded.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">merge_peft</span></code>: a callable that merges learned PEFT parameters into the model and
+honors <code class="docutils literal notranslate"><span class="pre">strict</span></code> when the structure cannot be merged completely.</p></li>
+</ul>
+<p>The registration has this shape:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_peft_method</span>
+
+<span class="n">register_peft_method</span><span class="p">(</span>
+    <span class="n">MY_PEFT_METHOD</span><span class="p">,</span>
+    <span class="n">config_cls</span><span class="o">=</span><span class="n">MyPeftConfig</span><span class="p">,</span>
+    <span class="n">build_peft_setup_hooks</span><span class="o">=</span><span class="n">build_my_peft_setup_hooks</span><span class="p">,</span>
+    <span class="n">apply_peft_from_checkpoint_metadata</span><span class="o">=</span><span class="n">apply_my_peft_from_checkpoint_metadata</span><span class="p">,</span>
+    <span class="n">merge_peft</span><span class="o">=</span><span class="n">merge_my_peft</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>A minimal discriminator field looks like this:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">Field</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">PeftConfig</span>
+
+<span class="n">MY_PEFT_METHOD</span> <span class="o">=</span> <span class="s2">&quot;my_peft&quot;</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyPeftConfig</span><span class="p">(</span><span class="n">PeftConfig</span><span class="p">):</span>
+    <span class="n">peft_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;my_peft&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">MY_PEFT_METHOD</span><span class="p">,</span>
+        <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">nvalchemi/training/peft/lora.py</span></code> as a reference implementation and
+<code class="docutils literal notranslate"><span class="pre">test/training/test_peft_lora.py</span></code> as its test example.</p>
+<p>Finally, add the method registration callback to <code class="docutils literal notranslate"><span class="pre">_register_builtin_peft_methods()</span></code>
+in <code class="docutils literal notranslate"><span class="pre">nvalchemi/training/peft/registry.py</span></code>.</p>
 </section>
 </section>
 <section id="checkpoint-workflows">
@@ -1179,6 +1478,72 @@ the next stage calls <code class="docutils literal notranslate"><span class="pre
 broader set of <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>, gradually opening up more of the model
 without ever managing weights manually between stages.</p>
 </section>
+<section id="lora-checkpoints-and-peft-loading">
+<h3>LoRA checkpoints and PEFT loading<a class="headerlink" href="#lora-checkpoints-and-peft-loading" title="Link to this heading">#</a></h3>
+<p>LoRA workflows use the same <code class="docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code> checkpoint APIs as regular
+fine-tuning. <a class="reference internal" href="../modules/training/generated/nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint.html#nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint" title="nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_pretrained_checkpoint()</span></code></a>
+starts a fresh LoRA run from saved model weights when the new strategy includes
+<code class="docutils literal notranslate"><span class="pre">peft_config=LoRAConfig(...)</span></code>. <code class="xref py py-meth docutils literal notranslate"><span class="pre">load_checkpoint()</span></code>,
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">restore_checkpoint()</span></code>,
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">save_checkpoint()</span></code>, and
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.CheckpointHook.html#nvalchemi.training.hooks.CheckpointHook" title="nvalchemi.training.hooks.CheckpointHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointHook</span></code></a> handle restartable runs.
+For parameter-efficient saving, especially with large base models or when
+training only a small fraction of parameters, use
+<code class="docutils literal notranslate"><span class="pre">save_trainable_state_only=True</span></code> in <code class="docutils literal notranslate"><span class="pre">save_checkpoint</span></code> or <code class="docutils literal notranslate"><span class="pre">CheckpointHook</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">CheckpointHook</span><span class="p">,</span> <span class="n">FineTuningStrategy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.lora</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoRAConfig</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">,</span>
+    <span class="n">peft_config</span><span class="o">=</span><span class="n">LoRAConfig</span><span class="p">(</span>
+        <span class="n">lora_target_patterns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;main.model.interactions.*.linear*&quot;</span><span class="p">,),</span>
+    <span class="p">),</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">CheckpointHook</span><span class="p">(</span>
+            <span class="s2">&quot;runs/lora-ft/checkpoints&quot;</span><span class="p">,</span>
+            <span class="n">step_interval</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+            <span class="n">save_trainable_state_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">],</span>
+    <span class="o">...</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">save_trainable_state_only=False</span></code> only when the checkpoint must carry
+the full model state instead of relying on the original base model being
+available. Trainable-only checkpoints are still training checkpoints; they are
+not meant to be standalone deployable model artifacts unless they are loaded
+with a compatible base model.</p>
+<p>Load a trainable-state PEFT checkpoint into a compatible pristine base model
+with <a class="reference internal" href="../modules/training/generated/nvalchemi.training.peft.load_peft_checkpoint_into_model.html#nvalchemi.training.peft.load_peft_checkpoint_into_model" title="nvalchemi.training.peft.load_peft_checkpoint_into_model"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_peft_checkpoint_into_model()</span></code></a>. By
+default, <code class="docutils literal notranslate"><span class="pre">load_peft_checkpoint_into_model(...,</span> <span class="pre">merge=True)</span></code> folds mergeable
+adapter weights into the base layers, which is usually the right shape for
+inference and export.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_peft_checkpoint_into_model</span>
+
+<span class="n">checkpoint_index</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">save_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;runs/lora-ft/checkpoints&quot;</span><span class="p">,</span>
+    <span class="n">save_trainable_state_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">base_model</span> <span class="o">=</span> <span class="n">load_my_pretrained_model</span><span class="p">()</span>
+<span class="n">finetuned_model</span> <span class="o">=</span> <span class="n">load_peft_checkpoint_into_model</span><span class="p">(</span>
+    <span class="n">base_model</span><span class="p">,</span>
+    <span class="s2">&quot;runs/lora-ft/checkpoints&quot;</span><span class="p">,</span>
+    <span class="n">checkpoint_index</span><span class="o">=</span><span class="n">checkpoint_index</span><span class="p">,</span>
+    <span class="n">model_name</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
+    <span class="n">merge</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">finetuned_model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>LoRA checkpoints record base-model fingerprints when
+<code class="docutils literal notranslate"><span class="pre">compute_base_fingerprints=True</span></code>, the default. Loading raises when the saved
+checkpoint does not match the supplied base model. For loading,
+<code class="docutils literal notranslate"><span class="pre">strict=False</span></code> turns supported compatibility or merge failures into warnings,
+but the safest workflow is to load PEFT checkpoints onto the same base
+checkpoint and model configuration used during fine-tuning.</p>
+</section>
 </section>
 <section id="hooks-in-fine-tuning">
 <h2>Hooks in fine-tuning<a class="headerlink" href="#hooks-in-fine-tuning" title="Link to this heading">#</a></h2>
@@ -1186,12 +1551,18 @@ without ever managing weights manually between stages.</p>
 <code class="docutils literal notranslate"><span class="pre">TrainingStrategy</span></code> — see <a class="reference internal" href="../modules/training/hooks.html#training-hooks"><span class="std std-ref">Training update hooks</span></a> for the full hook lifecycle,
 available stages, and how to write custom hooks.</p>
 <p>One ordering detail is specific to fine-tuning: the strategy internally
-registers a <a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.ModulePatchHook.html#nvalchemi.training.hooks.ModulePatchHook" title="nvalchemi.training.hooks.ModulePatchHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModulePatchHook</span></code></a> and a
-<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainableParameterHook.html#nvalchemi.training.hooks.TrainableParameterHook" title="nvalchemi.training.hooks.TrainableParameterHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainableParameterHook</span></code></a> before any hooks
-you supply via <code class="docutils literal notranslate"><span class="pre">hooks=</span></code>. This means your custom hooks always observe the
-already-patched module tree and the already-filtered optimizer parameter
-groups. If a hook inspects which parameters are in the optimizer, it will see
-the post-filter state.</p>
+registers PEFT hooks first, including
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.BaseFingerprintHook.html#nvalchemi.training.hooks.BaseFingerprintHook" title="nvalchemi.training.hooks.BaseFingerprintHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseFingerprintHook</span></code></a> when base
+fingerprinting is enabled and then PEFT method hooks such as
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.peft.lora_hook.LoRAHook.html#nvalchemi.training.peft.lora_hook.LoRAHook" title="nvalchemi.training.peft.lora_hook.LoRAHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoRAHook</span></code></a>. It then registers
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.ModulePatchHook.html#nvalchemi.training.hooks.ModulePatchHook" title="nvalchemi.training.hooks.ModulePatchHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModulePatchHook</span></code></a>, followed by
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainableParameterHook.html#nvalchemi.training.hooks.TrainableParameterHook" title="nvalchemi.training.hooks.TrainableParameterHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainableParameterHook</span></code></a>. When parameter
+filtering is active, <a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.FineTuningSummaryHook.html#nvalchemi.training.hooks.FineTuningSummaryHook" title="nvalchemi.training.hooks.FineTuningSummaryHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FineTuningSummaryHook</span></code></a>
+caches the trainable-parameter summary before any hooks you supply via
+<code class="docutils literal notranslate"><span class="pre">hooks=</span></code>. This means your custom hooks always observe the already-adapted
+module tree, the already-filtered optimizer parameter groups, and the cached
+fine-tuning summary. If a hook inspects which parameters are in the optimizer,
+it will see the post-filter state.</p>
 <p>For per-batch policies — mixed precision, gradient clipping, custom scheduler
 stepping — use <a class="reference internal" href="../modules/training/hooks.html#training-update-hooks"><span class="std std-ref">Training update hooks</span></a> rather than registration-time
 hooks.</p>
@@ -1200,19 +1571,22 @@ hooks.</p>
 <h2>Notes on fine-tuning models<a class="headerlink" href="#notes-on-fine-tuning-models" title="Link to this heading">#</a></h2>
 <section id="mace">
 <h3>MACE<a class="headerlink" href="#mace" title="Link to this heading">#</a></h3>
-<p>When loading a MACE checkpoint for fine-tuning, make sure the model is in a
-trainable form before passing it to <code class="docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code>.
+<p>When loading a MACE checkpoint for fine-tuning, pass <code class="docutils literal notranslate"><span class="pre">train=True</span></code> so the
+weights stay trainable.
 <a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper.from_checkpoint" title="nvalchemi.models.mace.MACEWrapper.from_checkpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.models.mace.MACEWrapper.from_checkpoint()</span></code></a> returns an
-eval-mode wrapper by default; the training strategy switches it to train mode
-during <code class="docutils literal notranslate"><span class="pre">run</span></code>, so that part is handled for you. The one flag to watch is
-<code class="docutils literal notranslate"><span class="pre">compile_model</span></code>: setting it to <code class="docutils literal notranslate"><span class="pre">True</span></code> is inference-only because it freezes
-parameters before <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>. Always use <code class="docutils literal notranslate"><span class="pre">compile_model=False</span></code> for
-fine-tuning:</p>
+eval-mode wrapper with frozen weights by default (<code class="docutils literal notranslate"><span class="pre">train=False</span></code>), which is what
+inference wants: forces come from autograd with respect to positions, so frozen
+weights lose nothing. With <code class="docutils literal notranslate"><span class="pre">train=True</span></code> the checkpoint’s <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> flags
+are kept and the training strategy switches the wrapper to train mode during
+<code class="docutils literal notranslate"><span class="pre">run</span></code>. Whether the weights are trainable is controlled by <code class="docutils literal notranslate"><span class="pre">train</span></code> alone, not by
+<code class="docutils literal notranslate"><span class="pre">compile_model</span></code>; compiled fine-tuning is not covered here, so keep
+<code class="docutils literal notranslate"><span class="pre">compile_model=False</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.mace</span><span class="w"> </span><span class="kn">import</span> <span class="n">MACEWrapper</span>
 
 <span class="n">pretrained_model</span> <span class="o">=</span> <span class="n">MACEWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span>
     <span class="s2">&quot;runs/pretrain/checkpoints&quot;</span><span class="p">,</span>
     <span class="n">compile_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">train</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
@@ -1222,16 +1596,22 @@ fine-tuning:</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>If a compiled model is passed, the trainable parameter filter will match
-nothing and the strategy will raise an error before the run begins.</p>
+<p>For full-model fine-tuning, pass <code class="docutils literal notranslate"><span class="pre">train=True</span></code>. Otherwise, the frozen base has no
+trainable parameters and the strategy will raise an error unless you select
+parameters with <code class="docutils literal notranslate"><span class="pre">trainable_patterns</span></code>, add trainable module patches, or configure
+PEFT such as LoRA.</p>
 </section>
 </section>
 <section id="api-reference">
 <h2>API reference<a class="headerlink" href="#api-reference" title="Link to this heading">#</a></h2>
 <p>See <a class="reference internal" href="../modules/training/finetuning.html#training-finetuning-api"><span class="std std-ref">Fine-tuning API</span></a> for the API reference for
 <a class="reference internal" href="../modules/training/generated/nvalchemi.training.FineTuningStrategy.html#nvalchemi.training.FineTuningStrategy" title="nvalchemi.training.FineTuningStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code></a>,
-<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.ModulePatchHook.html#nvalchemi.training.hooks.ModulePatchHook" title="nvalchemi.training.hooks.ModulePatchHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModulePatchHook</span></code></a>, and
-<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainableParameterHook.html#nvalchemi.training.hooks.TrainableParameterHook" title="nvalchemi.training.hooks.TrainableParameterHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainableParameterHook</span></code></a>.</p>
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.ModulePatchHook.html#nvalchemi.training.hooks.ModulePatchHook" title="nvalchemi.training.hooks.ModulePatchHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModulePatchHook</span></code></a>,
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.TrainableParameterHook.html#nvalchemi.training.hooks.TrainableParameterHook" title="nvalchemi.training.hooks.TrainableParameterHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainableParameterHook</span></code></a>,
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.FineTuningSummaryHook.html#nvalchemi.training.hooks.FineTuningSummaryHook" title="nvalchemi.training.hooks.FineTuningSummaryHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FineTuningSummaryHook</span></code></a>,
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.peft.lora.LoRAConfig.html#nvalchemi.training.peft.lora.LoRAConfig" title="nvalchemi.training.peft.lora.LoRAConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoRAConfig</span></code></a>,
+<a class="reference internal" href="../modules/training/generated/nvalchemi.training.peft.load_peft_checkpoint_into_model.html#nvalchemi.training.peft.load_peft_checkpoint_into_model" title="nvalchemi.training.peft.load_peft_checkpoint_into_model"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_peft_checkpoint_into_model()</span></code></a>,
+and <a class="reference internal" href="../modules/training/generated/nvalchemi.training.hooks.BaseFingerprintHook.html#nvalchemi.training.hooks.BaseFingerprintHook" title="nvalchemi.training.hooks.BaseFingerprintHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseFingerprintHook</span></code></a>.</p>
 </section>
 </section>
 
@@ -1255,11 +1635,11 @@ nothing and the strategy will raise an error before the run begins.</p>
       </div>
     </a>
     <a class="right-next"
-       href="serialization.html"
+       href="distillation.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Serialization and Reproducibility</p>
+        <p class="prev-next-title">Distilling a Teacher Into a Student</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1294,11 +1674,17 @@ nothing and the strategy will raise an error before the run begins.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-or-replacing-an-output-head">Adding or replacing an output head</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-or-replacing-an-embedding-table">Adding or replacing an embedding table</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-model-fine-tuning">Multi-model fine-tuning</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lora-fine-tuning">LoRA fine-tuning</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#how-lora-is-applied">How LoRA is applied</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-peft-method">Adding a PEFT method</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checkpoint-workflows">Checkpoint workflows</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resuming-an-interrupted-run">Resuming an interrupted run</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#branching-a-new-run-from-existing-weights">Branching a new run from existing weights</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lora-checkpoints-and-peft-loading">LoRA checkpoints and PEFT loading</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks-in-fine-tuning">Hooks in fine-tuning</a></li>

@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.ReplayEviction
+==============================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autodata:: ReplayEviction

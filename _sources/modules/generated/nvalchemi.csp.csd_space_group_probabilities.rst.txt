@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.csd\_space\_group\_probabilities
+==============================================
+
+.. currentmodule:: nvalchemi.csp
+
+.. autofunction:: csd_space_group_probabilities

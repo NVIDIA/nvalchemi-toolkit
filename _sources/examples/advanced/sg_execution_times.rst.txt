@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:14.630** total execution time for 10 files **from examples/advanced**:
+**00:13.826** total execution time for 16 files **from examples/advanced**:
 
 .. container::
 
@@ -33,31 +33,49 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_examples_advanced_08_aimnet2_ewald_pipeline.py` (``08_aimnet2_ewald_pipeline.py``)
-     - 00:07.131
+     - 00:06.665
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_06_ewald_electrostatics.py` (``06_ewald_electrostatics.py``)
-     - 00:03.497
+     - 00:01.905
      - 0.0
-   * - :ref:`sphx_glr_examples_advanced_10_mace_training.py` (``10_mace_training.py``)
-     - 00:01.149
+   * - :ref:`sphx_glr_examples_advanced_11_batched_neb.py` (``11_batched_neb.py``)
+     - 00:01.889
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_02_custom_hook.py` (``02_custom_hook.py``)
-     - 00:01.094
+     - 00:01.149
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_07_composable_model_composition.py` (``07_composable_model_composition.py``)
-     - 00:00.834
+     - 00:00.817
      - 0.0
-   * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``04_mace_nvt.py``)
-     - 00:00.299
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_05_custom_integrator.py` (``05_custom_integrator.py``)
-     - 00:00.241
+   * - :ref:`sphx_glr_examples_advanced_15_rmsd_metadynamics.py` (``15_rmsd_metadynamics.py``)
+     - 00:00.296
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_01_biased_potential.py` (``01_biased_potential.py``)
-     - 00:00.222
+     - 00:00.223
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_05_custom_integrator.py` (``05_custom_integrator.py``)
+     - 00:00.199
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_14_metadynamics.py` (``14_metadynamics.py``)
+     - 00:00.161
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_16_adaptive_biasing_force.py` (``16_adaptive_biasing_force.py``)
+     - 00:00.118
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``04_mace_nvt.py``)
+     - 00:00.109
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_03_custom_convergence.py` (``03_custom_convergence.py``)
-     - 00:00.164
+     - 00:00.102
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_12_umbrella_sampling.py` (``12_umbrella_sampling.py``)
+     - 00:00.085
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_13_replica_exchange.py` (``13_replica_exchange.py``)
+     - 00:00.075
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_10_mace_training.py` (``10_mace_training.py``)
+     - 00:00.033
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_09_uma_nve.py` (``09_uma_nve.py``)
      - 00:00.000

@@ -1,0 +1,959 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.distillation.labeling &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/distillation/labeling';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.distillation.labeling</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Offline labeling of a dataset with teacher signals.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">time</span><span class="w"> </span><span class="kn">import</span> <span class="n">perf_counter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AtomicDataZarrReader</span><span class="p">,</span>
+    <span class="n">AtomicDataZarrWriter</span><span class="p">,</span>
+    <span class="n">FieldSchema</span><span class="p">,</span>
+    <span class="n">_get_cat_dim</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation._attach</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_attach_teacher_labels</span><span class="p">,</span>
+    <span class="n">_prune_empty_edges</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.scoring</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_DENSE_NEIGHBOR_KEYS</span><span class="p">,</span>
+    <span class="n">_NEIGHBOR_KEYS</span><span class="p">,</span>
+    <span class="n">_STORABLE_DTYPES</span><span class="p">,</span>
+    <span class="n">_reject_foreign_fields</span><span class="p">,</span>
+    <span class="n">scorer_fields</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">StoreLike</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchDatasetProtocol</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.scoring</span><span class="w"> </span><span class="kn">import</span> <span class="n">TeacherScorer</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;label_dataset&quot;</span><span class="p">]</span>
+
+
+<span class="n">_StoreSchema</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FieldSchema</span><span class="p">]</span>
+<span class="sd">&quot;&quot;&quot;Level, dtype, and row shape of every field a labeled chunk persists, by field.&quot;&quot;&quot;</span>
+
+<span class="n">_STORE_LEVELS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;atoms&quot;</span><span class="p">:</span> <span class="s2">&quot;atom&quot;</span><span class="p">,</span> <span class="s2">&quot;edges&quot;</span><span class="p">:</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span> <span class="s2">&quot;system&quot;</span><span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Store level names of the built-in batch levels; a custom level keeps its name.&quot;&quot;&quot;</span>
+
+<span class="n">_PREFETCH_METHODS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;prefetch_fused_batches&quot;</span><span class="p">,</span> <span class="s2">&quot;get_fused_batches&quot;</span><span class="p">,</span> <span class="s2">&quot;cancel_prefetch&quot;</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Dataset methods the pipelined chunk loop reads ahead through.&quot;&quot;&quot;</span>
+
+<span class="n">_AUTO_PROBE_CHUNKS</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="sd">&quot;&quot;&quot;Chunks ``prefetch=&quot;auto&quot;`` reads sequentially before it tries reading ahead.&quot;&quot;&quot;</span>
+
+<span class="n">_PIPELINE_LOAD_FRACTION</span> <span class="o">=</span> <span class="mf">0.5</span>
+<span class="sd">&quot;&quot;&quot;Load-to-processing time ratio below which ``prefetch=&quot;auto&quot;`` stays sequential.&quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_StoreState</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample counts and field schema of an existing labeled store.&quot;&quot;&quot;</span>
+
+    <span class="n">active</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">total</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">schema</span><span class="p">:</span> <span class="n">_StoreSchema</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_row_shape</span><span class="p">(</span><span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return *shape* without the axis a store concatenates *field* along.&quot;&quot;&quot;</span>
+    <span class="n">cat_dim</span> <span class="o">=</span> <span class="n">_get_cat_dim</span><span class="p">(</span><span class="n">field</span><span class="p">)</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">size</span> <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="k">if</span> <span class="n">axis</span> <span class="o">!=</span> <span class="n">cat_dim</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_existing_store_state</span><span class="p">(</span><span class="n">store</span><span class="p">:</span> <span class="n">StoreLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_StoreState</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the state of *store*, or ``None`` when it cannot be read.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">reader</span> <span class="o">=</span> <span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">FileNotFoundError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">reader</span><span class="o">.</span><span class="n">check_integrity</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">_StoreState</span><span class="p">(</span>
+            <span class="n">active</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">reader</span><span class="p">),</span> <span class="n">total</span><span class="o">=</span><span class="n">reader</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">reader</span><span class="o">.</span><span class="n">schema</span><span class="p">()</span>
+        <span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">reader</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_store_holds_data</span><span class="p">(</span><span class="n">store</span><span class="p">:</span> <span class="n">StoreLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Report whether *store* already holds anything a fresh write would destroy.</span>
+
+<span class="sd">    A filesystem path is measured by its existence, a mapping store by holding</span>
+<span class="sd">    a key, and any other store by whether zarr finds a node at its root, since</span>
+<span class="sd">    an abstract store publishes no synchronous emptiness probe. The question is</span>
+<span class="sd">    asked of every store type because :meth:`AtomicDataZarrWriter.write` opens</span>
+<span class="sd">    a new store in mode ``&quot;w&quot;``, which clears whatever it finds there.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">zarr</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;r&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">FileNotFoundError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="kc">True</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_batch_schema</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_StoreSchema</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the level, dtype, and row shape a writer would persist for each field.</span>
+
+<span class="sd">    Mirrors the writer&#39;s layout: a system-level tensor has its unit axes after</span>
+<span class="sd">    the sample axis squeezed away before it is stored. Levels come from the</span>
+<span class="sd">    batch&#39;s storage rather than ``batch.keys``, which carries only the built-in</span>
+<span class="sd">    levels, so a custom-level field is held to the schema like any other.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">schema</span><span class="p">:</span> <span class="n">_StoreSchema</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">level</span><span class="p">,</span> <span class="n">names</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="n">level_keys</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span>
+                <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">shape</span> <span class="o">=</span> <span class="n">shape</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>
+            <span class="n">store_level</span> <span class="o">=</span> <span class="n">_STORE_LEVELS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">level</span><span class="p">)</span>
+            <span class="n">schema</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">FieldSchema</span><span class="p">(</span>
+                <span class="n">store_level</span><span class="p">,</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">_row_shape</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="n">schema</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_chunk_schema</span><span class="p">(</span>
+    <span class="n">reference</span><span class="p">:</span> <span class="n">_StoreSchema</span><span class="p">,</span> <span class="n">outgoing</span><span class="p">:</span> <span class="n">_StoreSchema</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise when a chunk would write a different schema than the store holds.</span>
+
+<span class="sd">    The writer&#39;s append extends only the arrays a store already holds, so</span>
+<span class="sd">    drifting fields would misalign arrays, drifting dtypes would cast labels,</span>
+<span class="sd">    and drifting row shapes would truncate them, all without an error.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">chunk</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;the chunk covering samples </span><span class="si">{</span><span class="n">indices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">!r}</span><span class="s2">-</span><span class="si">{</span><span class="n">indices</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">!r}</span><span class="s2">&quot;</span>
+    <span class="n">extra</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">outgoing</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">reference</span><span class="p">))</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">reference</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">outgoing</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">extra</span> <span class="ow">or</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Every labeled chunk must write the fields the store holds; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">chunk</span><span class="si">}</span><span class="s2"> writes extra </span><span class="si">{</span><span class="n">extra</span><span class="si">!r}</span><span class="s2"> and is missing </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">drifted</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is stored as </span><span class="si">{</span><span class="n">reference</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">!r}</span><span class="s2"> but arrives as </span><span class="si">{</span><span class="n">outgoing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">!r}</span><span class="s2">&quot;</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">reference</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reference</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">!=</span> <span class="n">outgoing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">drifted</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Every labeled chunk must write the levels, dtypes, and row shapes the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;store holds; in </span><span class="si">{</span><span class="n">chunk</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">drifted</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_storable_dtypes</span><span class="p">(</span><span class="n">outgoing</span><span class="p">:</span> <span class="n">_StoreSchema</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise when a chunk carries a floating-point dtype no store can hold.</span>
+
+<span class="sd">    Only the chunk defining a fresh store&#39;s schema is checked; every later</span>
+<span class="sd">    chunk is already held to that schema.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">unstorable</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> arrives as </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="si">!r}</span><span class="s2">&quot;</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">spec</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">outgoing</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">is_floating_point</span> <span class="ow">and</span> <span class="n">spec</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_STORABLE_DTYPES</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">unstorable</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Every floating-point field must arrive in a dtype an ALCHEMI Zarr &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;store can hold; </span><span class="si">{</span><span class="n">unstorable</span><span class="si">}</span><span class="s2">, and the storable dtypes are &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_STORABLE_DTYPES</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_strip_unstorable</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">keep</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">ephemeral</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Drop *ephemeral* and any field that appeared during labeling, keeping *keep*.</span>
+
+<span class="sd">    An edge group left with no fields is dropped too, so the store&#39;s edge</span>
+<span class="sd">    pointers never record edges no array backs.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">ephemeral</span> <span class="o">|</span> <span class="p">(</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">_batch_schema</span><span class="p">(</span><span class="n">batch</span><span class="p">))</span> <span class="o">-</span> <span class="n">keep</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">batch</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+    <span class="n">_prune_empty_edges</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_chunk_batches</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">:</span> <span class="n">BatchDatasetProtocol</span><span class="p">,</span>
+    <span class="n">chunks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+    <span class="n">prefetch</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Yield the batch of every chunk, reading one chunk ahead while pipelining is on.</span>
+
+<span class="sd">    Under ``prefetch=&quot;auto&quot;`` the first :data:`_AUTO_PROBE_CHUNKS` chunks are</span>
+<span class="sd">    read sequentially, with each load and the caller&#39;s processing of the</span>
+<span class="sd">    yielded batch timed separately. The last of them is the reference: reading</span>
+<span class="sd">    ahead starts only when its load took at least</span>
+<span class="sd">    :data:`_PIPELINE_LOAD_FRACTION` of its processing, since a shorter load</span>
+<span class="sd">    has too little to hide. The first chunk read entirely ahead is then timed</span>
+<span class="sd">    against the reference per atom, and the run falls back to sequential reads</span>
+<span class="sd">    when it was not faster, which is what a fast local store looks like once</span>
+<span class="sd">    the read-ahead thread contends with the scoring. The first chunk is never</span>
+<span class="sd">    the reference because it carries CUDA warm-up and the store&#39;s creation,</span>
+<span class="sd">    and a chunk without atoms is never a probe because it carries no scoring</span>
+<span class="sd">    to compare the load against; the next chunk with atoms takes its place. A</span>
+<span class="sd">    read left pending when the caller stops early is cancelled.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pipelined</span> <span class="o">=</span> <span class="n">prefetch</span> <span class="ow">is</span> <span class="kc">True</span>
+    <span class="n">pending</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">probing</span> <span class="o">=</span> <span class="n">prefetch</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span>
+    <span class="n">reference</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">position</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">chunks</span><span class="p">):</span>
+            <span class="n">started</span> <span class="o">=</span> <span class="n">perf_counter</span><span class="p">()</span>
+            <span class="n">read_ahead</span> <span class="o">=</span> <span class="n">pending</span>
+            <span class="k">if</span> <span class="n">pending</span><span class="p">:</span>
+                <span class="p">(</span><span class="n">batch</span><span class="p">,)</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">get_fused_batches</span><span class="p">()</span>
+                <span class="n">pending</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">batch</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([</span><span class="n">indices</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">probing</span> <span class="ow">and</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">loaded</span> <span class="o">=</span> <span class="n">perf_counter</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">pipelined</span> <span class="ow">and</span> <span class="n">position</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">):</span>
+                <span class="n">dataset</span><span class="o">.</span><span class="n">prefetch_fused_batches</span><span class="p">([</span><span class="n">chunks</span><span class="p">[</span><span class="n">position</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]])</span>
+                <span class="n">pending</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">yield</span> <span class="n">batch</span>
+            <span class="c1"># A chunk without atoms carries no scoring, so it cannot be a probe.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">probing</span> <span class="ow">or</span> <span class="n">position</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">elapsed</span> <span class="o">=</span> <span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">started</span>
+            <span class="k">if</span> <span class="n">reference</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">load</span> <span class="o">=</span> <span class="n">loaded</span> <span class="o">-</span> <span class="n">started</span>
+                <span class="n">reference</span> <span class="o">=</span> <span class="n">elapsed</span> <span class="o">/</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span>
+                <span class="n">pipelined</span> <span class="o">=</span> <span class="n">load</span> <span class="o">&gt;=</span> <span class="n">_PIPELINE_LOAD_FRACTION</span> <span class="o">*</span> <span class="p">(</span><span class="n">elapsed</span> <span class="o">-</span> <span class="n">load</span><span class="p">)</span>
+                <span class="n">probing</span> <span class="o">=</span> <span class="n">pipelined</span>
+            <span class="k">elif</span> <span class="n">read_ahead</span><span class="p">:</span>
+                <span class="n">pipelined</span> <span class="o">=</span> <span class="n">elapsed</span> <span class="o">/</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span> <span class="o">&lt;</span> <span class="n">reference</span>
+                <span class="n">probing</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">pending</span><span class="p">:</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">cancel_prefetch</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="label_dataset">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.label_dataset.html#nvalchemi.training.distillation.label_dataset">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">label_dataset</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">:</span> <span class="n">BatchDatasetProtocol</span><span class="p">,</span>
+    <span class="n">scorer</span><span class="p">:</span> <span class="n">TeacherScorer</span><span class="p">,</span>
+    <span class="n">store</span><span class="p">:</span> <span class="n">StoreLike</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">resume</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">keep_neighbors</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">prefetch</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Label *dataset* with teacher signals and persist the result to *store*.</span>
+
+<span class="sd">    Walks *dataset* in contiguous chunks of *batch_size* samples, scores each</span>
+<span class="sd">    chunk with *scorer*, attaches every returned signal as a batch field, and</span>
+<span class="sd">    writes the augmented chunk to a Zarr store holding the original fields plus</span>
+<span class="sd">    the teacher fields, readable through the ordinary</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrReader` /</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.dataset.Dataset` path.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dataset : BatchDatasetProtocol</span>
+<span class="sd">        Source dataset; only ``__len__`` and ``load_batches`` are used.</span>
+<span class="sd">    scorer : TeacherScorer</span>
+<span class="sd">        Scorer producing the teacher signals for each chunk.</span>
+<span class="sd">    store : StoreLike</span>
+<span class="sd">        Destination Zarr store: a path, a zarr store instance, or a dict.</span>
+<span class="sd">    batch_size : int, optional</span>
+<span class="sd">        Number of samples scored per forward pass. Default ``32``.</span>
+<span class="sd">    device : torch.device | str | None, optional</span>
+<span class="sd">        Device to move each chunk to before scoring. Default ``None``</span>
+<span class="sd">        (score on whatever device the dataset emits).</span>
+<span class="sd">    resume : bool, optional</span>
+<span class="sd">        If ``True`` (default), an existing store is treated as a partial run:</span>
+<span class="sd">        the first ``len(store)`` samples are skipped and labeling continues</span>
+<span class="sd">        from there. A store already holding every sample is a no-op; one</span>
+<span class="sd">        holding more samples than *dataset* has is refused. If ``False``, an</span>
+<span class="sd">        existing store is an error.</span>
+<span class="sd">    keep_neighbors : bool, optional</span>
+<span class="sd">        If ``False`` (default), a source neighbor list is dropped rather than</span>
+<span class="sd">        stored, because the cutoff it was built at lives on the batch and not</span>
+<span class="sd">        in the store. ``True`` carries a sparse (``COO``) source list over; the</span>
+<span class="sd">        dense tensors are dropped either way. Default ``False``.</span>
+<span class="sd">    prefetch : bool | Literal[&quot;auto&quot;], optional</span>
+<span class="sd">        Whether to read each chunk while the previous one is scored and</span>
+<span class="sd">        written. ``False`` reads, scores, and writes one chunk at a time.</span>
+<span class="sd">        ``True`` reads one chunk ahead through the dataset&#39;s fused-prefetch</span>
+<span class="sd">        surface (``prefetch_fused_batches`` / ``get_fused_batches``), falling</span>
+<span class="sd">        back to the sequential loop with a :class:`UserWarning` when the</span>
+<span class="sd">        dataset offers none. ``&quot;auto&quot;`` (default) reads the first two chunks</span>
+<span class="sd">        sequentially and times the second one&#39;s load against the scoring and</span>
+<span class="sd">        writing of its chunk; when the load took at least half of that</span>
+<span class="sd">        processing it reads ahead, then times the first chunk read entirely</span>
+<span class="sd">        ahead against the sequential one per atom and falls back to</span>
+<span class="sd">        sequential reads if reading ahead was not faster. A dataset without</span>
+<span class="sd">        the surface stays sequential silently. Default ``&quot;auto&quot;``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        Number of samples labeled by this call; ``0`` when a resumed store</span>
+<span class="sd">        already covers the whole dataset.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *batch_size* is not positive, *prefetch* is not ``True``, ``False``,</span>
+<span class="sd">        or ``&quot;auto&quot;``, *scorer* declares or returns a batch</span>
+<span class="sd">        field outside the ``teacher_*`` namespace, *store* exists but cannot be</span>
+<span class="sd">        read as an ALCHEMI Zarr store, *resume* is ``False`` and *store*</span>
+<span class="sd">        exists, *store* holds soft-deleted samples or more samples than</span>
+<span class="sd">        *dataset* has, *store* holds arrays that disagree about how many</span>
+<span class="sd">        samples it contains, a teacher label does not hold one row per atom or</span>
+<span class="sd">        per graph, a chunk carries a floating-point field in a dtype a store</span>
+<span class="sd">        cannot hold, or a chunk would write a different field set, level,</span>
+<span class="sd">        dtype, or row shape than the store holds.</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If *scorer* declares ``label_fields`` as a single string.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import label_dataset</span>
+<span class="sd">    &gt;&gt;&gt; scorer = InProcessTeacherScorer(teacher, [&quot;energy&quot;, &quot;forces&quot;])  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; label_dataset(dataset, scorer, &quot;labeled.zarr&quot;, batch_size=64)  # doctest: +SKIP</span>
+<span class="sd">    1024</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The first chunk defines the store schema, and every later chunk — on</span>
+<span class="sd">    fresh and resumed runs alike — must write the same fields, levels, dtypes,</span>
+<span class="sd">    and row shapes, since the writer would otherwise misalign, cast, or</span>
+<span class="sd">    truncate labels silently. Each label is held to the chunk&#39;s atom or graph</span>
+<span class="sd">    count before it is attached, because the split into per-graph rows would</span>
+<span class="sd">    otherwise drop whatever a scorer returned beyond it. Resuming assumes</span>
+<span class="sd">    stored sample *i* is dataset sample *i*: soft-deleted samples, a store</span>
+<span class="sd">    longer than the dataset, and a store whose arrays disagree with its</span>
+<span class="sd">    committed sample count (what an interrupted append leaves) are refused,</span>
+<span class="sd">    while drift within the dataset&#39;s length is undetectable. Labels are</span>
+<span class="sd">    attached with ``overwrite=True``, so a scorer is held to the ``teacher_*``</span>
+<span class="sd">    namespace both by its declared ``label_fields`` and by every chunk it</span>
+<span class="sd">    returns, to protect the reference fields it would otherwise replace.</span>
+
+<span class="sd">    Labels stored in float16 or float64 read back at the reading dataset&#39;s</span>
+<span class="sd">    ``positions`` dtype, because a dataset coerces every floating-point field</span>
+<span class="sd">    it loads (:meth:`~nvalchemi.data.AtomicData.check_fp_dtype_consistency`);</span>
+<span class="sd">    the stored dtype governs the store&#39;s size, not what training sees. Build</span>
+<span class="sd">    the student&#39;s neighbor list from the stored positions with a</span>
+<span class="sd">    :class:`~nvalchemi.hooks.NeighborListHook` at ``BEFORE_FORWARD``.</span>
+
+<span class="sd">    Reading ahead overlaps the next chunk&#39;s load with the current chunk&#39;s</span>
+<span class="sd">    scoring and write, so it saves up to one load per chunk when the store is</span>
+<span class="sd">    slow to read (a network or object store, or shared storage) or when</span>
+<span class="sd">    per-sample validation dominates the load. The dataset&#39;s prefetch thread</span>
+<span class="sd">    decodes and validates the chunk while the main thread launches the</span>
+<span class="sd">    teacher&#39;s kernels, and a dataset that targets a CUDA device also moves</span>
+<span class="sd">    every sample there from that thread; on a fast local store the contention</span>
+<span class="sd">    can cost more than the load it hides, and labeling runs a little slower</span>
+<span class="sd">    than the sequential loop. ``&quot;auto&quot;`` therefore measures both forms on the</span>
+<span class="sd">    first chunks rather than assuming; the per-chunk writes, resume</span>
+<span class="sd">    bookkeeping, and store contents are the same in every mode. A dataset</span>
+<span class="sd">    that emits host-resident chunks, with *device* passed here for the move,</span>
+<span class="sd">    keeps the transfer on the main thread and reads ahead faster than one that</span>
+<span class="sd">    transfers from the prefetch thread.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">batch_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;batch_size must be positive; got </span><span class="si">{</span><span class="n">batch_size</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prefetch</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;auto&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;prefetch must be True, False, or &#39;auto&#39;; got </span><span class="si">{</span><span class="n">prefetch</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prefetch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">False</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span>
+        <span class="nb">callable</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_PREFETCH_METHODS</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">prefetch</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> offers no fused-prefetch surface, so &quot;</span>
+                <span class="s2">&quot;labeling reads each chunk sequentially.&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">prefetch</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="n">declared</span> <span class="o">=</span> <span class="n">scorer_fields</span><span class="p">(</span><span class="n">scorer</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">declared</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_reject_foreign_fields</span><span class="p">(</span><span class="n">declared</span><span class="p">,</span> <span class="s2">&quot;A scorer&#39;s label_fields&quot;</span><span class="p">)</span>
+
+    <span class="n">state</span> <span class="o">=</span> <span class="n">_existing_store_state</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">_store_holds_data</span><span class="p">(</span><span class="n">store</span><span class="p">):</span>
+        <span class="n">described</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">))</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;a </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Store already holds data but is not a readable ALCHEMI Zarr store, and &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;writing a fresh one would clear it; got </span><span class="si">{</span><span class="n">described</span><span class="si">}</span><span class="s2">. Label into an &quot;</span>
+            <span class="s2">&quot;empty store.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">resume</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Store already exists with </span><span class="si">{</span><span class="n">state</span><span class="o">.</span><span class="n">active</span><span class="si">!r}</span><span class="s2"> samples and resume is False; &quot;</span>
+            <span class="s2">&quot;pass resume=True to continue labeling or write to a fresh store.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">state</span><span class="o">.</span><span class="n">active</span> <span class="o">!=</span> <span class="n">state</span><span class="o">.</span><span class="n">total</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Store holds </span><span class="si">{</span><span class="n">state</span><span class="o">.</span><span class="n">total</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">state</span><span class="o">.</span><span class="n">active</span><span class="si">!r}</span><span class="s2"> soft-deleted samples, so a &quot;</span>
+            <span class="s2">&quot;resumed run cannot line up with the dataset; defragment the store or &quot;</span>
+            <span class="s2">&quot;label into a fresh one.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">total</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">active</span> <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">schema</span> <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">start</span> <span class="o">&gt;</span> <span class="n">total</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Store holds </span><span class="si">{</span><span class="n">start</span><span class="si">!r}</span><span class="s2"> samples but the dataset has </span><span class="si">{</span><span class="n">total</span><span class="si">!r}</span><span class="s2">, so it was &quot;</span>
+            <span class="s2">&quot;labeled from a different, longer dataset; resume against that dataset &quot;</span>
+            <span class="s2">&quot;or label into a fresh store.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">start</span> <span class="o">==</span> <span class="n">total</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
+    <span class="n">writer</span> <span class="o">=</span> <span class="n">AtomicDataZarrWriter</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+    <span class="n">ephemeral</span> <span class="o">=</span> <span class="n">_DENSE_NEIGHBOR_KEYS</span> <span class="k">if</span> <span class="n">keep_neighbors</span> <span class="k">else</span> <span class="n">_NEIGHBOR_KEYS</span>
+    <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">begin</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">begin</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">total</span><span class="p">)))</span>
+        <span class="k">for</span> <span class="n">begin</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">total</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="n">labeled</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">indices</span><span class="p">,</span> <span class="n">batch</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">chunks</span><span class="p">,</span> <span class="n">_chunk_batches</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">chunks</span><span class="p">,</span> <span class="n">prefetch</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">loaded_fields</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">_batch_schema</span><span class="p">(</span><span class="n">batch</span><span class="p">))</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">scorer</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">_attach_teacher_labels</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+        <span class="n">_strip_unstorable</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">loaded_fields</span> <span class="o">|</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">labels</span><span class="p">),</span> <span class="n">ephemeral</span><span class="p">)</span>
+        <span class="n">outgoing</span> <span class="o">=</span> <span class="n">_batch_schema</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">schema</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_check_storable_dtypes</span><span class="p">(</span><span class="n">outgoing</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="n">schema</span> <span class="o">=</span> <span class="n">outgoing</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_check_chunk_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">outgoing</span><span class="p">,</span> <span class="n">indices</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">labeled</span> <span class="o">+=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+    <span class="k">return</span> <span class="n">labeled</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

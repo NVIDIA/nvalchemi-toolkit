@@ -1,0 +1,1332 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Generative Models &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/generative';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Distributed Simulations" href="distributed.html" />
+    <link rel="prev" title="Enhanced Sampling" href="enhanced_sampling.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Generative Models</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Generative Models</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="generative-models">
+<span id="generative"></span><h1>Generative Models<a class="headerlink" href="#generative-models" title="Link to this heading">#</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> provides an inference driver,
+<a class="reference internal" href="../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator" title="nvalchemi.gen.generator.AtomisticGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomisticGenerator</span></code></a>, for generative workflows across
+any model family. Whether you work with diffusion models, flow matching, generative
+adversarial networks (GANs), variational autoencoders (VAEs), or heuristic search
+algorithms, the driver provides a unified execution loop. It handles batching, seeds,
+devices, CUDA streams, lifecycle hooks, and pipelining into <a class="reference internal" href="dynamics.html"><span class="doc">dynamics simulations</span></a>.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> follows a batch-first principle. Generative workflows produce
+<em>batches</em> of structures per call, not individual structures one at a time.</p>
+</div>
+<section id="the-mental-model">
+<h2>The mental model<a class="headerlink" href="#the-mental-model" title="Link to this heading">#</a></h2>
+<p>Generative inference separates model execution from workflow orchestration:</p>
+<ol class="arabic simple">
+<li><p><strong>You write a generating function.</strong> This callable encapsulates the family-specific
+sampling logic and owns the model.</p></li>
+<li><p><strong>The driver runs the pipeline.</strong>
+<a class="reference internal" href="../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator" title="nvalchemi.gen.generator.AtomisticGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomisticGenerator</span></code></a> manages conditioning, device
+placement, random number generation, lifecycle hooks, and validation.</p></li>
+<li><p><strong>The output is a <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>.</strong> Returning a <code class="docutils literal notranslate"><span class="pre">Batch</span></code> lets hooks
+filter structures and allows immediate composition with <a class="reference internal" href="dynamics.html"><span class="doc">dynamics engines</span></a>.</p></li>
+</ol>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>BEFORE_CONDITION   hooks                      (only when conditioning is present)
+                   inputs = condition(inputs, num_samples=..., rng=...)
+AFTER_CONDITION    hooks                      (only when conditioning is present)
+                   sample = generator_func(inputs, num_samples=..., rng=...)
+if sample is a Batch:                         (the contract path)
+    ctx.batch = sample
+    AFTER_GENERATE hooks                      (filtering: ctx.batch = ctx.batch[keep])
+    return ctx.batch
+return sample                                 (other containers pass through raw)
+</pre></div>
+</div>
+<p>The table below summarizes the core generative components:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>Role</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator" title="nvalchemi.gen.generator.AtomisticGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomisticGenerator</span></code></a></p></td>
+<td><p>The driver</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.GeneratingFunction.html#nvalchemi.gen.GeneratingFunction" title="nvalchemi.gen.generator.GeneratingFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeneratingFunction</span></code></a></p></td>
+<td><p>The sampling callable</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.ConditionFunction.html#nvalchemi.gen.ConditionFunction" title="nvalchemi.gen.generator.ConditionFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConditionFunction</span></code></a></p></td>
+<td><p>Optional input transform</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.GenerationStage.html#nvalchemi.gen.GenerationStage" title="nvalchemi.gen.stages.GenerationStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerationStage</span></code></a></p></td>
+<td><p>The lifecycle stages</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.hooks.GenerationContext.html#nvalchemi.hooks.GenerationContext" title="nvalchemi.hooks.GenerationContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerationContext</span></code></a></p></td>
+<td><p>Per-call hook state</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.GenerationPipeline.html#nvalchemi.gen.GenerationPipeline" title="nvalchemi.gen.pipeline.GenerationPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerationPipeline</span></code></a></p></td>
+<td><p>Composition via <code class="docutils literal notranslate"><span class="pre">|</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.gen.GenerativeModelMixin.html#nvalchemi.models.gen.GenerativeModelMixin" title="nvalchemi.models.gen.base.GenerativeModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerativeModelMixin</span></code></a></p></td>
+<td><p>The model-side mixin</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.gen.GenerativeModelConfig.html#nvalchemi.models.gen.GenerativeModelConfig" title="nvalchemi.models.gen.base.GenerativeModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerativeModelConfig</span></code></a></p></td>
+<td><p>Model-side declaration</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="the-generating-function-and-output-contract">
+<h2>The generating function and output contract<a class="headerlink" href="#the-generating-function-and-output-contract" title="Link to this heading">#</a></h2>
+<p>A <a class="reference internal" href="../modules/generated/nvalchemi.gen.GeneratingFunction.html#nvalchemi.gen.GeneratingFunction" title="nvalchemi.gen.generator.GeneratingFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeneratingFunction</span></code></a> is any callable that accepts
+inputs and returns generated structures. It receives the following arguments:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">inputs</span></code>: Conditioning data, an existing <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> for
+unconditional generation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">num_samples</span></code>: Number of independent draws requested for the call.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rng</span></code>: An optional <code class="docutils literal notranslate"><span class="pre">torch.Generator</span></code> instance for reproducible draws.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">**kwargs</span></code>: Additional runtime options forwarded from the caller.</p></li>
+</ul>
+<p>The function owns the model, the sampling loop, and data materialization. Returning a
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> follows the <strong>output contract</strong>:</p>
+<ul class="simple">
+<li><p>The driver runs <code class="docutils literal notranslate"><span class="pre">AFTER_GENERATE</span></code> filtering hooks on <code class="docutils literal notranslate"><span class="pre">ctx.batch</span></code>.</p></li>
+<li><p>The driver verifies device residency and declared batch fields.</p></li>
+<li><p>Downstream <a class="reference internal" href="dynamics.html"><span class="doc">dynamics engines</span></a> can consume the batch directly.</p></li>
+</ul>
+<p>If a function returns another container, the driver passes it through as raw output. The
+driver skips <code class="docutils literal notranslate"><span class="pre">AFTER_GENERATE</span></code> hooks, and downstream dynamics stages will reject the
+non-<code class="docutils literal notranslate"><span class="pre">Batch</span></code> output.</p>
+<p>To signal total rejection, a generating function can return
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.empty" title="nvalchemi.data.Batch.empty"><code class="xref py py-meth docutils literal notranslate"><span class="pre">empty()</span></code></a>. Downstream pipeline stages then skip execution for
+that batch.</p>
+<p>Here is a minimal generating function producing random carbon clusters:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">random_cluster_generate</span><span class="p">(</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_atoms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+    <span class="n">device</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">device</span> <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="n">num_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">atomic_numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">num_atoms</span><span class="p">,),</span> <span class="mi">6</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">AtomicData</span><span class="p">(</span><span class="n">positions</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">atomic_numbers</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">positions</span><span class="p">]</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="driving-generation">
+<h2>Driving generation<a class="headerlink" href="#driving-generation" title="Link to this heading">#</a></h2>
+<p>Wrap your generating function in <a class="reference internal" href="../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator" title="nvalchemi.gen.generator.AtomisticGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomisticGenerator</span></code></a> to
+run it:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomisticGenerator</span>
+
+<span class="n">gen</span> <span class="o">=</span> <span class="n">AtomisticGenerator</span><span class="p">(</span><span class="n">generator_func</span><span class="o">=</span><span class="n">random_cluster_generate</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="c1"># Generate a batch of 4 structures</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>  <span class="c1"># gen(num_samples=4) is equivalent</span>
+</pre></div>
+</div>
+<section id="per-call-lifecycle">
+<h3>Per-call lifecycle<a class="headerlink" href="#per-call-lifecycle" title="Link to this heading">#</a></h3>
+<p>Every call to <code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code> follows a fixed
+sequence:</p>
+<ol class="arabic simple">
+<li><p><strong>Resolve conditioning</strong>: If a condition function exists (<code class="docutils literal notranslate"><span class="pre">condition_func</span></code> or
+<code class="docutils literal notranslate"><span class="pre">generator_func.condition</span></code>), the driver runs <code class="docutils literal notranslate"><span class="pre">BEFORE_CONDITION</span></code> hooks, transforms
+<code class="docutils literal notranslate"><span class="pre">inputs</span></code>, and runs <code class="docutils literal notranslate"><span class="pre">AFTER_CONDITION</span></code> hooks.</p></li>
+<li><p><strong>Execute sampling</strong>: The driver calls <code class="docutils literal notranslate"><span class="pre">generator_func</span></code> with the inputs, the resolved
+<code class="docutils literal notranslate"><span class="pre">num_samples</span></code>, and the active <code class="docutils literal notranslate"><span class="pre">rng</span></code>.</p></li>
+<li><p><strong>Inspect batch output</strong>: When <code class="docutils literal notranslate"><span class="pre">generator_func</span></code> returns a
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>, the driver runs <code class="docutils literal notranslate"><span class="pre">AFTER_GENERATE</span></code> hooks, tests device
+residency, and tests declared batch fields.</p></li>
+<li><p><strong>Pass through raw output</strong>: Any other return type passes through directly without
+batch tests or <code class="docutils literal notranslate"><span class="pre">AFTER_GENERATE</span></code> hooks.</p></li>
+</ol>
+<p>Calling <code class="docutils literal notranslate"><span class="pre">gen(inputs,</span> <span class="pre">...)</span></code> is direct syntactic sugar for <code class="docutils literal notranslate"><span class="pre">gen.sample(inputs,</span> <span class="pre">...)</span></code>.</p>
+</section>
+<section id="driver-configuration">
+<h3>Driver configuration<a class="headerlink" href="#driver-configuration" title="Link to this heading">#</a></h3>
+<p>You configure the driver at initialization. The table below lists the available fields:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">generator_func</span></code></p></td>
+<td><p>The generating callable that runs the model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">condition_func</span></code></p></td>
+<td><p>Optional input transform run before generation.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">hooks</span></code></p></td>
+<td><p>List of hooks that run at generation stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">num_samples</span></code></p></td>
+<td><p>Default draw count per call. A call argument overrides it.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">seed</span></code></p></td>
+<td><p>Base seed for random number generation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p>Target device, tested at initialization.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dedicated_stream</span></code></p></td>
+<td><p>Creates a dedicated CUDA stream inside sessions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">enable_inference_mode</span></code></p></td>
+<td><p>Disables gradient tracking inside sessions.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">compile_generate</span></code>, <code class="docutils literal notranslate"><span class="pre">compile_kwargs</span></code></p></td>
+<td><p>Options to compile with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">required_inputs</span></code>, <code class="docutils literal notranslate"><span class="pre">outputs</span></code></p></td>
+<td><p>Declared input and output batch fields.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Explicit arguments override attributes on <code class="docutils literal notranslate"><span class="pre">generator_func</span></code>. If <code class="docutils literal notranslate"><span class="pre">device</span></code>,
+<code class="docutils literal notranslate"><span class="pre">required_inputs</span></code>, or <code class="docutils literal notranslate"><span class="pre">outputs</span></code> are unset, the driver reads them from
+<code class="docutils literal notranslate"><span class="pre">generator_func</span></code>. The driver tests <code class="docutils literal notranslate"><span class="pre">device</span></code> and <code class="docutils literal notranslate"><span class="pre">compile_kwargs</span></code> at initialization.
+For the full list, see <a class="reference internal" href="../modules/gen.html"><span class="doc">the API reference</span></a>.</p>
+</section>
+<section id="streaming">
+<h3>Streaming<a class="headerlink" href="#streaming" title="Link to this heading">#</a></h3>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">stream()</span></code> yields batches one at a time
+across an iterable of inputs. For unconditional generation, pass <code class="docutils literal notranslate"><span class="pre">inputs=None</span></code> along
+with <code class="docutils literal notranslate"><span class="pre">max_batches</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">gen</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_batches</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Generated batch with </span><span class="si">{</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2"> structures&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Calling <code class="docutils literal notranslate"><span class="pre">iter(gen)</span></code> or <code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">batch</span> <span class="pre">in</span> <span class="pre">gen:</span></code> creates an unbounded stream. Use
+<code class="docutils literal notranslate"><span class="pre">max_batches</span></code> in <code class="docutils literal notranslate"><span class="pre">stream()</span></code> whenever you need a bounded loop.</p>
+</section>
+<section id="sessions-streams-seeds-and-compilation">
+<h3>Sessions: streams, seeds, and compilation<a class="headerlink" href="#sessions-streams-seeds-and-compilation" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator" title="nvalchemi.gen.generator.AtomisticGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomisticGenerator</span></code></a> acts as a context manager:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">gen</span><span class="p">:</span>
+    <span class="n">first_batch</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+    <span class="n">second_batch</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Bare calls (<code class="docutils literal notranslate"><span class="pre">gen.sample(...)</span></code> or <code class="docutils literal notranslate"><span class="pre">gen(...)</span></code>) are sufficient for quick draws. Outside
+a session, each call seeds independently using <code class="docutils literal notranslate"><span class="pre">seed</span> <span class="pre">+</span> <span class="pre">step_count</span></code>.</p>
+<p>Sessions (<code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">gen:</span></code>) manage state across multiple calls. Entering a session
+performs four setup actions:</p>
+<ol class="arabic simple">
+<li><p><strong>Dedicated CUDA stream</strong>: Enters a private CUDA stream on CUDA devices (disable with
+<code class="docutils literal notranslate"><span class="pre">dedicated_stream=False</span></code>). The stream waits on pending work at entry.</p></li>
+<li><p><strong>Session-scoped RNG</strong>: Initializes a <code class="docutils literal notranslate"><span class="pre">torch.Generator</span></code> from <code class="docutils literal notranslate"><span class="pre">seed</span></code> that advances
+across draws.</p></li>
+<li><p><strong>Inference mode</strong>: Enters <code class="docutils literal notranslate"><span class="pre">torch.inference_mode</span></code> when <code class="docutils literal notranslate"><span class="pre">enable_inference_mode=True</span></code>
+(off by default). Enable it when your sampler does not need gradients.</p></li>
+<li><p><strong>Hook lifecycles</strong>: Calls <code class="docutils literal notranslate"><span class="pre">__enter__</span></code> on context-manager hooks for clean teardown
+on exit.</p></li>
+</ol>
+<p>You can compile the generating function with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> via
+<code class="docutils literal notranslate"><span class="pre">gen.compile(**compile_kwargs)</span></code> or by setting <code class="docutils literal notranslate"><span class="pre">compile_generate=True</span></code>. Compilation
+wraps the function call. Hook dispatch stays eager.</p>
+<p>Building a <code class="docutils literal notranslate"><span class="pre">Batch</span></code> runs Python and pydantic code that TorchDynamo cannot trace, so a
+function that constructs a <code class="docutils literal notranslate"><span class="pre">Batch</span></code> graph-breaks at construction. For end-to-end
+capture, compile the model inside your generating function
+(<code class="docutils literal notranslate"><span class="pre">torch.compile(model,</span> <span class="pre">...)</span></code>) and keep the wrapper eager.</p>
+</section>
+<section id="devices-streams-and-compile">
+<h3>Devices, streams, and compile<a class="headerlink" href="#devices-streams-and-compile" title="Link to this heading">#</a></h3>
+<p>The driver resolves its target device at construction time. The driver reads
+the explicit <code class="docutils literal notranslate"><span class="pre">device</span></code> field first, and then falls back to the <code class="docutils literal notranslate"><span class="pre">device</span></code> attribute
+on the generating function, with the following conditions:</p>
+<ul class="simple">
+<li><p>If you specify a CUDA device, that device must exist
+on the host.</p></li>
+<li><p>When the generating function returns a
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>, the batch tensors must reside on the resolved
+device (i.e. the function cannot change devices).</p></li>
+</ul>
+<p>A device mismatch raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> during the call. In a pipeline,
+each stage resolves its own device, and its outputs pass to the next stage
+without automatic device migration.</p>
+<p>Using the context manager pattern (i.e. <code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">gen:</span> <span class="pre">...</span></code>), the generation
+workflow will run on a CUDA stream unless <code class="docutils literal notranslate"><span class="pre">dedicated_stream</span></code> is set to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+At session entry, the new stream waits for active work
+on the current caller stream, so session operations do not race caller tasks. A
+pipeline session creates one CUDA stream and shares that stream with every stage
+that follows the <code class="docutils literal notranslate"><span class="pre">_stream</span></code> convention. These stages include generators, dynamics
+engines, and fused stages. The pipeline shares the stream only when the stage
+device matches the pipeline stream device, so mixed-device pipelines do not
+share streams across devices.</p>
+<p>The shared stream serializes stage execution within a pipeline call without
+cross-stream synchronization. One caveat however is that exiting a session
+does <strong>not</strong> synchronize the CUDA stream: if you dispatch operations on other
+streams, you must synchronize or
+enqueue a <code class="docutils literal notranslate"><span class="pre">wait_stream</span></code> call before you consume the results. As the session
+overview explains, <code class="docutils literal notranslate"><span class="pre">compile_generate</span></code> and <code class="docutils literal notranslate"><span class="pre">compile_kwargs</span></code> compile the
+generating function call. Because batch construction causes graph breaks in
+TorchDynamo, you must compile the neural network model inside the generating
+function for end-to-end graph capture.</p>
+</section>
+</section>
+<section id="input-conditioning">
+<h2>Input conditioning<a class="headerlink" href="#input-conditioning" title="Link to this heading">#</a></h2>
+<p>Conditioning prepares inputs before generation runs. It converts raw inputs (such as
+class labels, compositions, or parent structures) into the representation expected by
+the generating function.</p>
+<p>You supply conditioning through <code class="docutils literal notranslate"><span class="pre">condition_func</span></code> on the generator, or via a <code class="docutils literal notranslate"><span class="pre">condition</span></code>
+attribute on the generating function callable. The driver resolves conditioning by
+priority:</p>
+<ol class="arabic simple">
+<li><p>Explicit <code class="docutils literal notranslate"><span class="pre">condition_func</span></code> passed to
+<a class="reference internal" href="../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator" title="nvalchemi.gen.generator.AtomisticGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomisticGenerator</span></code></a>.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">condition</span></code> attribute on <code class="docutils literal notranslate"><span class="pre">generator_func</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code> (unconditional; inputs pass directly to <code class="docutils literal notranslate"><span class="pre">generator_func</span></code>).</p></li>
+</ol>
+<p>The <code class="docutils literal notranslate"><span class="pre">BEFORE_CONDITION</span></code> and <code class="docutils literal notranslate"><span class="pre">AFTER_CONDITION</span></code> hook stages fire only when a condition step
+is present.</p>
+<p>Conditioning prepares the request; it does not enforce physical constraints on the
+output. Output constraints belong in guidance terms inside the sampler, in filtering
+hooks, or in downstream relaxation stages.</p>
+<p>Here is a common pattern: tiling a conditioning batch so each structure receives
+<code class="docutils literal notranslate"><span class="pre">num_samples</span></code> draws:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">tile_condition</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">Batch</span><span class="p">):</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">inputs</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">)</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">inputs</span><span class="p">[</span><span class="n">idx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">inputs</span><span class="o">.</span><span class="n">device</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="n">inputs</span>
+</pre></div>
+</div>
+</section>
+<section id="lifecycle-hooks-and-generationcontext">
+<h2>Lifecycle hooks and GenerationContext<a class="headerlink" href="#lifecycle-hooks-and-generationcontext" title="Link to this heading">#</a></h2>
+<p>Generative workflows use the same <a class="reference internal" href="../modules/generated/nvalchemi.hooks.Hook.html#nvalchemi.hooks.Hook" title="nvalchemi.hooks.Hook"><code class="xref py py-class docutils literal notranslate"><span class="pre">Hook</span></code></a> protocol as
+<a class="reference internal" href="dynamics.html"><span class="doc">dynamics</span></a> and <a class="reference internal" href="training.html"><span class="doc">training</span></a>. A hook defines <code class="docutils literal notranslate"><span class="pre">stage</span></code>,
+<code class="docutils literal notranslate"><span class="pre">frequency</span></code>, and <code class="docutils literal notranslate"><span class="pre">__call__(ctx,</span> <span class="pre">stage)</span></code>.</p>
+<p>All hooks in a call share a single <a class="reference internal" href="../modules/generated/nvalchemi.hooks.GenerationContext.html#nvalchemi.hooks.GenerationContext" title="nvalchemi.hooks.GenerationContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerationContext</span></code></a> instance:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ctx.batch</span></code></p></td>
+<td><p>The generated <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> (or a <code class="docutils literal notranslate"><span class="pre">Batch</span></code> input).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ctx.inputs</span></code></p></td>
+<td><p>Raw inputs before conditioning, conditioned inputs after.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ctx.sample</span></code></p></td>
+<td><p>Raw sample returned by the generating function.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ctx.accepted_mask</span></code></p></td>
+<td><p>Optional boolean tensor indicating accepted candidates.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ctx.intermediates</span></code></p></td>
+<td><p>Scratch dictionary for passing data between hooks.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ctx.step_count</span></code></p></td>
+<td><p>Counter of generation calls driving frequency gating.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ctx.global_rank</span></code></p></td>
+<td><p>Distributed process rank for multi-GPU reporting.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ctx.workflow</span></code></p></td>
+<td><p>Back-reference to the driving generator.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Hooks mutate state by replacing context fields. For example, filtering at
+<code class="docutils literal notranslate"><span class="pre">AFTER_GENERATE</span></code> subsets <code class="docutils literal notranslate"><span class="pre">ctx.batch</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen</span><span class="w"> </span><span class="kn">import</span> <span class="n">GenerationStage</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CentroidSpreadFilter</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_spread</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_spread</span> <span class="o">=</span> <span class="n">max_spread</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">GenerationStage</span><span class="o">.</span><span class="n">AFTER_GENERATE</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">),</span> <span class="n">counts</span>
+        <span class="p">)</span>
+        <span class="n">centroid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">centroid</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+        <span class="n">centroid</span> <span class="o">=</span> <span class="n">centroid</span> <span class="o">/</span> <span class="n">counts</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span>
+
+        <span class="n">dist</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span> <span class="o">-</span> <span class="n">centroid</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">max_dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">max_dist</span><span class="o">.</span><span class="n">scatter_reduce_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">&quot;amax&quot;</span><span class="p">)</span>
+
+        <span class="n">keep</span> <span class="o">=</span> <span class="n">max_dist</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_spread</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">accepted_mask</span> <span class="o">=</span> <span class="n">keep</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">keep</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="c1"># Batch does not support zero-graph selections; signal total</span>
+            <span class="c1"># rejection with an explicitly empty batch instead</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+                <span class="n">num_systems</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">num_nodes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">num_edges</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Attach the hook during generator construction:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">gen</span> <span class="o">=</span> <span class="n">AtomisticGenerator</span><span class="p">(</span>
+    <span class="n">generator_func</span><span class="o">=</span><span class="n">random_cluster_generate</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">CentroidSpreadFilter</span><span class="p">(</span><span class="n">max_spread</span><span class="o">=</span><span class="mf">2.5</span><span class="p">)],</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="the-model-side-mixin-and-config">
+<h2>The model side: mixin and config<a class="headerlink" href="#the-model-side-mixin-and-config" title="Link to this heading">#</a></h2>
+<p>When generation relies on a neural network, the model subclasses
+<a class="reference internal" href="../modules/generated/nvalchemi.models.gen.GenerativeModelMixin.html#nvalchemi.models.gen.GenerativeModelMixin" title="nvalchemi.models.gen.base.GenerativeModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerativeModelMixin</span></code></a> and declares its capabilities
+via <a class="reference internal" href="../modules/generated/nvalchemi.models.gen.GenerativeModelConfig.html#nvalchemi.models.gen.GenerativeModelConfig" title="nvalchemi.models.gen.base.GenerativeModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerativeModelConfig</span></code></a>.</p>
+<p>This is the non-energy counterpart to <a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>. It
+does not require energy, forces, or neighbor lists.</p>
+<p>Every subclass must set <code class="docutils literal notranslate"><span class="pre">self.model_config</span></code> in <code class="docutils literal notranslate"><span class="pre">__init__</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.gen</span><span class="w"> </span><span class="kn">import</span> <span class="n">GenerativeModelConfig</span><span class="p">,</span> <span class="n">GenerativeModelMixin</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ToyDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">GenerativeModelMixin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_atoms</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">latent_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">latent_dim</span> <span class="o">=</span> <span class="n">latent_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_atoms</span> <span class="o">=</span> <span class="n">num_atoms</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">net</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">latent_dim</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">SiLU</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="n">num_atoms</span> <span class="o">*</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">GenerativeModelConfig</span><span class="p">(</span>
+            <span class="n">required_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(),</span>  <span class="c1"># unconditional</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">}),</span>
+            <span class="n">prediction_outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">},</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">net</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="model-owning-samplers">
+<h3>Model-owning samplers<a class="headerlink" href="#model-owning-samplers" title="Link to this heading">#</a></h3>
+<p>In <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code>, the model does not own the sampler. Instead, a sampler callable owns the
+model:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ToyGenerate</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">ToyDecoder</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">required_inputs</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">required_inputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
+            <span class="n">num_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">z</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="n">numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">,),</span> <span class="mi">6</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">AtomicData</span><span class="p">(</span><span class="n">positions</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">numbers</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">positions</span><span class="p">]</span>
+        <span class="p">)</span>
+</pre></div>
+</div>
+<p>The driver reads <code class="docutils literal notranslate"><span class="pre">required_inputs</span></code>, <code class="docutils literal notranslate"><span class="pre">outputs</span></code>, and <code class="docutils literal notranslate"><span class="pre">device</span></code> off the sampler object as
+default declarations.</p>
+<p>For testing and rapid prototyping, <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> provides ready-made demo models:
+<a class="reference internal" href="../modules/generated/nvalchemi.models.gen.demo.DemoGANModel.html#nvalchemi.models.gen.demo.DemoGANModel" title="nvalchemi.models.gen.demo.DemoGANModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DemoGANModel</span></code></a> and
+<a class="reference internal" href="../modules/generated/nvalchemi.models.gen.demo.DemoDiffusionModel.html#nvalchemi.models.gen.demo.DemoDiffusionModel" title="nvalchemi.models.gen.demo.DemoDiffusionModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">DemoDiffusionModel</span></code></a>.</p>
+</section>
+</section>
+<section id="composing-pipelines-with-generationpipeline">
+<span id="chaining-generators"></span><h2>Composing pipelines with GenerationPipeline<a class="headerlink" href="#composing-pipelines-with-generationpipeline" title="Link to this heading">#</a></h2>
+<p>You can chain multiple generative stages, custom transformations, and <a class="reference internal" href="dynamics.html"><span class="doc">dynamics simulations</span></a> using the <code class="docutils literal notranslate"><span class="pre">|</span></code> operator:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomisticGenerator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.demo</span><span class="w"> </span><span class="kn">import</span> <span class="n">DemoModel</span><span class="p">,</span> <span class="n">DemoModelWrapper</span>
+
+<span class="c1"># Stage 1: Generate initial candidate structures</span>
+<span class="n">gen_stage</span> <span class="o">=</span> <span class="n">AtomisticGenerator</span><span class="p">(</span><span class="n">generator_func</span><span class="o">=</span><span class="n">ToyGenerate</span><span class="p">(</span><span class="n">ToyDecoder</span><span class="p">(</span><span class="n">num_atoms</span><span class="o">=</span><span class="mi">8</span><span class="p">)))</span>
+
+<span class="c1"># Stage 2: Relax candidates with an ML potential optimizer</span>
+<span class="n">relax_stage</span> <span class="o">=</span> <span class="n">FIRE2</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">DemoModelWrapper</span><span class="p">(</span><span class="n">DemoModel</span><span class="p">()),</span>  <span class="c1"># swap in your own model here</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="c1"># Chain into a sequential pipeline; per-stage options go through stage_kwargs</span>
+<span class="n">pipeline</span> <span class="o">=</span> <span class="n">gen_stage</span> <span class="o">|</span> <span class="n">relax_stage</span>
+<span class="k">with</span> <span class="n">pipeline</span><span class="p">:</span>  <span class="c1"># session: shared stream, seeded RNG, stage sessions</span>
+    <span class="n">relaxed_batch</span> <span class="o">=</span> <span class="n">pipeline</span><span class="p">(</span><span class="n">stage_kwargs</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;num_samples&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">},</span> <span class="kc">None</span><span class="p">])</span>
+</pre></div>
+</div>
+<section id="pipeline-execution-rules">
+<h3>Pipeline execution rules<a class="headerlink" href="#pipeline-execution-rules" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.gen.GenerationPipeline.html#nvalchemi.gen.GenerationPipeline" title="nvalchemi.gen.pipeline.GenerationPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerationPipeline</span></code></a> executes stages sequentially:</p>
+<ul class="simple">
+<li><p><strong>Stage invocation</strong>: Stages with a <code class="docutils literal notranslate"><span class="pre">run()</span></code> method (such as dynamics engines) run to
+completion via <code class="docutils literal notranslate"><span class="pre">stage.run(batch,</span> <span class="pre">**kwargs)</span></code>. Other callables run via <code class="docutils literal notranslate"><span class="pre">stage(batch,</span> <span class="pre">**kwargs)</span></code>.</p></li>
+<li><p><strong>Field contract validation</strong>: At construction, adjacent <code class="docutils literal notranslate"><span class="pre">AtomisticGenerator</span></code> stages
+are validated: <code class="docutils literal notranslate"><span class="pre">downstream.required_inputs</span></code> must be a subset of <code class="docutils literal notranslate"><span class="pre">upstream.outputs</span></code>.</p></li>
+<li><p><strong>Shared CUDA stream</strong>: Entering <code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">pipeline:</span></code> creates a single dedicated CUDA
+stream shared across all stages honoring the <code class="docutils literal notranslate"><span class="pre">_stream</span></code> convention.</p></li>
+<li><p><strong>Stage arguments</strong>: Pass per-stage keyword arguments using <code class="docutils literal notranslate"><span class="pre">stage_kwargs</span></code> as a list
+of dictionaries aligned with pipeline stages.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">out</span> <span class="o">=</span> <span class="n">pipeline</span><span class="p">(</span><span class="n">stage_kwargs</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;num_samples&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;n_steps&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">}])</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="integrations-and-model-families">
+<h2>Integrations and model families<a class="headerlink" href="#integrations-and-model-families" title="Link to this heading">#</a></h2>
+<p>Sampling procedures differ across model families. Below are common integration patterns.</p>
+<section id="physicsnemo-diffusion">
+<h3>PhysicsNeMo diffusion<a class="headerlink" href="#physicsnemo-diffusion" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> integrates directly with NVIDIA PhysicsNeMo diffusion abstractions
+(<code class="docutils literal notranslate"><span class="pre">physicsnemo.diffusion</span></code>). Noise schedulers, preconditioners, and ODE/SDE samplers plug
+into a generating function without adapter layers:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">physicsnemo.diffusion.noise_schedulers</span><span class="w"> </span><span class="kn">import</span> <span class="n">EDMNoiseScheduler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">physicsnemo.diffusion.preconditioners</span><span class="w"> </span><span class="kn">import</span> <span class="n">EDMPreconditioner</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">physicsnemo.diffusion.samplers</span><span class="w"> </span><span class="kn">import</span> <span class="n">sample</span> <span class="k">as</span> <span class="n">pn_sample</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomisticGenerator</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">PositionDenoiser</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_atoms</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_atoms</span> <span class="o">=</span> <span class="n">num_atoms</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">net</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">num_atoms</span> <span class="o">*</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">SiLU</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="n">num_atoms</span> <span class="o">*</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">sigma</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">class_labels</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">sigma</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">net</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">x</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">s</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">reshape_as</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">EDMGenerate</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">PositionDenoiser</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">18</span><span class="p">,</span>
+        <span class="n">sigma_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_steps</span> <span class="o">=</span> <span class="n">num_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span> <span class="o">=</span> <span class="n">EDMNoiseScheduler</span><span class="p">(</span><span class="n">sigma_max</span><span class="o">=</span><span class="n">sigma_max</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">required_inputs</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">})</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+        <span class="n">denoiser</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span><span class="o">.</span><span class="n">get_denoiser</span><span class="p">(</span>
+            <span class="n">x0_predictor</span><span class="o">=</span><span class="n">EDMPreconditioner</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">xN</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
+            <span class="n">num_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="n">xN</span> <span class="o">=</span> <span class="n">xN</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span><span class="o">.</span><span class="n">sigma_max</span>
+        <span class="n">x0</span> <span class="o">=</span> <span class="n">pn_sample</span><span class="p">(</span>
+            <span class="n">denoiser</span><span class="p">,</span> <span class="n">xN</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheduler</span><span class="p">,</span> <span class="n">num_steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_steps</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="s2">&quot;heun&quot;</span>
+        <span class="p">)</span>
+        <span class="n">numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">,),</span> <span class="mi">6</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">AtomicData</span><span class="p">(</span><span class="n">positions</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">numbers</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">x0</span><span class="p">]</span>
+        <span class="p">)</span>
+
+<span class="n">diffusion</span> <span class="o">=</span> <span class="n">AtomisticGenerator</span><span class="p">(</span>
+    <span class="n">generator_func</span><span class="o">=</span><span class="n">EDMGenerate</span><span class="p">(</span><span class="n">PositionDenoiser</span><span class="p">(</span><span class="n">num_atoms</span><span class="o">=</span><span class="mi">32</span><span class="p">),</span> <span class="n">num_steps</span><span class="o">=</span><span class="mi">18</span><span class="p">),</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <span class="n">diffusion</span><span class="p">:</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">diffusion</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">num_samples</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Deterministic solvers (like <code class="docutils literal notranslate"><span class="pre">&quot;heun&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;euler&quot;</span></code>) derive all randomness from the
+initial noise tensor <code class="docutils literal notranslate"><span class="pre">xN</span></code>. Drawing <code class="docutils literal notranslate"><span class="pre">xN</span></code> with the session’s <code class="docutils literal notranslate"><span class="pre">rng</span></code> ensures exact
+reproducibility from <code class="docutils literal notranslate"><span class="pre">seed</span></code>.</p>
+</section>
+<section id="generative-adversarial-networks-gan">
+<h3>Generative Adversarial Networks (GAN)<a class="headerlink" href="#generative-adversarial-networks-gan" title="Link to this heading">#</a></h3>
+<p>GAN generation decodes a single latent noise vector in one forward pass:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">GANGenerate</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
+            <span class="n">num_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">z</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="n">numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],),</span> <span class="mi">6</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">AtomicData</span><span class="p">(</span><span class="n">positions</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">numbers</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">positions</span><span class="p">]</span>
+        <span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.gen</span><span class="w"> </span><span class="kn">import</span> <span class="n">DemoGANModel</span>
+
+<span class="c1"># the demo model satisfies this sketch&#39;s interface (latent_dim + decode)</span>
+<span class="n">gan</span> <span class="o">=</span> <span class="n">AtomisticGenerator</span><span class="p">(</span><span class="n">generator_func</span><span class="o">=</span><span class="n">GANGenerate</span><span class="p">(</span><span class="n">DemoGANModel</span><span class="p">()))</span>
+<span class="n">samples</span> <span class="o">=</span> <span class="n">gan</span><span class="p">(</span><span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="variational-autoencoders-vae">
+<h3>Variational Autoencoders (VAE)<a class="headerlink" href="#variational-autoencoders-vae" title="Link to this heading">#</a></h3>
+<p>A VAE decodes a latent draw like a GAN, but the latent can also come from the
+encoder — which is how a VAE conditions on input structures:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">VAEGenerate</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">inputs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># unconditional: sample the prior</span>
+            <span class="n">z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
+                <span class="n">num_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">num_samples</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># conditional: encode the inputs, then reparametrize —</span>
+            <span class="c1"># one draw per input graph; for repeated draws per input, add a</span>
+            <span class="c1"># condition step that tiles the batch (the driver does not tile</span>
+            <span class="c1"># on its own)</span>
+            <span class="n">mu</span><span class="p">,</span> <span class="n">logvar</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">eps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">mu</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">z</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">eps</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">logvar</span><span class="p">)</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">z</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="n">numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],),</span> <span class="mi">6</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">z</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">AtomicData</span><span class="p">(</span><span class="n">positions</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">numbers</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">positions</span><span class="p">]</span>
+        <span class="p">)</span>
+
+<span class="n">vae</span> <span class="o">=</span> <span class="n">AtomisticGenerator</span><span class="p">(</span><span class="n">generator_func</span><span class="o">=</span><span class="n">VAEGenerate</span><span class="p">(</span><span class="n">vae_model</span><span class="p">))</span>
+<span class="n">samples</span> <span class="o">=</span> <span class="n">vae</span><span class="p">(</span><span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For a complete executable script demonstrating model-owning samplers with both GAN and
+diffusion architectures, see <code class="docutils literal notranslate"><span class="pre">examples/intermediate/09_generative_samplers.py</span></code>.</p>
+</section>
+</section>
+<section id="what-s-next">
+<h2>What’s next<a class="headerlink" href="#what-s-next" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="dynamics.html"><span class="doc">Dynamics</span></a> — Relax or run MD on generated structures.</p></li>
+<li><p><a class="reference internal" href="hooks.html"><span class="doc">Hooks</span></a> — Learn the shared hook protocol and reporting system.</p></li>
+<li><p><a class="reference internal" href="training.html"><span class="doc">Training</span></a> — Train or fine-tune neural network backbones.</p></li>
+<li><p><a class="reference internal" href="data.html"><span class="doc">AtomicData and Batch</span></a> — Understand graph data representations, node and
+edge features, and batching.</p></li>
+<li><p><a class="reference internal" href="../modules/gen.html"><span class="doc">Generative API reference</span></a> — Explore the complete class and method
+reference.</p></li>
+</ul>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator" title="nvalchemi.gen.generator.AtomisticGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomisticGenerator</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.GeneratingFunction.html#nvalchemi.gen.GeneratingFunction" title="nvalchemi.gen.generator.GeneratingFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeneratingFunction</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.ConditionFunction.html#nvalchemi.gen.ConditionFunction" title="nvalchemi.gen.generator.ConditionFunction"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConditionFunction</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.GenerationStage.html#nvalchemi.gen.GenerationStage" title="nvalchemi.gen.stages.GenerationStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerationStage</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.hooks.GenerationContext.html#nvalchemi.hooks.GenerationContext" title="nvalchemi.hooks.GenerationContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerationContext</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.gen.GenerationPipeline.html#nvalchemi.gen.GenerationPipeline" title="nvalchemi.gen.pipeline.GenerationPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerationPipeline</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.models.gen.GenerativeModelMixin.html#nvalchemi.models.gen.GenerativeModelMixin" title="nvalchemi.models.gen.base.GenerativeModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerativeModelMixin</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.models.gen.GenerativeModelConfig.html#nvalchemi.models.gen.GenerativeModelConfig" title="nvalchemi.models.gen.base.GenerativeModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">GenerativeModelConfig</span></code></a></p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="enhanced_sampling.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Enhanced Sampling</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="distributed.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Distributed Simulations</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-mental-model">The mental model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-generating-function-and-output-contract">The generating function and output contract</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#driving-generation">Driving generation</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#per-call-lifecycle">Per-call lifecycle</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#driver-configuration">Driver configuration</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming">Streaming</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sessions-streams-seeds-and-compilation">Sessions: streams, seeds, and compilation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#devices-streams-and-compile">Devices, streams, and compile</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#input-conditioning">Input conditioning</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lifecycle-hooks-and-generationcontext">Lifecycle hooks and GenerationContext</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-model-side-mixin-and-config">The model side: mixin and config</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-owning-samplers">Model-owning samplers</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#composing-pipelines-with-generationpipeline">Composing pipelines with GenerationPipeline</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pipeline-execution-rules">Pipeline execution rules</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#integrations-and-model-families">Integrations and model families</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#physicsnemo-diffusion">PhysicsNeMo diffusion</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#generative-adversarial-networks-gan">Generative Adversarial Networks (GAN)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#variational-autoencoders-vae">Variational Autoencoders (VAE)</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-s-next">What’s next</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/generative.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

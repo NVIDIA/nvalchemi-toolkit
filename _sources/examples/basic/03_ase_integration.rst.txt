@@ -27,9 +27,9 @@ workflow.  ASE provides a rich library of molecular and crystal builders,
 file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
 :class:`ase.Atoms` objects via :meth:`AtomicData.from_atoms`.
 
-* **Part 1** — FIRE geometry optimization of rattled molecules (H2O, CH4,
+* **Part 1** — FIRE2 geometry optimization of rattled molecules (H2O, CH4,
   CH3CH2OH).
-* **Part 2** — FusedStage (FIRE + NVT Langevin) on a Cu(111) slab with a CO
+* **Part 2** — FusedStage (FIRE2 + NVT Langevin) on a Cu(111) slab with a CO
   adsorbate — a classic surface-science system.  Slab atoms are frozen with
   :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`.
 
@@ -55,7 +55,7 @@ file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
 
     from nvalchemi._typing import AtomCategory
     from nvalchemi.data import AtomicData, Batch
-    from nvalchemi.dynamics import FIRE, NVTLangevin
+    from nvalchemi.dynamics import FIRE2, NVTLangevin
     from nvalchemi.dynamics.base import ConvergenceHook
     from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
     from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -161,17 +161,17 @@ pre-allocated so ``compute()`` can write into them.
 
 .. GENERATED FROM PYTHON SOURCE LINES 111-115
 
-Part 1: FIRE Geometry Optimization of Rattled Molecules
+Part 1: FIRE2 Geometry Optimization of Rattled Molecules
 --------------------------------------------------------
 Build three molecules from the ASE G2 database, rattle them slightly so
-the optimizer has work to do, and relax them in a single batched FIRE run.
+the optimizer has work to do, and relax them in a single batched FIRE2 run.
 
 .. GENERATED FROM PYTHON SOURCE LINES 115-158
 
 .. code-block:: Python
 
 
-    print("=== Part 1: FIRE Optimization — Rattled Molecules ===")
+    print("=== Part 1: FIRE2 Optimization — Rattled Molecules ===")
 
     molecules = []
     for name, seed in [("H2O", 1), ("CH4", 2), ("CH3CH2OH", 3)]:
@@ -190,9 +190,9 @@ the optimizer has work to do, and relax them in a single batched FIRE run.
     batch_opt = Batch.from_data_list(data_list_opt)
     print(f"\nBatch: {batch_opt.num_graphs} systems, {batch_opt.num_nodes} atoms total\n")
 
-    fire_opt = FIRE(
+    fire_opt = FIRE2(
         model=model,
-        dt=0.1,
+        dt=0.05,
         n_steps=200,
         convergence_hook=ConvergenceHook(
             criteria=[
@@ -205,7 +205,7 @@ the optimizer has work to do, and relax them in a single batched FIRE run.
         fire_opt.register_hook(log_hook)
         batch_opt = fire_opt.run(batch_opt)
 
-    print(f"\nCompleted {fire_opt.step_count} FIRE steps. Log: 03_fire_opt.csv")
+    print(f"\nCompleted {fire_opt.step_count} FIRE2 steps. Log: 03_fire_opt.csv")
 
     relaxed_molecules = batch_to_atoms_list(batch_opt)
     write(OUTPUT_DIR / "molecules_relaxed.xyz", relaxed_molecules)
@@ -221,7 +221,10 @@ the optimizer has work to do, and relax them in a single batched FIRE run.
 
  .. code-block:: none
 
-    === Part 1: FIRE Optimization — Rattled Molecules ===
+    === Part 1: FIRE2 Optimization — Rattled Molecules ===
+    /home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/ase/atoms.py:427: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.
+    As an alternative, you can create a new view using np.reshape (with copy=False if needed).
+      a.shape = (-1,) + shape
       H2O: 3 atoms, rattled
       CH4: 5 atoms, rattled
       CH3CH2OH: 9 atoms, rattled
@@ -230,7 +233,7 @@ the optimizer has work to do, and relax them in a single batched FIRE run.
     Batch: 3 systems, 17 atoms total
 
 
-    Completed 1 FIRE steps. Log: 03_fire_opt.csv
+    Completed 1 FIRE2 steps. Log: 03_fire_opt.csv
     Wrote 3 relaxed structures -> 03_ase_integration_output/molecules_relaxed.xyz
 
 
@@ -241,7 +244,7 @@ the optimizer has work to do, and relax them in a single batched FIRE run.
 Part 2: FusedStage — Surface + Adsorbate System with Frozen Slab
 ------------------------------------------------------------------
 Build a Cu(111) slab with a CO molecule adsorbed on top.  This is a
-textbook surface-science setup: relax the adsorbate geometry with FIRE
+textbook surface-science setup: relax the adsorbate geometry with FIRE2
 (status 0), then run NVT Langevin MD at 300 K (status 1).
 
 The copper slab atoms are frozen using :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`,
@@ -303,7 +306,7 @@ We create three copies with different random rattles to form a batch.
     n_free = int((batch_fused.atom_categories == AtomCategory.GAS.value).sum().item())
     print(f"  Frozen (slab): {n_frozen} atoms, Free (adsorbate): {n_free} atoms")
 
-    # All systems start in the FIRE stage (status = 0).
+    # All systems start in the FIRE2 stage (status = 0).
     batch_fused["status"] = torch.zeros(batch_fused.num_graphs, 1, dtype=torch.long)
 
     print(
@@ -312,7 +315,7 @@ We create three copies with different random rattles to form a batch.
 
     # FreezeAtomsHook: keeps slab positions fixed, zeros their velocities and forces.
     # Both stages share the same hook instance so the snapshot/restore logic is
-    # consistent across the FIRE -> Langevin transition.
+    # consistent across the FIRE2 -> Langevin transition.
     freeze_hook = FreezeAtomsHook()
 
     # Create LoggingHooks before the stage constructors so they can be passed via
@@ -322,10 +325,10 @@ We create three copies with different random rattles to form a batch.
         backend="csv", log_path="03_langevin_stage.csv", frequency=10
     )
 
-    # FIRE sub-stage (relaxation) — only adsorbate atoms relax
-    fire_stage = FIRE(
+    # FIRE2 sub-stage (relaxation) — only adsorbate atoms relax
+    fire_stage = FIRE2(
         model=model,
-        dt=0.1,
+        dt=0.05,
         convergence_hook=ConvergenceHook(
             criteria=[
                 {"key": "forces", "threshold": 0.05, "reduce_op": "norm", "reduce_dims": -1}
@@ -346,7 +349,7 @@ We create three copies with different random rattles to form a batch.
         n_steps=200,
     )
 
-    # Compose: status 0 → FIRE, status 1 → Langevin
+    # Compose: status 0 → FIRE2, status 1 → Langevin
     fused = fire_stage + langevin_stage
     print(f"Created: {fused}\n")
 
@@ -355,14 +358,14 @@ We create three copies with different random rattles to form a batch.
         batch_fused = fused.run(batch_fused, n_steps=n_fused_steps)
 
     status_final = batch_fused.status.squeeze(-1).tolist()
-    print(f"\nFinal status: {status_final}  (0=FIRE, 1=Langevin)")
+    print(f"\nFinal status: {status_final}  (0=FIRE2, 1=Langevin)")
     print(f"FusedStage total steps: {fused.step_count}")
 
     final_systems = batch_to_atoms_list(batch_fused)
     write(OUTPUT_DIR / "cu111_co_final.xyz", final_systems)
     print(f"Wrote {len(final_systems)} final structures -> {OUTPUT_DIR}/cu111_co_final.xyz")
 
-    print(f"\nAll output written to {OUTPUT_DIR.resolve()}/")
+    print(f"\nAll output written to {OUTPUT_DIR}/")
     print("  Visualize with: ase gui 03_ase_integration_output/cu111_co_initial.xyz")
 
 
@@ -378,21 +381,21 @@ We create three copies with different random rattles to form a batch.
       System (seed=10): 14 atoms (12 slab + 2 adsorbate)
       System (seed=11): 14 atoms (12 slab + 2 adsorbate)
       System (seed=12): 14 atoms (12 slab + 2 adsorbate)
-    /home/kelvin/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/ase/io/extxyz.py:318: UserWarning: Skipping unhashable information adsorbate_info
+    /home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/ase/io/extxyz.py:318: UserWarning: Skipping unhashable information adsorbate_info
       warnings.warn('Skipping unhashable information '
       Wrote 3 initial slab+CO structures -> 03_ase_integration_output/cu111_co_initial.xyz
       Frozen (slab): 36 atoms, Free (adsorbate): 6 atoms
 
     Batch: 3 systems, 42 atoms total
 
-    Created: FusedStage(sub_stages=[0:FIRE, 1:NVTLangevin], entry_status=0, exit_status=2, compiled=False, step_count=0)
+    Created: FusedStage(sub_stages=[0:FIRE2, 1:NVTLangevin], entry_status=0, exit_status=2, reprime_status_codes=set(), compiled=False, step_count=0)
 
 
-    Final status: [2, 2, 2]  (0=FIRE, 1=Langevin)
-    FusedStage total steps: 200
+    Final status: [2, 2, 2]  (0=FIRE2, 1=Langevin)
+    FusedStage total steps: 201
     Wrote 3 final structures -> 03_ase_integration_output/cu111_co_final.xyz
 
-    All output written to /home/kelvin/Repos/nvalchemi-toolkit/examples/basic/03_ase_integration_output/
+    All output written to 03_ase_integration_output/
       Visualize with: ase gui 03_ase_integration_output/cu111_co_initial.xyz
 
 
@@ -401,7 +404,7 @@ We create three copies with different random rattles to form a batch.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.473 seconds)
+   **Total running time of the script:** (0 minutes 1.853 seconds)
 
 
 .. _sphx_glr_download_examples_basic_03_ase_integration.py:

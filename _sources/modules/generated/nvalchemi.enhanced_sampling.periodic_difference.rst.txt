@@ -1,0 +1,6 @@
+﻿nvalchemi.enhanced\_sampling.periodic\_difference
+=================================================
+
+.. currentmodule:: nvalchemi.enhanced_sampling
+
+.. autofunction:: periodic_difference

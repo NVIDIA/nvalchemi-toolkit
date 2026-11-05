@@ -1,0 +1,1766 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.distillation.scoring &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/distillation/scoring';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.distillation.scoring</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Teacher scoring interfaces for knowledge distillation.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">AbstractContextManager</span><span class="p">,</span> <span class="n">contextmanager</span><span class="p">,</span> <span class="n">nullcontext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">MappingProxyType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">TypeAlias</span><span class="p">,</span> <span class="n">runtime_checkable</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Forces</span><span class="p">,</span> <span class="n">NodePositions</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._derivatives</span><span class="w"> </span><span class="kn">import</span> <span class="n">HessianOperator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelConfig</span><span class="p">,</span> <span class="n">NeighborConfig</span><span class="p">,</span> <span class="n">NeighborListFormat</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_neighbors</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">evaluating</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;BUILTIN_SIGNALS&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;InProcessTeacherScorer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;NeighborListPolicy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SUPPORTED_SIGNALS&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SignalLevel&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;SignalNormalizer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TeacherLabels&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TeacherScorer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TeacherSignal&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;scorer_fields&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;signal_fields&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;signal_for_field&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">SignalLevel</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">]</span>
+<span class="sd">&quot;&quot;&quot;Batch level a teacher signal is attached at.&quot;&quot;&quot;</span>
+
+<span class="n">TeacherLabels</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">SignalLevel</span><span class="p">]]</span>
+<span class="sd">&quot;&quot;&quot;Teacher signals for one batch, keyed by the batch field they populate.&quot;&quot;&quot;</span>
+
+<span class="n">SignalNormalizer</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[</span>
+    <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Batch</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span>
+<span class="p">]</span>
+<span class="sd">&quot;&quot;&quot;Callable that reshapes a raw teacher output or spreads it over a signal&#39;s fields.&quot;&quot;&quot;</span>
+
+<span class="n">NeighborListPolicy</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;rebuild&quot;</span><span class="p">,</span> <span class="s2">&quot;reuse&quot;</span><span class="p">]</span>
+<span class="sd">&quot;&quot;&quot;Where :class:`InProcessTeacherScorer` takes the teacher&#39;s neighbor list from.&quot;&quot;&quot;</span>
+
+<span class="n">_NEIGHBOR_LIST_POLICIES</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;rebuild&quot;</span><span class="p">,</span> <span class="s2">&quot;reuse&quot;</span><span class="p">})</span>
+<span class="sd">&quot;&quot;&quot;The two values of :data:`NeighborListPolicy`.&quot;&quot;&quot;</span>
+
+<span class="n">_HVP_PROBE_FIELD</span> <span class="o">=</span> <span class="s2">&quot;teacher_hvp_probe&quot;</span>
+<span class="sd">&quot;&quot;&quot;Field holding the direction a stored Hessian-vector product was taken along.&quot;&quot;&quot;</span>
+
+<span class="n">_TEACHER_FIELD_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;teacher_&quot;</span>
+<span class="sd">&quot;&quot;&quot;Namespace every teacher field lives in, clear of a batch&#39;s own fields.&quot;&quot;&quot;</span>
+
+<span class="n">_SIGNAL_LEVELS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">})</span>
+<span class="sd">&quot;&quot;&quot;The two levels a teacher signal may be attached at.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="TeacherSignal">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.TeacherSignal.html#nvalchemi.training.distillation.TeacherSignal">[docs]</a>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TeacherSignal</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Model output, batch field, level, and shape rule behind one teacher signal.</span>
+
+<span class="sd">    A signal names what the teacher produces — *model_output*, a key in its</span>
+<span class="sd">    outputs — and where the label lands: *field*, at *level*. A signal with</span>
+<span class="sd">    ``model_output=None`` is one the scorer derives outside the forward pass,</span>
+<span class="sd">    such as the built-in ``embeddings`` through</span>
+<span class="sd">    :meth:`~nvalchemi.models.base.BaseModelMixin.compute_embeddings`; a custom</span>
+<span class="sd">    signal must name an output. Pass an instance to</span>
+<span class="sd">    :class:`InProcessTeacherScorer` beside the built-in names to label a</span>
+<span class="sd">    teacher output the built-in table does not cover.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Signal name, as a scorer is asked for it.</span>
+<span class="sd">    model_output : str | None</span>
+<span class="sd">        Key of the teacher output the label is read from, or ``None`` for a</span>
+<span class="sd">        signal the scorer derives by a route of its own.</span>
+<span class="sd">    field : str</span>
+<span class="sd">        Batch field the label populates; must start with ``teacher_``.</span>
+<span class="sd">    level : SignalLevel</span>
+<span class="sd">        ``&quot;node&quot;`` for one row per atom, ``&quot;system&quot;`` for one per graph.</span>
+<span class="sd">    normalize : SignalNormalizer | None, optional</span>
+<span class="sd">        Reshapes the detached raw output to the field&#39;s canonical shape, given</span>
+<span class="sd">        the batch it was produced for. For a signal with companion fields, it</span>
+<span class="sd">        instead returns a mapping from every name in :attr:`fields` to its</span>
+<span class="sd">        tensor, all at *level*. Default ``None`` (keep the shape).</span>
+<span class="sd">    extra_fields : tuple[str, ...], optional</span>
+<span class="sd">        Companion fields the signal writes beside *field*, each in the</span>
+<span class="sd">        ``teacher_*`` namespace and produced by *normalize*. Default ``()``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *field* or a companion field falls outside the ``teacher_*``</span>
+<span class="sd">        namespace, if *level* is neither ``&quot;node&quot;`` nor ``&quot;system&quot;``, or if a</span>
+<span class="sd">        signal read from a model output declares companion fields without a</span>
+<span class="sd">        *normalize* to produce them.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import TeacherSignal</span>
+<span class="sd">    &gt;&gt;&gt; charges = TeacherSignal(&quot;charges&quot;, &quot;charges&quot;, &quot;teacher_charges&quot;, &quot;node&quot;)</span>
+<span class="sd">    &gt;&gt;&gt; charges.fields</span>
+<span class="sd">    (&#39;teacher_charges&#39;,)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">model_output</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">field</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">level</span><span class="p">:</span> <span class="n">SignalLevel</span>
+    <span class="n">normalize</span><span class="p">:</span> <span class="n">SignalNormalizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">extra_fields</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Hold the fields to the ``teacher_*`` namespace and the level to the two.&quot;&quot;&quot;</span>
+        <span class="n">foreign</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">field</span>
+            <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">_TEACHER_FIELD_PREFIX</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="n">foreign</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Teacher signal </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must populate the &#39;teacher_*&#39; &quot;</span>
+                <span class="s2">&quot;namespace, so a batch&#39;s own reference fields are never overwritten; &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">foreign</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">level</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SIGNAL_LEVELS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Teacher signal </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must be attached at &#39;node&#39; or &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;&#39;system&#39;; got level </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">level</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">extra_fields</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_output</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalize</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Teacher signal </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> declares companion fields &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">extra_fields</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> that nothing produces; give it a &quot;</span>
+                <span class="s2">&quot;normalize returning a mapping over its fields.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return every batch field the signal populates, its own first.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">extra_fields</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_energy_shape</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a per-graph energy as ``(B, 1)``.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">value</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_atomic_energies_shape</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return per-atom energies as ``(V,)``.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_stress_shape</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a per-graph stress as ``(B, 3, 3)``.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+
+<span class="n">BUILTIN_SIGNALS</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TeacherSignal</span><span class="p">]</span> <span class="o">=</span> <span class="n">MappingProxyType</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">TeacherSignal</span><span class="p">(</span>
+            <span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;teacher_energy&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="n">_energy_shape</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="n">TeacherSignal</span><span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;teacher_forces&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;stress&quot;</span><span class="p">:</span> <span class="n">TeacherSignal</span><span class="p">(</span>
+            <span class="s2">&quot;stress&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">,</span> <span class="s2">&quot;teacher_stress&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="n">_stress_shape</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;atomic_energies&quot;</span><span class="p">:</span> <span class="n">TeacherSignal</span><span class="p">(</span>
+            <span class="s2">&quot;atomic_energies&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;atomic_energies&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;teacher_atomic_energies&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;node&quot;</span><span class="p">,</span>
+            <span class="n">_atomic_energies_shape</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;embeddings&quot;</span><span class="p">:</span> <span class="n">TeacherSignal</span><span class="p">(</span>
+            <span class="s2">&quot;embeddings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;teacher_node_embeddings&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;hessian&quot;</span><span class="p">:</span> <span class="n">TeacherSignal</span><span class="p">(</span>
+            <span class="s2">&quot;hessian&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;teacher_hvp&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="n">extra_fields</span><span class="o">=</span><span class="p">(</span><span class="n">_HVP_PROBE_FIELD</span><span class="p">,)</span>
+        <span class="p">),</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Built-in teacher signals by name; a scorer takes these names or a :class:`TeacherSignal`.&quot;&quot;&quot;</span>
+
+<span class="n">SUPPORTED_SIGNALS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">BUILTIN_SIGNALS</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Names of the built-in signals, the strings :class:`InProcessTeacherScorer` resolves.&quot;&quot;&quot;</span>
+
+<span class="n">_DERIVED_SIGNALS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;embeddings&quot;</span><span class="p">,</span> <span class="s2">&quot;hessian&quot;</span><span class="p">})</span>
+<span class="sd">&quot;&quot;&quot;Built-in signals the scorer derives outside the forward pass, by name.&quot;&quot;&quot;</span>
+
+<span class="n">_DENSE_NEIGHBOR_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">,</span> <span class="s2">&quot;num_neighbors&quot;</span><span class="p">,</span> <span class="s2">&quot;neighbor_matrix_shifts&quot;</span><span class="p">}</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Node-level neighbor tensors a ``MATRIX`` build writes.&quot;&quot;&quot;</span>
+
+<span class="n">_SPARSE_NEIGHBOR_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">,</span> <span class="s2">&quot;neighbor_list_shifts&quot;</span><span class="p">})</span>
+<span class="sd">&quot;&quot;&quot;Edge-level neighbor tensors a ``COO`` build writes.&quot;&quot;&quot;</span>
+
+<span class="n">_NEIGHBOR_KEYS</span> <span class="o">=</span> <span class="n">_DENSE_NEIGHBOR_KEYS</span> <span class="o">|</span> <span class="n">_SPARSE_NEIGHBOR_KEYS</span>
+<span class="sd">&quot;&quot;&quot;Ephemeral neighbor keys; the distillation package&#39;s shared definition.&quot;&quot;&quot;</span>
+
+<span class="n">_STORABLE_DTYPES</span> <span class="o">=</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Floating-point dtypes an ALCHEMI Zarr store can hold.&quot;&quot;&quot;</span>
+
+<span class="n">_EMBEDDING_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;node_embeddings&quot;</span><span class="p">,</span> <span class="s2">&quot;graph_embeddings&quot;</span><span class="p">})</span>
+<span class="sd">&quot;&quot;&quot;Batch keys that :meth:`compute_embeddings` implementations write in place.&quot;&quot;&quot;</span>
+
+<span class="n">_COUNT_LEVELS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;atoms&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">})</span>
+<span class="sd">&quot;&quot;&quot;Batch levels whose storage holds the atom and graph counts and never leaves.&quot;&quot;&quot;</span>
+
+<span class="n">_CUTOFF_ATTR</span> <span class="o">=</span> <span class="s2">&quot;_neighbor_list_cutoff&quot;</span>
+<span class="sd">&quot;&quot;&quot;Batch attribute recording the cutoff a neighbor list was built at.&quot;&quot;&quot;</span>
+
+<span class="n">_PIPELINE_SOURCES_ATTR</span> <span class="o">=</span> <span class="s2">&quot;_pipeline_neighbor_sources&quot;</span>
+<span class="sd">&quot;&quot;&quot;Instance-dict attribute holding a composed pipeline&#39;s per-source neighbor lists.&quot;&quot;&quot;</span>
+
+<span class="n">_SHADOWED_NEIGHBOR_ATTRS</span> <span class="o">=</span> <span class="n">_NEIGHBOR_KEYS</span> <span class="o">|</span> <span class="p">{</span><span class="s2">&quot;edge_ptr&quot;</span><span class="p">,</span> <span class="n">_CUTOFF_ATTR</span><span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Instance-dict neighbor attributes snapshotted and restored around a rebuild.&quot;&quot;&quot;</span>
+
+<span class="n">_REQUIRED_NEIGHBOR_KEYS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">NeighborListFormat</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">,),</span>
+    <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">MATRIX</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">,</span> <span class="s2">&quot;num_neighbors&quot;</span><span class="p">),</span>
+<span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Batch keys a teacher reads its neighbor list from, by format.&quot;&quot;&quot;</span>
+
+<span class="n">_BATCH_STATE_ATTRS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;keys&quot;</span><span class="p">})</span>
+<span class="sd">&quot;&quot;&quot;Public instance-dict entries of a batch that hold state rather than a field.&quot;&quot;&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_signals</span><span class="p">(</span>
+    <span class="n">signals</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">TeacherSignal</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TeacherSignal</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the spec behind every entry of *signals*, keyed by name, in order.</span>
+
+<span class="sd">    A name is looked up in :data:`BUILTIN_SIGNALS`; a :class:`TeacherSignal` is</span>
+<span class="sd">    taken as given. A repeated entry is folded into one.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    KeyError</span>
+<span class="sd">        If a name is not a built-in signal.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If two different specs share a name, or two specs claim one field.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">resolved</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TeacherSignal</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">signal</span> <span class="ow">in</span> <span class="n">signals</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">signal</span><span class="p">,</span> <span class="n">TeacherSignal</span><span class="p">):</span>
+            <span class="n">spec</span> <span class="o">=</span> <span class="n">signal</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">spec</span> <span class="o">=</span> <span class="n">BUILTIN_SIGNALS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">signal</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Unknown teacher signal </span><span class="si">{</span><span class="n">signal</span><span class="si">!r}</span><span class="s2">; supported signals are &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">BUILTIN_SIGNALS</span><span class="p">)</span><span class="si">!r}</span><span class="s2">, and any other must be given &quot;</span>
+                    <span class="s2">&quot;as a TeacherSignal.&quot;</span>
+                <span class="p">)</span>
+        <span class="n">previous</span> <span class="o">=</span> <span class="n">resolved</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">previous</span> <span class="o">!=</span> <span class="n">spec</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Teacher signals must have distinct names; got two specs named &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+    <span class="n">owners</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">resolved</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">fields</span><span class="p">:</span>
+            <span class="n">owner</span> <span class="o">=</span> <span class="n">owners</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">owner</span> <span class="o">!=</span> <span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Teacher signals must populate distinct fields; got </span><span class="si">{</span><span class="n">field</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;from both </span><span class="si">{</span><span class="n">owner</span><span class="si">!r}</span><span class="s2"> and </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+    <span class="k">return</span> <span class="n">resolved</span>
+
+
+<div class="viewcode-block" id="signal_fields">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.signal_fields.html#nvalchemi.training.distillation.signal_fields">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">signal_fields</span><span class="p">(</span><span class="n">signals</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">TeacherSignal</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return every batch field the given signals populate, sorted.</span>
+
+<span class="sd">    A signal may populate companion fields alongside its own; all are reported</span>
+<span class="sd">    so a consumer can prepare for the whole set a scorer will write.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    signals : Iterable[str | TeacherSignal]</span>
+<span class="sd">        Built-in signal names or :class:`TeacherSignal` specs.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[str, ...]</span>
+<span class="sd">        Batch field names, deduplicated and sorted.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    KeyError</span>
+<span class="sd">        If a name is not a built-in signal.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If two specs share a name or claim one field.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">_resolve_signals</span><span class="p">(</span><span class="n">signals</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">fields</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">fields</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">fields</span><span class="p">))</span></div>
+
+
+
+<div class="viewcode-block" id="signal_for_field">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.signal_for_field.html#nvalchemi.training.distillation.signal_for_field">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">signal_for_field</span><span class="p">(</span>
+    <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">signals</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">TeacherSignal</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the signal that populates *field*, or ``None`` when none does.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    field : str</span>
+<span class="sd">        Batch field name to resolve back to the signal that writes it.</span>
+<span class="sd">    signals : Iterable[str | TeacherSignal] | None, optional</span>
+<span class="sd">        Signals to search, as built-in names or :class:`TeacherSignal` specs.</span>
+<span class="sd">        Default ``None`` (the built-in signals).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str | None</span>
+<span class="sd">        Name of the signal populating *field*, as its own or a companion</span>
+<span class="sd">        field, or ``None`` when no searched signal writes it.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">specs</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">BUILTIN_SIGNALS</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">signals</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="n">_resolve_signals</span><span class="p">(</span><span class="n">signals</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">fields</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">spec</span><span class="o">.</span><span class="n">name</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_reject_foreign_fields</span><span class="p">(</span><span class="n">fields</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise ``ValueError`` when any of *fields* falls outside ``teacher_*``.</span>
+
+<span class="sd">    *subject* opens the message and names where the fields came from: a</span>
+<span class="sd">    scorer&#39;s declared ``label_fields`` or the labels it actually returned.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">foreign</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+        <span class="n">field</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">_TEACHER_FIELD_PREFIX</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">foreign</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">subject</span><span class="si">}</span><span class="s2"> must populate the &#39;teacher_*&#39; namespace, so a batch&#39;s own &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;reference fields are never overwritten; got </span><span class="si">{</span><span class="n">foreign</span><span class="si">!r}</span><span class="s2">. Rename each &quot;</span>
+            <span class="s2">&quot;into the namespace, or stop the scorer writing it.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_node_embedding_shapes</span><span class="p">(</span><span class="n">teacher</span><span class="p">:</span> <span class="n">BaseModelMixin</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the teacher&#39;s embedding shapes, empty when it publishes none.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">teacher</span><span class="o">.</span><span class="n">embedding_shapes</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="k">except</span> <span class="ne">NotImplementedError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_planned_neighbor_sources</span><span class="p">(</span><span class="n">teacher</span><span class="p">:</span> <span class="n">BaseModelMixin</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return how many neighbor lists *teacher* consumes per batch.&quot;&quot;&quot;</span>
+    <span class="n">factory</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">teacher</span><span class="p">,</span> <span class="s2">&quot;make_neighbor_hooks&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">factory</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mi">1</span>
+    <span class="n">hooks</span> <span class="o">=</span> <span class="n">factory</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hooks</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">hooks</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">1</span>
+    <span class="n">sources</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hooks</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;sources&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">sources</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sources</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="k">else</span> <span class="mi">1</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_reusable_neighbors</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">NeighborConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise unless *batch* carries a list the teacher&#39;s format can consume.</span>
+
+<span class="sd">    Only what a rebuild would otherwise have to guess is checked: the keys the</span>
+<span class="sd">    teacher&#39;s format reads, in storage or shadowed in the instance dictionary,</span>
+<span class="sd">    and the cutoff stamp when the batch carries one. Whether the list holds</span>
+<span class="sd">    each pair once or twice is recorded nowhere, so matching it to the</span>
+<span class="sd">    teacher&#39;s ``half_list`` is the caller&#39;s.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">required</span> <span class="o">=</span> <span class="n">_REQUIRED_NEIGHBOR_KEYS</span><span class="p">[</span><span class="n">config</span><span class="o">.</span><span class="n">format</span><span class="p">]</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">required</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">batch</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;neighbor_list=&#39;reuse&#39; needs the batch to carry the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">format</span><span class="o">.</span><span class="n">value</span><span class="si">!r}</span><span class="s2"> neighbor list the teacher consumes, but it has &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;no </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">. Build the list before scoring, or pass &quot;</span>
+            <span class="s2">&quot;neighbor_list=&#39;rebuild&#39; to let the scorer build the teacher&#39;s own.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">cutoff</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">_CUTOFF_ATTR</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cutoff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">float</span><span class="p">(</span><span class="n">cutoff</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">float</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">cutoff</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;neighbor_list=&#39;reuse&#39; needs the batch&#39;s neighbor list built at the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;teacher&#39;s cutoff </span><span class="si">{</span><span class="n">config</span><span class="o">.</span><span class="n">cutoff</span><span class="si">!r}</span><span class="s2">, but it is stamped with cutoff &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">cutoff</span><span class="si">!r}</span><span class="s2">. Build the list at the teacher&#39;s cutoff, or pass &quot;</span>
+            <span class="s2">&quot;neighbor_list=&#39;rebuild&#39;.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_snapshot_grad_flags</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ModelConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the ``requires_grad`` flag of every tensor field of *batch*.</span>
+
+<span class="sd">    Every stored field is recorded, not only the inputs *config* declares: a</span>
+<span class="sd">    model may enable gradients on a field it never names, as a stress head</span>
+<span class="sd">    does on ``cell``, and a flag left on would let a later copy of the batch</span>
+<span class="sd">    carry an autograd graph.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">keys</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">}</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">gradient_keys</span><span class="p">)</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">autograd_inputs</span><span class="p">)</span>
+    <span class="n">keys</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">field</span> <span class="k">for</span> <span class="n">fields</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="n">level_keys</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">)</span>
+    <span class="n">flags</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">flags</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">requires_grad</span>
+    <span class="k">return</span> <span class="n">flags</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_restore_grad_flags</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">flags</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Restore the ``requires_grad`` flags captured by :func:`_snapshot_grad_flags`.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">flag</span> <span class="ow">in</span> <span class="n">flags</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">is_leaf</span>
+            <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">!=</span> <span class="n">flag</span>
+        <span class="p">):</span>
+            <span class="n">value</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="n">flag</span><span class="p">)</span>
+
+
+<span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_isolated_neighbors</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">NeighborConfig</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">neighbor_list</span><span class="p">:</span> <span class="n">NeighborListPolicy</span> <span class="o">=</span> <span class="s2">&quot;rebuild&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Give the teacher the neighbor list *neighbor_list* names, restoring state on exit.</span>
+
+<span class="sd">    ``&quot;rebuild&quot;`` snapshots the node-level neighbor tensors, the edge group,</span>
+<span class="sd">    and every neighbor attribute in the batch&#39;s instance dictionary — where a</span>
+<span class="sd">    composed pipeline shadows its default source&#39;s list — builds the teacher&#39;s</span>
+<span class="sd">    own list, so the teacher can resolve nothing else, and restores all of it</span>
+<span class="sd">    afterwards. ``&quot;reuse&quot;`` consumes the batch&#39;s list after</span>
+<span class="sd">    :func:`_check_reusable_neighbors` and builds nothing. The per-source table</span>
+<span class="sd">    a composed pipeline captures under ``_pipeline_neighbor_sources`` is</span>
+<span class="sd">    hidden for the whole block either way, because a composed teacher consults</span>
+<span class="sd">    it before anything canonical.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    batch : Batch</span>
+<span class="sd">        Batch to score on; mutated for the duration of the block under</span>
+<span class="sd">        ``&quot;rebuild&quot;``.</span>
+<span class="sd">    config : NeighborConfig | None</span>
+<span class="sd">        Neighbor requirements of the teacher, or ``None`` for a model that</span>
+<span class="sd">        needs no neighbor list, which makes the block a no-op.</span>
+<span class="sd">    neighbor_list : NeighborListPolicy, optional</span>
+<span class="sd">        ``&quot;rebuild&quot;`` or ``&quot;reuse&quot;``. Default ``&quot;rebuild&quot;``.</span>
+
+<span class="sd">    Yields</span>
+<span class="sd">    ------</span>
+<span class="sd">    None</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *neighbor_list* is ``&quot;reuse&quot;`` and the batch carries no list the</span>
+<span class="sd">        teacher&#39;s format reads, or one stamped with another cutoff.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">saved_sources</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">{</span><span class="n">_PIPELINE_SOURCES_ATTR</span><span class="p">:</span> <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">_PIPELINE_SOURCES_ATTR</span><span class="p">)}</span>
+        <span class="k">if</span> <span class="n">_PIPELINE_SOURCES_ATTR</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span>
+        <span class="k">else</span> <span class="p">{}</span>
+    <span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">yield</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">neighbor_list</span> <span class="o">==</span> <span class="s2">&quot;reuse&quot;</span><span class="p">:</span>
+            <span class="n">_check_reusable_neighbors</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+            <span class="k">yield</span>
+            <span class="k">return</span>
+
+        <span class="n">atoms</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">_atoms_group</span>
+        <span class="n">saved_nodes</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">atoms</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_NEIGHBOR_KEYS</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">atoms</span><span class="p">}</span>
+            <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="p">{}</span>
+        <span class="p">)</span>
+        <span class="n">saved_edges</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">pop_level</span><span class="p">(</span><span class="s2">&quot;edges&quot;</span><span class="p">)</span>
+        <span class="n">saved_shadows</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_SHADOWED_NEIGHBOR_ATTRS</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">saved_nodes</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">atoms</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">compute_neighbors</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+            <span class="k">yield</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_NEIGHBOR_KEYS</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">atoms</span><span class="p">:</span>
+                        <span class="k">del</span> <span class="n">atoms</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">saved_nodes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">atoms</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">if</span> <span class="n">saved_edges</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">drop_level</span><span class="p">(</span><span class="s2">&quot;edges&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">set_level</span><span class="p">(</span><span class="s2">&quot;edges&quot;</span><span class="p">,</span> <span class="n">saved_edges</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_SHADOWED_NEIGHBOR_ATTRS</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">saved_shadows</span><span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">saved_sources</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_restore_at_level</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Write *value* back to *batch* under *key* at the *level* it was taken from.</span>
+
+<span class="sd">    The value is split along the level&#39;s own pointer so</span>
+<span class="sd">    :meth:`~nvalchemi.data.Batch.add_key` lands it on that level instead of</span>
+<span class="sd">    the one the attribute registry would pick.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ptr</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">level_ptr</span><span class="p">(</span><span class="n">level</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span> <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">ptr</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">rows</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">level</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_field_shadows</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the instance-dict entries a model can shadow *batch*&#39;s fields with.</span>
+
+<span class="sd">    The private entries are left out: they are the neighbor provenance stamps</span>
+<span class="sd">    and the captured source table, which :func:`_isolated_neighbors` owns.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="n">name</span><span class="p">:</span> <span class="n">value</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_BATCH_STATE_ATTRS</span>
+    <span class="p">}</span>
+
+
+<span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_isolated_fields</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Score with *batch*, restoring on exit every field the teacher writes.</span>
+
+<span class="sd">    A composed teacher wires one stage into the next through the batch: the</span>
+<span class="sd">    pipeline writes an intermediate such as ``charges`` straight into the</span>
+<span class="sd">    instance dictionary, where it shadows the batch&#39;s own field of that name,</span>
+<span class="sd">    and an autograd group replaces each of its gradient inputs with a fresh</span>
+<span class="sd">    leaf in storage. Neither is rolled back, so a teacher scored on a live</span>
+<span class="sd">    batch would hand the student its charges in place of the batch&#39;s, or a</span>
+<span class="sd">    positions tensor cut loose from the graph the student built it on.</span>
+
+<span class="sd">    Both are undone by recording every stored field and every shadow by</span>
+<span class="sd">    reference — no tensor is copied, so the cost is one dictionary per level —</span>
+<span class="sd">    and afterwards dropping what appeared and putting back what was replaced.</span>
+<span class="sd">    A field the teacher deleted outright is re-added at the level it came</span>
+<span class="sd">    from. A level the teacher detached wholesale, such as ``edges``, is</span>
+<span class="sd">    re-attached from the same snapshot first. A tensor a teacher edits in</span>
+<span class="sd">    place is not recovered; nothing short of cloning the batch could.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    batch : Batch</span>
+<span class="sd">        Batch the teacher runs on; its fields are restored on exit.</span>
+
+<span class="sd">    Yields</span>
+<span class="sd">    ------</span>
+<span class="sd">    None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">levels</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">level</span><span class="p">:</span> <span class="p">(</span>
+            <span class="p">{</span><span class="n">field</span><span class="p">:</span> <span class="n">batch</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">},</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">level_ptr</span><span class="p">(</span><span class="n">level</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">level</span><span class="p">,</span> <span class="n">fields</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="n">level_keys</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+    <span class="n">groups</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">level</span><span class="p">:</span> <span class="n">batch</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">level</span> <span class="ow">in</span> <span class="n">levels</span>
+        <span class="k">if</span> <span class="n">level</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_COUNT_LEVELS</span>
+    <span class="p">}</span>
+    <span class="n">shadows</span> <span class="o">=</span> <span class="n">_field_shadows</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">level</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">groups</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">level</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">set_level</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">group</span><span class="p">)</span>
+        <span class="n">current</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">level_keys</span>
+        <span class="k">for</span> <span class="n">level</span> <span class="ow">in</span> <span class="n">current</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">level</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">levels</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">drop_level</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">level</span><span class="p">,</span> <span class="p">(</span><span class="n">saved</span><span class="p">,</span> <span class="n">cardinality</span><span class="p">)</span> <span class="ow">in</span> <span class="n">levels</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">fields</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">saved</span><span class="p">):</span>
+                <span class="k">del</span> <span class="n">batch</span><span class="p">[</span><span class="n">field</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">saved</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">:</span>
+                    <span class="n">_restore_at_level</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">level</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">batch</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">value</span><span class="p">:</span>
+                    <span class="n">batch</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">saved</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">cardinality</span> <span class="ow">and</span> <span class="n">level</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_COUNT_LEVELS</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">drop_level</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_field_shadows</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shadows</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">batch</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">shadows</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="TeacherScorer">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.TeacherScorer.html#nvalchemi.training.distillation.TeacherScorer">[docs]</a>
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TeacherScorer</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Structural interface for objects that produce teacher signals for a batch.</span>
+
+<span class="sd">    An implementation declares the ``signals`` it emits and returns, for one</span>
+<span class="sd">    :class:`~nvalchemi.data.Batch`, ``{batch field: (tensor, level)}`` with</span>
+<span class="sd">    levels ``&quot;node&quot;`` or ``&quot;system&quot;`` as :meth:`~nvalchemi.data.Batch.add_key`</span>
+<span class="sd">    takes them. Tensors must be detached and live on the batch&#39;s device.</span>
+
+<span class="sd">    It may also publish ``label_fields``, the sequence of batch fields</span>
+<span class="sd">    :meth:`label` populates (never a bare string); consumers read it through</span>
+<span class="sd">    :func:`scorer_fields`. An implementation naming a built-in signal is read</span>
+<span class="sd">    as writing every field that signal populates, so one that writes fewer,</span>
+<span class="sd">    or one whose signals are its own, must declare ``label_fields``. The</span>
+<span class="sd">    protocol will not grow required members.</span>
+
+<span class="sd">    Label precision is the scorer&#39;s decision. A consumer calls :meth:`label`</span>
+<span class="sd">    inside the ambient autocast region, meaning whatever autocast state is in</span>
+<span class="sd">    force at the call site, and opens no region of its own. An implementation</span>
+<span class="sd">    used in a mixed-precision workflow therefore sets its own autocast mode.</span>
+<span class="sd">    :class:`InProcessTeacherScorer` disables autocast unless its ``autocast``</span>
+<span class="sd">    setting says otherwise.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    InProcessTeacherScorer : Scorer that evaluates a teacher in this process.</span>
+<span class="sd">    nvalchemi.training.distillation.labeling.label_dataset : Offline consumer.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">signals</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+
+<div class="viewcode-block" id="TeacherScorer.label">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.TeacherScorer.html#nvalchemi.training.distillation.TeacherScorer.label">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">label</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TeacherLabels</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``{batch field: (detached tensor, level)}`` for *batch*.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="scorer_fields">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.scorer_fields.html#nvalchemi.training.distillation.scorer_fields">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">scorer_fields</span><span class="p">(</span><span class="n">scorer</span><span class="p">:</span> <span class="n">TeacherScorer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the batch fields *scorer* populates, or ``None`` when they cannot be known.</span>
+
+<span class="sd">    A ``label_fields`` declaration is taken at its word; otherwise a scorer</span>
+<span class="sd">    whose signals are all built in gets :func:`signal_fields` of them,</span>
+<span class="sd">    companion fields included; otherwise the fields are unknown, since a</span>
+<span class="sd">    custom signal may map onto any field.</span>
+
+<span class="sd">    ``None`` is not ``()``: a scorer that labels nothing declares ``()``, while</span>
+<span class="sd">    an undeclared scorer with a custom signal resolves to ``None``, which a</span>
+<span class="sd">    consumer must treat as unknown rather than as nothing to check.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    scorer : TeacherScorer</span>
+<span class="sd">        Scorer to resolve the fields of.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[str, ...] | None</span>
+<span class="sd">        Batch field names the scorer writes, or ``None`` when they cannot be</span>
+<span class="sd">        determined without scoring a batch.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If *scorer* declares ``label_fields`` as a string, which would</span>
+<span class="sd">        otherwise resolve to its characters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">declared</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">scorer</span><span class="p">,</span> <span class="s2">&quot;label_fields&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">declared</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;label_fields must be a sequence of field names, not a single &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;string; got </span><span class="si">{</span><span class="n">declared</span><span class="si">!r}</span><span class="s2"> — declare (</span><span class="si">{</span><span class="n">declared</span><span class="si">!r}</span><span class="s2">,) to mean one &quot;</span>
+            <span class="s2">&quot;field.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">declared</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">declared</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">scorer</span><span class="o">.</span><span class="n">signals</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">SUPPORTED_SIGNALS</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">signal_fields</span><span class="p">(</span><span class="n">scorer</span><span class="o">.</span><span class="n">signals</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_as_scorer</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">TeacherScorer</span> <span class="o">|</span> <span class="n">BaseModelMixin</span><span class="p">,</span>
+    <span class="n">signals</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return *model* as a scorer, wrapping a bare model in an in-process one.</span>
+
+<span class="sd">    A supplied scorer is checked against the batch fields that the requested</span>
+<span class="sd">    signals are read from, not against the signal names it declares, because it</span>
+<span class="sd">    may publish under fields of its own. A scorer whose fields cannot be</span>
+<span class="sd">    determined is let through. A bare model is wrapped in an</span>
+<span class="sd">    :class:`InProcessTeacherScorer` with the scorer&#39;s defaults, so it labels</span>
+<span class="sd">    with autocast disabled; *dtype* applies only to that wrapped model.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a supplied scorer declares fields that omit one the *signals* are</span>
+<span class="sd">        read from.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">TeacherScorer</span><span class="p">):</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="n">scorer_fields</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="n">signal_fields</span><span class="p">(</span><span class="n">signals</span><span class="p">)</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">required</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">fields</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scorer must publish the fields </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">required</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> this evaluation &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;reads; got </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span><span class="si">!r}</span><span class="s2">, missing </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">model</span>
+    <span class="k">return</span> <span class="n">InProcessTeacherScorer</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">signals</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="InProcessTeacherScorer">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.InProcessTeacherScorer.html#nvalchemi.training.distillation.InProcessTeacherScorer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">InProcessTeacherScorer</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Score a batch with a teacher model loaded in the current process.</span>
+
+<span class="sd">    The scorer owns the teacher&#39;s evaluation contract: it narrows</span>
+<span class="sd">    ``active_outputs`` to the outputs the requested signals need, builds and</span>
+<span class="sd">    afterwards restores whatever neighbor list the teacher requires — or, on</span>
+<span class="sd">    request, consumes the one the batch already carries — picks the grad mode</span>
+<span class="sd">    the teacher&#39;s autograd outputs need, runs the pass under its ``autocast``</span>
+<span class="sd">    setting, detaches every result, and normalizes each signal to its</span>
+<span class="sd">    canonical shape. The batch is left exactly as it was found, so a scorer</span>
+<span class="sd">    can be called mid-training on a live batch.</span>
+
+<span class="sd">    Each signal is a :class:`TeacherSignal` mapping one teacher output to one</span>
+<span class="sd">    batch field at one level. The built-in ones (:data:`BUILTIN_SIGNALS`) are</span>
+<span class="sd">    requested by name: ``energy`` to ``teacher_energy`` ``(B, 1)`` and</span>
+<span class="sd">    ``stress`` to ``teacher_stress`` ``(B, 3, 3)`` at system level;</span>
+<span class="sd">    ``forces`` to ``teacher_forces`` ``(V, 3)``, ``atomic_energies`` to</span>
+<span class="sd">    ``teacher_atomic_energies`` ``(V,)``, ``embeddings`` (from</span>
+<span class="sd">    :meth:`~nvalchemi.models.base.BaseModelMixin.compute_embeddings`) to</span>
+<span class="sd">    ``teacher_node_embeddings`` ``(V, D)``, and ``hessian`` (from</span>
+<span class="sd">    :meth:`label_hvp`) to ``teacher_hvp`` ``(V, 3)`` at node level. The</span>
+<span class="sd">    ``hessian`` signal is the teacher&#39;s Hessian-vector product, the product of</span>
+<span class="sd">    its energy Hessian with a random probe direction; that direction is</span>
+<span class="sd">    written to ``teacher_hvp_probe``. Any other teacher output is requested as</span>
+<span class="sd">    a :class:`TeacherSignal` of its own. The resolved specs are published as</span>
+<span class="sd">    ``signal_specs`` and the fields they write as ``label_fields``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    teacher : BaseModelMixin</span>
+<span class="sd">        Model wrapper producing the signals. Placed in evaluation mode at</span>
+<span class="sd">        construction and for the duration of every :meth:`label` call, with</span>
+<span class="sd">        the mode it arrived in restored afterwards; its parameters and their</span>
+<span class="sd">        ``requires_grad`` flags are never modified.</span>
+<span class="sd">    signals : Iterable[str | TeacherSignal]</span>
+<span class="sd">        Signals to produce: built-in names or :class:`TeacherSignal` specs,</span>
+<span class="sd">        each naming an output in the teacher&#39;s declared ``outputs``.</span>
+<span class="sd">    dtype : torch.dtype | None, optional</span>
+<span class="sd">        Cast floating-point outputs to this dtype. Any floating-point dtype is</span>
+<span class="sd">        accepted; whether a store can hold it is checked by</span>
+<span class="sd">        :func:`~nvalchemi.training.distillation.labeling.label_dataset`, and a</span>
+<span class="sd">        labeled store reads back at the reading dataset&#39;s ``positions`` dtype</span>
+<span class="sd">        regardless. Default ``None`` (keep the teacher&#39;s dtype).</span>
+<span class="sd">    neighbor_list : NeighborListPolicy, optional</span>
+<span class="sd">        ``&quot;rebuild&quot;`` builds the teacher&#39;s own neighbor list for every call,</span>
+<span class="sd">        hiding whatever list the batch carries, and rolls it back afterwards.</span>
+<span class="sd">        ``&quot;reuse&quot;`` hands the teacher the batch&#39;s list instead: the batch must</span>
+<span class="sd">        carry the keys the teacher&#39;s format reads, and a cutoff stamp, when</span>
+<span class="sd">        the batch has one, must equal the teacher&#39;s; otherwise :meth:`label`</span>
+<span class="sd">        raises rather than falling back. Whether the list holds each pair once</span>
+<span class="sd">        or twice is not recorded on the batch, so a reused list must match the</span>
+<span class="sd">        teacher&#39;s ``half_list`` by construction. Default ``&quot;rebuild&quot;``.</span>
+<span class="sd">    autocast : bool | torch.dtype | None, optional</span>
+<span class="sd">        Autocast mode for the scoring pass. The ambient autocast region is</span>
+<span class="sd">        whatever autocast state is in force where :meth:`label` is called,</span>
+<span class="sd">        such as a caller&#39;s AMP region. ``False`` disables autocast for the</span>
+<span class="sd">        pass, so an ambient region never reaches the teacher. ``None`` leaves</span>
+<span class="sd">        the ambient state untouched, so the teacher runs under the caller&#39;s</span>
+<span class="sd">        region when one is open. ``True`` or a floating-point ``torch.dtype``</span>
+<span class="sd">        enables autocast for the pass, whether or not an ambient region is</span>
+<span class="sd">        open: a dtype sets the autocast dtype, and ``True`` keeps the autocast</span>
+<span class="sd">        dtype in force for the device, which is the device default when no</span>
+<span class="sd">        region is open and the ambient region&#39;s dtype when one is. *dtype*</span>
+<span class="sd">        applies after this setting: the teacher produces each label at the</span>
+<span class="sd">        precision this mode gives, and *dtype*, when set, then casts it.</span>
+<span class="sd">        Default ``False``.</span>
+<span class="sd">    probe_seed : int | None, optional</span>
+<span class="sd">        Seed of the generator the ``hessian`` probe direction is drawn from.</span>
+<span class="sd">        Default ``None`` draws from the global RNG, a fresh direction per</span>
+<span class="sd">        labeling. A call to :meth:`label` can override it for that labeling</span>
+<span class="sd">        alone; see the Notes.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *signals* is empty, names a signal that is neither built in nor a</span>
+<span class="sd">        :class:`TeacherSignal`, gives two specs one name or one field, names a</span>
+<span class="sd">        model output the teacher does not declare, gives a custom spec no</span>
+<span class="sd">        model output, requests ``&quot;embeddings&quot;`` from a teacher that publishes</span>
+<span class="sd">        no node-embedding shape, requests ``&quot;hessian&quot;`` from a teacher that</span>
+<span class="sd">        declares no ``energy`` output, *dtype* is not a floating-point dtype,</span>
+<span class="sd">        *neighbor_list* is neither ``&quot;rebuild&quot;`` nor ``&quot;reuse&quot;``, *autocast*</span>
+<span class="sd">        is neither ``None``, a bool, nor a floating-point dtype, or *teacher*</span>
+<span class="sd">        is a composition planning more than one neighbor-list source.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import InProcessTeacherScorer</span>
+<span class="sd">    &gt;&gt;&gt; scorer = InProcessTeacherScorer(teacher, [&quot;energy&quot;, &quot;forces&quot;])  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; labels = scorer.label(batch)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; labels[&quot;teacher_forces&quot;][1]  # doctest: +SKIP</span>
+<span class="sd">    &#39;node&#39;</span>
+
+<span class="sd">    A teacher output the built-in table does not cover is labeled through a</span>
+<span class="sd">    spec of its own:</span>
+
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import TeacherSignal</span>
+<span class="sd">    &gt;&gt;&gt; charges = TeacherSignal(&quot;charges&quot;, &quot;charges&quot;, &quot;teacher_charges&quot;, &quot;node&quot;)</span>
+<span class="sd">    &gt;&gt;&gt; scorer = InProcessTeacherScorer(teacher, [&quot;energy&quot;, charges])  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; scorer.label_fields  # doctest: +SKIP</span>
+<span class="sd">    (&#39;teacher_charges&#39;, &#39;teacher_energy&#39;)</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Under the default ``neighbor_list=&quot;rebuild&quot;`` the teacher&#39;s list is built</span>
+<span class="sd">    for the forward pass and rolled back, and a list a composed pipeline keeps</span>
+<span class="sd">    as an instance attribute, along with its captured per-source table, is</span>
+<span class="sd">    hidden from the teacher for the whole of scoring. ``&quot;reuse&quot;`` is for the</span>
+<span class="sd">    case where the student has already built the list the teacher needs, in</span>
+<span class="sd">    the teacher&#39;s format and at its cutoff, and one build per step is one too</span>
+<span class="sd">    many; the scorer then checks only what it cannot infer and refuses the</span>
+<span class="sd">    batch by name when the list is missing or stamped with another cutoff. A</span>
+<span class="sd">    teacher composition planning more than one neighbor-list source is refused</span>
+<span class="sd">    at construction, because the scorer builds one list per batch; compose it</span>
+<span class="sd">    to plan a single list instead (``neighbor_adaptation=&quot;always&quot;`` or a large</span>
+<span class="sd">    enough ``max_cutoff_ratio``).</span>
+<span class="sd">    ``requires_grad`` on ``positions`` and the teacher&#39;s autograd inputs is</span>
+<span class="sd">    restored after each call, as is every field a composed teacher writes onto</span>
+<span class="sd">    the batch to wire one stage into the next.</span>
+
+<span class="sd">    Label precision is the scorer&#39;s decision. Every consumer in the package</span>
+<span class="sd">    calls :meth:`label` inside the ambient autocast region and opens none of</span>
+<span class="sd">    its own, so the *autocast* setting decides which autocast mode the teacher</span>
+<span class="sd">    runs under. The default disables autocast, so a label taken during a</span>
+<span class="sd">    mixed-precision training or generation phase equals the one</span>
+<span class="sd">    :func:`~nvalchemi.training.distillation.label_dataset` writes offline.</span>
+<span class="sd">    Inside a caller&#39;s region, ``True`` and a dtype differ: ``True`` enables</span>
+<span class="sd">    autocast at the region&#39;s dtype, whereas a dtype pins the pass to itself.</span>
+
+<span class="sd">    Forward-pass signals share one teacher pass. ``embeddings`` adds a second</span>
+<span class="sd">    pass, and ``hessian`` adds an energy-only pass plus three backward passes, so</span>
+<span class="sd">    a Hessian label costs roughly three to four times an energy-and-force</span>
+<span class="sd">    label. Each redrawn probe is a new objective. Leave ``probe_seed`` unset</span>
+<span class="sd">    wherever coverage of the Hessian comes from redrawing, as in training and</span>
+<span class="sd">    offline labeling. Pin it wherever a number is compared across passes, as</span>
+<span class="sd">    :class:`~nvalchemi.training.distillation.DistillationStrategy` does per</span>
+<span class="sd">    validation batch through the call-time ``probe_seed`` of :meth:`label`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">teacher</span><span class="p">:</span> <span class="n">BaseModelMixin</span><span class="p">,</span>
+        <span class="n">signals</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">TeacherSignal</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">neighbor_list</span><span class="p">:</span> <span class="n">NeighborListPolicy</span> <span class="o">=</span> <span class="s2">&quot;rebuild&quot;</span><span class="p">,</span>
+        <span class="n">autocast</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">probe_seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate the requested signals against the teacher&#39;s declared outputs.&quot;&quot;&quot;</span>
+        <span class="n">requested</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">signals</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">requested</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;At least one teacher signal must be requested; got [].&quot;</span><span class="p">)</span>
+        <span class="n">unsupported</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="n">signal</span>
+                <span class="k">for</span> <span class="n">signal</span> <span class="ow">in</span> <span class="n">requested</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">signal</span><span class="p">,</span> <span class="n">TeacherSignal</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="n">signal</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">BUILTIN_SIGNALS</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">unsupported</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Teacher signals must be names from </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">BUILTIN_SIGNALS</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> or &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;TeacherSignal specs; got unsupported </span><span class="si">{</span><span class="n">unsupported</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">specs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">_resolve_signals</span><span class="p">(</span><span class="n">requested</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
+        <span class="n">underived</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="n">name</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">model_output</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_DERIVED_SIGNALS</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">underived</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Teacher signals </span><span class="si">{</span><span class="n">underived</span><span class="si">!r}</span><span class="s2"> name no model output, and the scorer &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;derives only </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">_DERIVED_SIGNALS</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> without one; give each a &quot;</span>
+                <span class="s2">&quot;model_output the teacher declares.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">model_output</span>
+            <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">model_output</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">declared</span> <span class="o">=</span> <span class="n">teacher</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="n">required</span> <span class="o">-</span> <span class="n">declared</span>
+        <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Teacher cannot produce the outputs required by signals &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">specs</span><span class="p">)</span><span class="si">!r}</span><span class="s2">; got outputs=</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">declared</span><span class="p">)</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;missing </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;embeddings&quot;</span> <span class="ow">in</span> <span class="n">specs</span> <span class="ow">and</span> <span class="s2">&quot;node_embeddings&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_node_embedding_shapes</span><span class="p">(</span>
+            <span class="n">teacher</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Teacher must publish a ``node_embeddings`` shape to serve the &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;``embeddings`` signal; got </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">_node_embedding_shapes</span><span class="p">(</span><span class="n">teacher</span><span class="p">))</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;hessian&quot;</span> <span class="ow">in</span> <span class="n">specs</span> <span class="ow">and</span> <span class="s2">&quot;energy&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The ``hessian`` signal differentiates the teacher&#39;s energy &quot;</span>
+                <span class="s2">&quot;twice, so the teacher must declare an ``energy`` output; got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;outputs=</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">declared</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">dtype</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;dtype must be a floating-point dtype; got </span><span class="si">{</span><span class="n">dtype</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">neighbor_list</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_NEIGHBOR_LIST_POLICIES</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;neighbor_list must be &#39;rebuild&#39; or &#39;reuse&#39;; got </span><span class="si">{</span><span class="n">neighbor_list</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="n">autocast</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">autocast</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">autocast</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="ow">and</span> <span class="n">autocast</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;autocast must be False to disable autocast for the scoring pass, &quot;</span>
+                <span class="s2">&quot;None to leave the caller&#39;s autocast state in force, or True or a &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;floating-point dtype to enable it; got </span><span class="si">{</span><span class="n">autocast</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">planned</span> <span class="o">=</span> <span class="n">_planned_neighbor_sources</span><span class="p">(</span><span class="n">teacher</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">planned</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Teacher plans </span><span class="si">{</span><span class="n">planned</span><span class="si">!r}</span><span class="s2"> neighbor-list sources, but a scorer &quot;</span>
+                <span class="s2">&quot;builds one list per batch; compose the teacher to plan a single &quot;</span>
+                <span class="s1">&#39;list with neighbor_adaptation=&quot;always&quot; or a max_cutoff_ratio of &#39;</span>
+                <span class="s2">&quot;at least its largest-to-smallest cutoff ratio.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">teacher</span> <span class="o">=</span> <span class="n">teacher</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">signals</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">specs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">signal_specs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TeacherSignal</span><span class="p">]</span> <span class="o">=</span> <span class="n">MappingProxyType</span><span class="p">(</span><span class="n">specs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_fields</span> <span class="o">=</span> <span class="n">signal_fields</span><span class="p">(</span><span class="n">specs</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">neighbor_list</span> <span class="o">=</span> <span class="n">neighbor_list</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">autocast</span> <span class="o">=</span> <span class="n">autocast</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">probe_seed</span> <span class="o">=</span> <span class="n">probe_seed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_required_outputs</span> <span class="o">=</span> <span class="n">required</span>
+        <span class="n">evaluate</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">teacher</span><span class="p">,</span> <span class="s2">&quot;eval&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">evaluate</span><span class="p">):</span>
+            <span class="n">evaluate</span><span class="p">()</span>
+
+<div class="viewcode-block" id="InProcessTeacherScorer.label">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.InProcessTeacherScorer.html#nvalchemi.training.distillation.InProcessTeacherScorer.label">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">label</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">probe_seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TeacherLabels</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the requested teacher signals for *batch*.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            Batch to score. Restored to its incoming state before returning,</span>
+<span class="sd">            including neighbor tensors, any pre-existing embeddings, and any</span>
+<span class="sd">            field the teacher writes while scoring.</span>
+<span class="sd">        probe_seed : int | None, optional</span>
+<span class="sd">            Seed of this labeling&#39;s ``hessian`` probe direction, in place of</span>
+<span class="sd">            the scorer&#39;s own ``probe_seed``, which is left as it is. Default</span>
+<span class="sd">            ``None`` uses the scorer&#39;s setting.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        TeacherLabels</span>
+<span class="sd">            Mapping from batch field name to ``(detached tensor, level)``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If the teacher omits an output or embedding a requested signal</span>
+<span class="sd">            needs.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``neighbor_list=&quot;reuse&quot;`` and *batch* carries no list the</span>
+<span class="sd">            teacher&#39;s format reads, or one stamped with another cutoff.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="o">.</span><span class="n">model_config</span>
+        <span class="n">grad_flags</span> <span class="o">=</span> <span class="n">_snapshot_grad_flags</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="o">.</span><span class="n">narrowed_outputs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_required_outputs</span><span class="p">),</span>
+                <span class="n">evaluating</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span>
+                <span class="k">else</span> <span class="n">nullcontext</span><span class="p">(),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_autocast_scope</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span><span class="p">),</span>
+                <span class="n">_isolated_neighbors</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">neighbor_list</span><span class="p">),</span>
+                <span class="n">_isolated_fields</span><span class="p">(</span><span class="n">batch</span><span class="p">),</span>
+            <span class="p">):</span>
+                <span class="n">labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forward_labels</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_required_outputs</span> <span class="k">else</span> <span class="p">{}</span>
+                <span class="k">if</span> <span class="s2">&quot;embeddings&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">signals</span><span class="p">:</span>
+                    <span class="n">labels</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding_labels</span><span class="p">(</span><span class="n">batch</span><span class="p">))</span>
+                <span class="k">if</span> <span class="s2">&quot;hessian&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">signals</span><span class="p">:</span>
+                    <span class="n">labels</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_hessian_labels</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">probe_seed</span><span class="p">))</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">_restore_grad_flags</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">grad_flags</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">labels</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_autocast_scope</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AbstractContextManager</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the autocast context :attr:`autocast` selects for *device_type*.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">autocast</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">nullcontext</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">autocast</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">autocast</span><span class="p">(</span><span class="n">device_type</span><span class="o">=</span><span class="n">device_type</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">autocast</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">autocast</span><span class="p">(</span><span class="n">device_type</span><span class="o">=</span><span class="n">device_type</span><span class="p">,</span> <span class="n">enabled</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">autocast</span><span class="p">)</span>
+
+<div class="viewcode-block" id="InProcessTeacherScorer.label_hvp">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.InProcessTeacherScorer.html#nvalchemi.training.distillation.InProcessTeacherScorer.label_hvp">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">label_hvp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">probe</span><span class="p">:</span> <span class="n">NodePositions</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Forces</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the teacher&#39;s Hessian-vector product along *probe*.</span>
+
+<span class="sd">        The teacher&#39;s energy is differentiated twice with respect to the</span>
+<span class="sd">        positions of *batch*. The pass is narrowed to the energy and runs under</span>
+<span class="sd">        the same ``autocast`` setting and the same neighbor-list and field</span>
+<span class="sd">        isolation as :meth:`label`. The batch is left as it was found,</span>
+<span class="sd">        including a composed teacher&#39;s wired intermediates and swapped</span>
+<span class="sd">        autograd leaves.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            Batch to differentiate the teacher&#39;s energy on.</span>
+<span class="sd">        probe : NodePositions</span>
+<span class="sd">            Probe direction of shape ``(V, 3)``, matching the batch&#39;s positions.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Forces</span>
+<span class="sd">            Detached Hessian-vector product of shape ``(V, 3)``, cast to</span>
+<span class="sd">            ``dtype`` when one is configured.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If the teacher returns no energy, or is not twice differentiable</span>
+<span class="sd">            with respect to positions.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from nvalchemi.training.distillation import InProcessTeacherScorer</span>
+<span class="sd">        &gt;&gt;&gt; scorer = InProcessTeacherScorer(teacher, [&quot;hessian&quot;])  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; probe = torch.randn_like(batch.positions)  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; scorer.label_hvp(batch, probe).shape  # doctest: +SKIP</span>
+<span class="sd">        torch.Size([12, 3])</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        One product costs one forward and the three backward passes</span>
+<span class="sd">        :class:`~nvalchemi.models.HessianOperator` takes: the first position</span>
+<span class="sd">        derivative, its connectivity probe, and the product. A Hutchinson</span>
+<span class="sd">        average over ``k`` probes takes ``k`` calls. That average is left to the</span>
+<span class="sd">        caller, because the loss consumes one materialized target per batch.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="o">.</span><span class="n">model_config</span>
+        <span class="n">grad_flags</span> <span class="o">=</span> <span class="n">_snapshot_grad_flags</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="o">.</span><span class="n">narrowed_outputs</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">}),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_autocast_scope</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span><span class="p">),</span>
+                <span class="n">_isolated_neighbors</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">neighbor_list</span><span class="p">),</span>
+                <span class="n">_isolated_fields</span><span class="p">(</span><span class="n">batch</span><span class="p">),</span>
+            <span class="p">):</span>
+                <span class="n">positions</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span>
+                <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">enable_grad</span><span class="p">():</span>
+                    <span class="n">positions</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+                    <span class="n">energy</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">energy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">produced</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+                            <span class="n">key</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">outputs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                        <span class="p">)</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="s2">&quot;Teacher returned no &#39;energy&#39; output for the &#39;hessian&#39; &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;signal; got outputs </span><span class="si">{</span><span class="n">produced</span><span class="si">!r}</span><span class="s2">. Declare energy among &quot;</span>
+                            <span class="s2">&quot;the teacher&#39;s outputs, or drop the &#39;hessian&#39; signal.&quot;</span>
+                        <span class="p">)</span>
+                    <span class="k">with</span> <span class="n">HessianOperator</span><span class="o">.</span><span class="n">from_energy</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">positions</span><span class="p">)</span> <span class="k">as</span> <span class="n">op</span><span class="p">:</span>
+                        <span class="n">value</span> <span class="o">=</span> <span class="n">op</span><span class="o">.</span><span class="n">matvec</span><span class="p">(</span><span class="n">probe</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">_restore_grad_flags</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">grad_flags</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cast</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_forward_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TeacherLabels</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the teacher forward pass and collect its detached signals.&quot;&quot;&quot;</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="o">.</span><span class="n">model_config</span>
+        <span class="n">grad_mode</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">enable_grad</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">autograd_outputs</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_required_outputs</span>
+            <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="n">grad_mode</span><span class="p">:</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">labels</span><span class="p">:</span> <span class="n">TeacherLabels</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">signal_specs</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">model_output</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">model_output</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Teacher returned no </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">model_output</span><span class="si">!r}</span><span class="s2"> output for the &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> signal.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">labels</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">batch</span><span class="p">))</span>
+        <span class="k">del</span> <span class="n">outputs</span>
+        <span class="k">return</span> <span class="n">labels</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_embedding_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TeacherLabels</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute node embeddings without leaving them attached to *batch*.&quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="n">batch</span><span class="o">.</span><span class="n">without_keys</span><span class="p">(</span><span class="o">*</span><span class="n">_EMBEDDING_KEYS</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">teacher</span><span class="o">.</span><span class="n">compute_embeddings</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;node_embeddings&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Teacher compute_embeddings() must write ``node_embeddings`` onto &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;the batch; got </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">key</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">key</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">_EMBEDDING_KEYS</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">key</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">batch</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">signal_specs</span><span class="p">[</span><span class="s2">&quot;embeddings&quot;</span><span class="p">]</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;node_embeddings&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">batch</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_hessian_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">probe_seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TeacherLabels</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Draw a probe and return the teacher&#39;s product with it, probe included.</span>
+
+<span class="sd">        The probe is standard normal, on the batch&#39;s device and dtype. It comes</span>
+<span class="sd">        from the global random stream unless *probe_seed*, or failing that the</span>
+<span class="sd">        scorer&#39;s ``probe_seed``, seeds a generator of its own. The probe</span>
+<span class="sd">        travels with the product because the loss compares two products taken</span>
+<span class="sd">        along one direction.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">signal_specs</span><span class="p">[</span><span class="s2">&quot;hessian&quot;</span><span class="p">]</span>
+        <span class="n">probe</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_draw_probe</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">probe_seed</span> <span class="k">if</span> <span class="n">probe_seed</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">probe_seed</span>
+        <span class="p">)</span>
+        <span class="n">product</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_hvp</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">probe</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span>
+            <span class="n">spec</span><span class="p">,</span> <span class="p">{</span><span class="n">spec</span><span class="o">.</span><span class="n">field</span><span class="p">:</span> <span class="n">product</span><span class="p">,</span> <span class="n">_HVP_PROBE_FIELD</span><span class="p">:</span> <span class="n">probe</span><span class="p">},</span> <span class="n">batch</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_draw_probe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">positions</span><span class="p">:</span> <span class="n">NodePositions</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NodePositions</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a standard-normal direction shaped like *positions*, from *seed*.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+        <span class="n">generator</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">generator</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
+            <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+            <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_finalize</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">spec</span><span class="p">:</span> <span class="n">TeacherSignal</span><span class="p">,</span>
+        <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TeacherLabels</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Normalize *value* and spread it, detached and cast, over *spec*&#39;s fields.</span>
+
+<span class="sd">        A producer that has already spread its output over the fields, as the</span>
+<span class="sd">        Hessian path does with its probe, passes the mapping in place of the</span>
+<span class="sd">        raw tensor. ``normalize`` then runs on the mapping&#39;s entry for</span>
+<span class="sd">        :attr:`TeacherSignal.field`; a tensor it returns replaces that entry</span>
+<span class="sd">        and a mapping replaces the spread.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If the produced mapping&#39;s keys differ from</span>
+<span class="sd">            :attr:`TeacherSignal.fields`, or ``normalize`` returns a single</span>
+<span class="sd">            tensor for a signal that declares companion fields.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="n">produced</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">normalize</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">normalized</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">field</span><span class="p">]</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span> <span class="n">batch</span><span class="p">)</span>
+                <span class="n">produced</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">normalized</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">normalized</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span>
+                    <span class="k">else</span> <span class="p">{</span><span class="o">**</span><span class="n">value</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">field</span><span class="p">:</span> <span class="n">normalized</span><span class="p">}</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="n">produced</span> <span class="o">=</span> <span class="n">value</span> <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">normalize</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">spec</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">produced</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">produced</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">fields</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Teacher signal </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must produce exactly &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">fields</span><span class="p">)</span><span class="si">!r}</span><span class="s2">; got </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">produced</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">spec</span><span class="o">.</span><span class="n">extra_fields</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Teacher signal </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> normalize returned one tensor, but &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;the signal declares companion fields </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">extra_fields</span><span class="p">)</span><span class="si">!r}</span><span class="s2">; &quot;</span>
+                <span class="s2">&quot;return a mapping over its fields.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">produced</span> <span class="o">=</span> <span class="p">{</span><span class="n">spec</span><span class="o">.</span><span class="n">field</span><span class="p">:</span> <span class="n">produced</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">field</span><span class="p">:</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cast</span><span class="p">(</span><span class="n">tensor</span><span class="p">),</span> <span class="n">spec</span><span class="o">.</span><span class="n">level</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">produced</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_cast</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Detach *value* and cast it to ``dtype`` when it is floating point.&quot;&quot;&quot;</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">():</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">value</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

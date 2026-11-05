@@ -1,0 +1,846 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.enhanced_sampling._bias &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/enhanced_sampling/_bias';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.en...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.enhanced_sampling._bias</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;The conservative-bias battery.</span>
+
+<span class="sd">A bias in this toolkit is an **additive potential** — the same shape as</span>
+<span class="sd">``DFTD3ModelWrapper`` and ``LennardJonesModelWrapper``, which is why it is</span>
+<span class="sd">built from the same parts rather than from a parallel hierarchy of its own:</span>
+
+<span class="sd">* It produces :data:`~nvalchemi._typing.ModelOutputs`, like every model.  There</span>
+<span class="sd">  is no bias-specific result type.  Diagnostics travel as ``diagnostics/&lt;key&gt;``</span>
+<span class="sd">  entries and the producer&#39;s state revision as ``state_version``; both are</span>
+<span class="sd">  general ``ModelOutputs`` conventions, not enhanced-sampling ones.</span>
+<span class="sd">* It is a :class:`~nvalchemi.models.base.BaseModelMixin`, which supplies</span>
+<span class="sd">  ``model_config.active_outputs``, ``distribution_spec``, and ``+``</span>
+<span class="sd">  composition.  There is no separate ``BiasPotential`` protocol: &quot;produces</span>
+<span class="sd">  ``ModelOutputs`` from a ``Batch``&quot; is what ``BaseModelMixin`` already means,</span>
+<span class="sd">  and a second name for it would only be a second thing to keep in sync.</span>
+<span class="sd">* A bias whose state evolves during sampling additionally mixes in</span>
+<span class="sd">  :class:`~nvalchemi.enhanced_sampling.AdaptivePotentialMixin`, which is the</span>
+<span class="sd">  shared ``StatefulHook`` lifecycle — ``frequency``, ``stage``, ``read_only``,</span>
+<span class="sd">  ``commit`` — and not a lifecycle invented here.</span>
+
+<span class="sd">:class:`ConservativeBias` itself is thin.  The autograd work lives in</span>
+<span class="sd">:func:`~nvalchemi.models._utils.isolated_energy_derivatives`, because</span>
+<span class="sd">evaluating an energy against a detached view of a live ``Batch`` and handing</span>
+<span class="sd">back derivatives with no graph attached is useful to anything that</span>
+<span class="sd">differentiates against a batch it does not own — an NEB spring term, a</span>
+<span class="sd">hand-written wall — and not only to biases.</span>
+
+<span class="sd">Why the *applied* outputs are a closed set</span>
+<span class="sd">------------------------------------------</span>
+<span class="sd">``ModelOutputs`` is an open mapping, and a bias may put any key in it.  Only a</span>
+<span class="sd">defined set is ever *applied*: for each one the runner must know the</span>
+<span class="sd">destination buffer (``batch.energy``, ``batch.forces``, ``batch.stress``),</span>
+<span class="sd">whether it is per-graph or per-atom, and how it combines across biases.  An</span>
+<span class="sd">unrecognised applied key has none of that, so</span>
+<span class="sd">``EnhancedSampling._check_destinations`` raises rather than dropping a</span>
+<span class="sd">contribution in silence.  The open extension point is ``diagnostics/&lt;key&gt;``:</span>
+<span class="sd">arbitrary tensors, no shape contract, reported and never applied.  The split</span>
+<span class="sd">is between what the runner acts on and what it merely records.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">nn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">isolated_energy_derivatives</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span><span class="p">,</span> <span class="n">ModelConfig</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrategyKind</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">MLIPSpec</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;ConservativeBias&quot;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="ConservativeBias">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ConservativeBias.html#nvalchemi.enhanced_sampling.ConservativeBias">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConservativeBias</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A bias defined by a differentiable energy.</span>
+
+<span class="sd">    Subclass and override :meth:`energy` to return a per-graph bias energy</span>
+<span class="sd">    ``[B, 1]``; :meth:`forward` derives atomic forces and tensile-positive</span>
+<span class="sd">    Cauchy stress from it and returns detached</span>
+<span class="sd">    :data:`~nvalchemi._typing.ModelOutputs`.</span>
+
+<span class="sd">    Composed as ``nn.Module, BaseModelMixin`` — the house multiple-inheritance</span>
+<span class="sd">    idiom (``LennardJonesModelWrapper(nn.Module, BaseModelMixin)``,</span>
+<span class="sd">    ``TrainingStrategy(BaseModel, HookRegistryMixin)``).</span>
+<span class="sd">    ``BaseModelMixin.__init_subclass__`` is cooperative, so it composes with</span>
+<span class="sd">    :class:`~nvalchemi.enhanced_sampling.AdaptivePotentialMixin` for a bias</span>
+<span class="sd">    that is adaptive as well as conservative.  The cost of the abstraction is</span>
+<span class="sd">    the two ``BaseModelMixin`` abstract methods (:attr:`embedding_shapes` and</span>
+<span class="sd">    :meth:`compute_embeddings`), stubbed here exactly as</span>
+<span class="sd">    ``LennardJonesModelWrapper`` and ``DFTD3ModelWrapper`` stub them.</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        Subclasses **must** call ``super().__init__(name=...)``.  That is the</span>
+<span class="sd">        ``nn.Module`` requirement (attribute assignment before</span>
+<span class="sd">        ``Module.__init__`` raises), and ``BaseModelMixin.__init_subclass__``</span>
+<span class="sd">        additionally verifies ``self.model_config`` is set afterwards.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    How the derivatives are taken — the symmetric strain leaf, the</span>
+<span class="sd">    substitute-and-restore, the detachment — is</span>
+<span class="sd">    :func:`~nvalchemi.models._utils.isolated_energy_derivatives` and is</span>
+<span class="sd">    documented there.  It is deliberately not restated here: one mechanism</span>
+<span class="sd">    described in two places is one that can drift.  What follows is what is</span>
+<span class="sd">    true of *this class* and not of that function.</span>
+
+<span class="sd">    Stress rather than virial</span>
+<span class="sd">        :meth:`forward` emits ``&quot;stress&quot;``, never ``&quot;virial&quot;``.  That is a</span>
+<span class="sd">        policy choice, not a consequence of the maths: both are documented</span>
+<span class="sd">        toolkit conventions, and tensile-positive Cauchy stress is the one the</span>
+<span class="sd">        rest of the toolkit speaks — every model wrapper emits it,</span>
+<span class="sd">        :func:`~nvalchemi.models._utils.sum_outputs` treats it as additive,</span>
+<span class="sd">        and the NPT/NPH integrators read ``batch.stress``.  So a bias</span>
+<span class="sd">        contribution sums with model output with no volume conversion at the</span>
+<span class="sd">        boundary.  ``&quot;virial&quot;`` stays available for a hand-written bias that</span>
+<span class="sd">        produces one directly.</span>
+
+<span class="sd">    What gates stress here</span>
+<span class="sd">        The helper computes stress for any periodic batch with a non-zero</span>
+<span class="sd">        cell.  This class adds one gate on top: ``&quot;stress&quot;`` must be in</span>
+<span class="sd">        ``model_config.active_outputs``.  Pass ``compute_stress=False`` to</span>
+<span class="sd">        drop it at construction, or flip ``active_outputs`` at runtime as on</span>
+<span class="sd">        any model wrapper.</span>
+
+<span class="sd">    ``torch.compile`` compatibility</span>
+<span class="sd">        :meth:`forward` is eager, because the helper it delegates to calls</span>
+<span class="sd">        ``requires_grad_()``.  Compile :meth:`energy` — the hot path —</span>
+<span class="sd">        instead; ``EnhancedSampling(compile_biases=True)`` does exactly that.</span>
+<span class="sd">        Keep data-dependent Python branches out of :meth:`energy` for the</span>
+<span class="sd">        same reason; put them in a :meth:`forward` override, which is eager by</span>
+<span class="sd">        construction, as ``HarmonicUmbrellaBias`` does for its bounds check.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">compute_stress</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise the bias and declare its output capabilities.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name:</span>
+<span class="sd">            Unique identifier, used as a dict key in</span>
+<span class="sd">            ``EnhancedSampling(biases={...})`` and as a checkpoint group name.</span>
+<span class="sd">        compute_stress:</span>
+<span class="sd">            When ``False``, ``&quot;stress&quot;`` is dropped from</span>
+<span class="sd">            ``model_config.active_outputs`` and the strain leaf is skipped</span>
+<span class="sd">            entirely.  Use for force-only biases.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">outputs</span><span class="p">),</span>
+            <span class="n">autograd_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}),</span>
+            <span class="n">autograd_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">}),</span>
+            <span class="n">supports_pbc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">needs_pbc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">active_outputs</span><span class="o">=</span><span class="n">outputs</span> <span class="k">if</span> <span class="n">compute_stress</span> <span class="k">else</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">},</span>
+        <span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># BaseModelMixin required surface</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">embedding_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No embeddings: a bias potential is a closed-form energy term.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+<div class="viewcode-block" id="ConservativeBias.compute_embeddings">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ConservativeBias.html#nvalchemi.enhanced_sampling.ConservativeBias.compute_embeddings">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_embeddings</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computing embeddings is not meaningful for a bias potential.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> does not produce embeddings.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ConservativeBias.export_model">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ConservativeBias.html#nvalchemi.enhanced_sampling.ConservativeBias.export_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">export_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">as_state_dict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not implemented — a bias has no underlying model to export.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has no exportable model; use state_dict().&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ConservativeBias.distribution_spec">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ConservativeBias.html#nvalchemi.enhanced_sampling.ConservativeBias.distribution_spec">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">distribution_spec</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">strategy</span><span class="p">:</span> <span class="n">StrategyKind</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MLIPSpec</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``None``: a bias does not claim domain-decomposition support.</span>
+
+<span class="sd">        ``None`` is not an oversight, and it is not &quot;unsupported forever&quot; — it</span>
+<span class="sd">        makes ``DistributedModel`` raise ``DistributionError`` rather than</span>
+<span class="sd">        shard a bias whose cross-rank semantics are unverified (an explicit</span>
+<span class="sd">        ``DistributedModel(bias, cfg, spec=...)`` remains the escape hatch for</span>
+<span class="sd">        a caller who knows better).</span>
+
+<span class="sd">        The default cannot be a halo preset, because a bias is not necessarily</span>
+<span class="sd">        local the way a cutoff potential is.  A CV can couple atoms in</span>
+<span class="sd">        different domains by construction: ``pair_distance`` over two atoms on</span>
+<span class="sd">        opposite sides of the cell has no cutoff, and an RMSD bias reads every</span>
+<span class="sd">        atom.  ``SPEC_LJ_HALO`` is correct for LJ precisely because a halo</span>
+<span class="sd">        exchange covers its interaction range; nothing guarantees that for an</span>
+<span class="sd">        arbitrary CV.</span>
+
+<span class="sd">        A bias that *is* local should override this and declare its outputs,</span>
+<span class="sd">        e.g.::</span>
+
+<span class="sd">            def distribution_spec(self, strategy=None):</span>
+<span class="sd">                return MLIPSpec(</span>
+<span class="sd">                    distribution=DistributionSpec(policy=HaloStoragePolicy()),</span>
+<span class="sd">                    outputs={</span>
+<span class="sd">                        &quot;energy&quot;: OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE),</span>
+<span class="sd">                        &quot;forces&quot;: OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),</span>
+<span class="sd">                        &quot;stress&quot;: OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE),</span>
+<span class="sd">                    },</span>
+<span class="sd">                )</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        strategy:</span>
+<span class="sd">            Accepted for the framework contract; ignored by the default.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        MLIPSpec | None</span>
+<span class="sd">            Always ``None`` unless a subclass overrides.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Bias surface</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_align_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Move this bias&#39;s buffers to *reference*&#39;s device if they differ.</span>
+
+<span class="sd">        A bias holds its parameters as buffers (window centers, stiffness,</span>
+<span class="sd">        wall thresholds), and a user who builds the bias before moving the</span>
+<span class="sd">        batch to GPU would otherwise hit a bare &quot;expected all tensors to be on</span>
+<span class="sd">        the same device&quot; from inside the energy expression, naming neither the</span>
+<span class="sd">        bias nor the fix.  Moving once here is cheaper than making every bias</span>
+<span class="sd">        author remember ``.to(device)``.</span>
+
+<span class="sd">        Eager-only, like the rest of :meth:`forward`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        reference:</span>
+<span class="sd">            Any tensor from the live batch; its device is the target.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">buffer</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="p">(),</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">buffer</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">reference</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ConservativeBias.energy">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ConservativeBias.html#nvalchemi.enhanced_sampling.ConservativeBias.energy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return bias energy ``[B, 1]`` (eV).</span>
+
+<span class="sd">        Must be differentiable w.r.t. ``current.positions`` and/or</span>
+<span class="sd">        ``current.cell``.  Depending on only one of the two is allowed: a</span>
+<span class="sd">        position-independent term (a volume restraint, say) yields zero forces</span>
+<span class="sd">        rather than an error.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        current:</span>
+<span class="sd">            A *read-only view* of the live batch whose ``positions`` and</span>
+<span class="sd">            ``cell`` have been replaced by their strained counterparts from</span>
+<span class="sd">            :func:`~nvalchemi.models._utils.prepare_strain`.  Do not assign to</span>
+<span class="sd">            any batch field inside this method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Shape ``[B, 1]``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            If the subclass does not override.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> must implement energy(self, current: Batch) -&gt; Tensor&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ConservativeBias.forward">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.ConservativeBias.html#nvalchemi.enhanced_sampling.ConservativeBias.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the bias contribution for *data*, fully detached.</span>
+
+<span class="sd">        Read-only with respect to the bias: it deposits nothing, writes no</span>
+<span class="sd">        storage, and communicates with no other worker, so it is safe to call</span>
+<span class="sd">        repeatedly on the same batch.  An adaptive bias changes its state in</span>
+<span class="sd">        :meth:`~nvalchemi.enhanced_sampling.AdaptivePotentialMixin.update`</span>
+<span class="sd">        instead, which the runner delivers once per due step after the</span>
+<span class="sd">        integrator has finished.</span>
+
+<span class="sd">        *data* is treated as read-only: every field</span>
+<span class="sd">        :func:`~nvalchemi.models._utils.isolated_energy_derivatives`</span>
+<span class="sd">        substitutes is restored before this returns, including on an</span>
+<span class="sd">        exception.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data:</span>
+<span class="sd">            The live batch from the dynamics step.</span>
+<span class="sd">        **kwargs:</span>
+<span class="sd">            Unused; accepted for interface compatibility with model wrappers.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ModelOutputs</span>
+<span class="sd">            ``energy``, ``forces``, and — when ``&quot;stress&quot;`` is active and the</span>
+<span class="sd">            batch is periodic — ``stress``, restricted to</span>
+<span class="sd">            ``model_config.active_outputs``.  Every tensor satisfies</span>
+<span class="sd">            ``requires_grad=False`` and ``grad_fn is None``.</span>
+
+<span class="sd">            Not validated here:</span>
+<span class="sd">            :func:`~nvalchemi.models._utils.validate_contribution` runs where</span>
+<span class="sd">            the contribution is *consumed* — that is where an unchecked value</span>
+<span class="sd">            does damage, by being added into a batch buffer, retained in a</span>
+<span class="sd">            history, or written to a checkpoint — so</span>
+<span class="sd">            :class:`~nvalchemi.enhanced_sampling.EnhancedSampling` calls it on</span>
+<span class="sd">            every bias it applies.  Call it directly to self-check a bias used</span>
+<span class="sd">            outside the runner.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Called with ``allow_unused=True``, so :meth:`energy` need not depend on</span>
+<span class="sd">        both positions and strain — see that parameter on</span>
+<span class="sd">        :func:`~nvalchemi.models._utils.isolated_energy_derivatives` for what</span>
+<span class="sd">        a partial dependence yields.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_align_device</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+        <span class="n">active</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="ow">or</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="n">isolated_energy_derivatives</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="p">,</span>
+            <span class="n">data</span><span class="p">,</span>  <span class="c1"># type: ignore[arg-type]</span>
+            <span class="n">want_forces</span><span class="o">=</span><span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="n">active</span><span class="p">,</span>
+            <span class="n">want_stress</span><span class="o">=</span><span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="n">active</span><span class="p">,</span>
+            <span class="c1"># A bias need not depend on both positions and strain. A pure</span>
+            <span class="c1"># volume restraint has no position dependence, and its zero force</span>
+            <span class="c1"># is an answer, not an error.</span>
+            <span class="n">allow_unused</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">outputs</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">active</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">outputs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">outputs</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

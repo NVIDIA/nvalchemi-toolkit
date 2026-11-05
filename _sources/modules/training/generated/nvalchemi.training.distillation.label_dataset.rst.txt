@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.label\_dataset
+==============================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autofunction:: label_dataset

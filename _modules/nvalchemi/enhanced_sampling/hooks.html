@@ -1,0 +1,1878 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.enhanced_sampling.hooks &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/enhanced_sampling/hooks';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.en...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.enhanced_sampling.hooks</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;The hooks an enhanced-sampling run installs on a ``BaseDynamics``.</span>
+
+<span class="sd">``BaseDynamics`` owns the stepping loop and ``Hook`` already carries</span>
+<span class="sd">``frequency`` and ``stage``, so the work an enhanced-sampling run adds is</span>
+<span class="sd">expressed as hooks on that loop rather than as a second runner around it:</span>
+
+<span class="sd">==============================  ======================  =====================</span>
+<span class="sd">Concern                         Hook                    Cadence</span>
+<span class="sd">==============================  ======================  =====================</span>
+<span class="sd">Walker identity and counters    ``WalkerIdentityHook``  every step</span>
+<span class="sd">Bias forces and updates         ``BiasHook``            every step</span>
+<span class="sd">Shared-history synchronisation  ``EpochCommitHook``     ``steps_per_epoch``</span>
+<span class="sd">Replica-exchange attempts       ``PairSwapHook``        ``attempt_interval``</span>
+<span class="sd">==============================  ======================  =====================</span>
+
+<span class="sd">The last of those is not defined here: proposing pairs, accepting them and</span>
+<span class="sd">permuting per-system parameters is the mechanism behind basin hopping with</span>
+<span class="sd">swaps and population search too, so it lives in</span>
+<span class="sd">:class:`~nvalchemi.dynamics.hooks.PairSwapHook` and</span>
+<span class="sd">:meth:`ReplicaExchange.swap_hook` supplies the physics.</span>
+
+<span class="sd">The last two carry their cadence as ``Hook.frequency``, so the registry gates</span>
+<span class="sd">them and nothing here re-implements &quot;has the boundary been crossed&quot;.  A hook</span>
+<span class="sd">at ``frequency=N`` is dispatched at step *kN*, where ``step // N - 1`` is the</span>
+<span class="sd">index of the boundary that has just completed — the same index the lazy</span>
+<span class="sd">&quot;did the epoch change&quot; test used to produce.</span>
+
+<span class="sd">Where both are due on the same step, the exchange goes first:</span>
+<span class="sd">:meth:`EnhancedSampling.build_hooks` registers it ahead of the commit, and</span>
+<span class="sd">``checkpoint()`` drains them in the same order.  A commit publishes shared</span>
+<span class="sd">history, and publishing it before the swap would file it under labels that are</span>
+<span class="sd">about to change.</span>
+
+<span class="sd">Why the biases share one hook</span>
+<span class="sd">-----------------------------</span>
+<span class="sd">:class:`BiasHook` takes *all* the biases rather than each bias being</span>
+<span class="sd">registered separately.  Registering them independently would make each apply</span>
+<span class="sd">its contribution in turn, so the second bias evaluates against a batch that</span>
+<span class="sd">already carries the first one&#39;s forces — measured, on two biases contributing</span>
+<span class="sd">along ``x``: the second saw ``|forces| = 3.0`` instead of ``0.0``.  That is the</span>
+<span class="sd">sequential in-place mutation</span>
+<span class="sd">:class:`~nvalchemi.hooks.BiasedPotentialHook` was deprecated for, and hook</span>
+<span class="sd">registration order is user-owned, so the total would also depend on it.  One</span>
+<span class="sd">hook evaluates every bias against the same unmodified model output and sums</span>
+<span class="sd">once.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">BiasContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DIAGNOSTIC_PREFIX</span><span class="p">,</span>
+    <span class="n">aggregate_contributions</span><span class="p">,</span>
+    <span class="n">validate_contribution</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._exchange</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplicaExchange</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">StatefulHook</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;BiasHook&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;EpochCommitHook&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;WalkerIdentityHook&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">_ALLOCATION_HINT</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="s2">&quot;energy=torch.zeros(1, 1)&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="s2">&quot;forces=torch.zeros(n_atoms, 3)&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;stress&quot;</span><span class="p">:</span> <span class="s2">&quot;stress=torch.zeros(1, 3, 3)&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="WalkerIdentityHook">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.WalkerIdentityHook.html#nvalchemi.enhanced_sampling.WalkerIdentityHook">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">WalkerIdentityHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Stamp walker identity and step counters onto the live batch.</span>
+
+<span class="sd">    ``walker_id`` and ``thermodynamic_state_id`` are assigned once and then</span>
+<span class="sd">    preserved; the counters are refreshed every step.  All five fields are</span>
+<span class="sd">    also registered as ``BaseDynamics`` bookkeeping keys, so they survive</span>
+<span class="sd">    refill and graduation rather than depending on this hook alone.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    steps_per_epoch:</span>
+<span class="sd">        Divisor for ``sampling_epoch``.</span>
+<span class="sd">    exchange:</span>
+<span class="sd">        Ladder, when replica exchange is configured.  Read for the initial</span>
+<span class="sd">        assignment and the segment divisor only; attempts are</span>
+<span class="sd">        the swap hook&#39;s job.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    next_walker_id:</span>
+<span class="sd">        The identifier the next unstamped graph will receive.  Carried in a</span>
+<span class="sd">        checkpoint so a resumed run does not reissue identifiers.</span>
+<span class="sd">    current_batch:</span>
+<span class="sd">        The batch last stamped, which is what ``checkpoint()`` saves when the</span>
+<span class="sd">        caller does not name one.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">steps_per_epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">exchange</span><span class="p">:</span> <span class="n">ReplicaExchange</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">steps_per_epoch</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">steps_per_epoch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span> <span class="o">=</span> <span class="n">exchange</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_batch</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># One-shot: the walker/state bijection is checked on the first stamp.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validated_assignment</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># The engine whose per-system parameters follow the assignment, set</span>
+        <span class="c1"># by on_register, and whether it has been told the current one.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_states_bound</span> <span class="o">=</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="WalkerIdentityHook.on_register">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.WalkerIdentityHook.html#nvalchemi.enhanced_sampling.WalkerIdentityHook.on_register">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Remember the engine the thermodynamic assignment has to drive.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        workflow:</span>
+<span class="sd">            The ``BaseDynamics`` doing the registering.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span> <span class="o">=</span> <span class="n">workflow</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stamp the live batch.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx:</span>
+<span class="sd">            The dynamics hook context.</span>
+<span class="sd">        stage:</span>
+<span class="sd">            The stage being dispatched.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stamp</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s2">&quot;step_count&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+
+<div class="viewcode-block" id="WalkerIdentityHook.state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.WalkerIdentityHook.html#nvalchemi.enhanced_sampling.WalkerIdentityHook.state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the identifier allocation that must survive a restart.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Mapping[str, Any]</span>
+<span class="sd">            The next identifier to issue.  A resumed run that restarted the</span>
+<span class="sd">            counter would reissue ids already attached to saved history.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;next_walker_id&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span><span class="p">)}</span></div>
+
+
+<div class="viewcode-block" id="WalkerIdentityHook.load_state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.WalkerIdentityHook.html#nvalchemi.enhanced_sampling.WalkerIdentityHook.load_state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore the identifier allocation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state:</span>
+<span class="sd">            A mapping produced by :meth:`state_dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next_walker_id&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assign_walker_ids</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">n_graphs</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Give an identity to every graph that does not have one yet.</span>
+
+<span class="sd">        Three cases, and the third is the one that is easy to miss:</span>
+
+<span class="sd">        * The field is absent — a fresh batch.  Every row is allocated.</span>
+<span class="sd">        * Every row holds an identity.  Nothing is touched; that is what</span>
+<span class="sd">          &quot;immutable identity that follows a physical configuration&quot; means.</span>
+<span class="sd">        * Some rows hold the ``-1`` sentinel.  That is a refill: graduated</span>
+<span class="sd">          graphs were dropped and replacements appended, and the bookkeeping</span>
+<span class="sd">          registry rebuilt the column with the sentinel for rows it has no</span>
+<span class="sd">          value for.  Those rows are **new walkers** and are allocated fresh</span>
+<span class="sd">          identities — reusing the id of the walker that just left the slot</span>
+<span class="sd">          would hand the replacement that walker&#39;s per-walker bias history.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        n_graphs:</span>
+<span class="sd">            Number of graphs in it.</span>
+<span class="sd">        device:</span>
+<span class="sd">            Device for a newly allocated column.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">existing</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;walker_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">existing</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;walker_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_ids</span><span class="p">(</span><span class="n">n_graphs</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">existing</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="n">unassigned</span> <span class="o">=</span> <span class="n">ids</span> <span class="o">&lt;</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">unassigned</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="c1"># Never hand out an id a caller already used: a batch may arrive</span>
+            <span class="c1"># carrying its own identities, and the counter has to clear them</span>
+            <span class="c1"># or the first refill would collide with one.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">ids</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">assigned</span> <span class="o">=</span> <span class="n">ids</span><span class="p">[</span><span class="o">~</span><span class="n">unassigned</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">assigned</span><span class="o">.</span><span class="n">numel</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">assigned</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">ids</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="n">ids</span><span class="p">[</span><span class="n">unassigned</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_ids</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">unassigned</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span> <span class="n">device</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+            <span class="n">ids</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="p">)</span>
+        <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;walker_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ids</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assign_state_ids</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">n_graphs</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Give a thermodynamic state to every graph that does not have one.</span>
+
+<span class="sd">        Mirrors :meth:`_assign_walker_ids`, but the value is not free: under a</span>
+<span class="sd">        ladder the assignment must stay a bijection, so a sentinel row takes a</span>
+<span class="sd">        **vacant** rung rather than a default one.  Those are exactly the rungs</span>
+<span class="sd">        the graduated walkers left behind, so the replacement entering a slot</span>
+<span class="sd">        inherits the rung that slot was holding and the ladder stays fully</span>
+<span class="sd">        occupied.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        n_graphs:</span>
+<span class="sd">            Number of graphs in it.</span>
+<span class="sd">        device:</span>
+<span class="sd">            Device for a newly allocated column.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">existing</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;thermodynamic_state_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">existing</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Check before attaching: a ladder-sized tensor on a</span>
+                <span class="c1"># differently-sized batch would otherwise fail as an opaque</span>
+                <span class="c1"># &quot;Length mismatch&quot; from inside the batch storage.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="o">.</span><span class="n">validate_assignment</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="o">.</span><span class="n">initial_state_ids</span><span class="p">,</span>
+                    <span class="n">n_graphs</span><span class="p">,</span>
+                    <span class="n">source</span><span class="o">=</span><span class="s2">&quot;initial_state_ids&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;thermodynamic_state_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="o">.</span><span class="n">initial_state_ids</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                    <span class="n">device</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;thermodynamic_state_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="n">n_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_validated_assignment</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_bind_states</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">existing</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="n">unassigned</span> <span class="o">=</span> <span class="n">ids</span> <span class="o">&lt;</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">unassigned</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="n">ids</span> <span class="o">=</span> <span class="n">ids</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">ids</span><span class="p">[</span><span class="n">unassigned</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vacant_states</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">unassigned</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+            <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;thermodynamic_state_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ids</span>
+            <span class="c1"># The replacement took a vacant rung, so the integrator is now</span>
+            <span class="c1"># targeting the temperature of whoever held that row before.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_states_bound</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Re-checked after a refill, not only on arrival: the batch</span>
+                <span class="c1"># membership just changed, which is the one event that can</span>
+                <span class="c1"># break a bijection that was valid a step ago.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="o">.</span><span class="n">validate_assignment</span><span class="p">(</span>
+                    <span class="n">ids</span><span class="p">,</span> <span class="n">n_graphs</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;batch.thermodynamic_state_id after refill&quot;</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated_assignment</span><span class="p">:</span>
+            <span class="c1"># A batch may arrive carrying its own assignment, which never went</span>
+            <span class="c1"># through the constructor&#39;s check. Validate it once — a duplicate</span>
+            <span class="c1"># would surface later as a KeyError from the pair lookup.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="o">.</span><span class="n">validate_assignment</span><span class="p">(</span>
+                <span class="n">existing</span><span class="p">,</span> <span class="n">n_graphs</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;batch.thermodynamic_state_id&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validated_assignment</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bind_states</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_bind_states</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Make the integrator target the temperatures the assignment names.</span>
+
+<span class="sd">        The label and the thermostat target are two halves of one fact, and</span>
+<span class="sd">        only one of them was ever written here.  An accepted swap rebinds</span>
+<span class="sd">        both together, which left the two moments where the assignment</span>
+<span class="sd">        changes *without* a swap sampling the wrong ensemble:</span>
+
+<span class="sd">        * **The first stamp.**  The engine is built from ``engine_kwargs``</span>
+<span class="sd">          with one temperature — the documented recipe passes a scalar — so</span>
+<span class="sd">          every walker started at that temperature while its label claimed a</span>
+<span class="sd">          rung.  On a four-rung ladder from 300 K, three of the four walkers</span>
+<span class="sd">          sampled 300 K until a swap happened to touch them.</span>
+<span class="sd">        * **A refill.**  A replacement is given a vacant rung by</span>
+<span class="sd">          :meth:`_assign_state_ids`, but inherits the integrator row of the</span>
+<span class="sd">          walker that graduated, and so its temperature.</span>
+
+<span class="sd">        Both are silent: the trajectory looks healthy and the acceptance</span>
+<span class="sd">        rate looks merely badly tuned.</span>
+
+<span class="sd">        Integrator state is allocated lazily, on the first step, and this</span>
+<span class="sd">        hook runs before it.  Rather than let the first step integrate</span>
+<span class="sd">        unbound, the allocation is forced through the idempotent</span>
+<span class="sd">        ``_ensure_state_initialized`` the step itself calls; an engine that</span>
+<span class="sd">        keeps no per-system state is left alone, having nothing to bind.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch, carrying the assignment to bind.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_states_bound</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">ensure</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="p">,</span> <span class="s2">&quot;_ensure_state_initialized&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">ensure</span><span class="p">):</span>
+            <span class="n">ensure</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="p">,</span> <span class="s2">&quot;_state&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">thermodynamic_state_id</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="o">.</span><span class="n">apply_per_system_params</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="o">.</span><span class="n">per_system_params</span><span class="p">(</span><span class="n">ids</span><span class="p">),</span> <span class="n">batch</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_states_bound</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_vacant_states</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">unassigned</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the rungs no walker is holding, for the unassigned rows.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ids:</span>
+<span class="sd">            The current assignment, sentinel rows included.</span>
+<span class="sd">        unassigned:</span>
+<span class="sd">            Mask of the rows needing a state.</span>
+<span class="sd">        device:</span>
+<span class="sd">            Device for the result.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            One state per unassigned row, in ascending rung order.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If there are more rows to fill than rungs left to fill them with.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">unassigned</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Without a ladder the field is a label, not a rung; zero is the</span>
+            <span class="c1"># same value a fresh batch gets.</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">held</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">[</span><span class="o">~</span><span class="n">unassigned</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()}</span>
+        <span class="n">vacant</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">state</span> <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="o">.</span><span class="n">states</span><span class="p">))</span> <span class="k">if</span> <span class="n">state</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">held</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vacant</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">count</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ReplicaExchange: </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> walker(s) need a thermodynamic &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;state but only </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">vacant</span><span class="p">)</span><span class="si">}</span><span class="s2"> rung(s) are vacant &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">vacant</span><span class="si">}</span><span class="s2">). The batch has outgrown the ladder — replica &quot;</span>
+                <span class="s2">&quot;exchange presumes one walker per state, so a refill cannot &quot;</span>
+                <span class="s2">&quot;add walkers beyond the number of states.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">vacant</span><span class="p">[:</span><span class="n">count</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_next_ids</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Allocate *count* consecutive identities and advance the counter.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        count:</span>
+<span class="sd">            How many to issue.</span>
+<span class="sd">        device:</span>
+<span class="sd">            Device for the result.</span>
+<span class="sd">        shape:</span>
+<span class="sd">            Shape to view the result as.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            The issued identities.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span> <span class="o">+</span> <span class="n">count</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">next_walker_id</span> <span class="o">+=</span> <span class="n">count</span>
+        <span class="k">return</span> <span class="n">ids</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
+
+<div class="viewcode-block" id="WalkerIdentityHook.stamp">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.WalkerIdentityHook.html#nvalchemi.enhanced_sampling.WalkerIdentityHook.stamp">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stamp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write identity and counter fields for *step* onto *batch*.</span>
+
+<span class="sd">        Exposed separately from :meth:`__call__` because force priming needs</span>
+<span class="sd">        the batch stamped without a hook dispatch behind it.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        step:</span>
+<span class="sd">            The dynamics step the stamp describes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n_graphs</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assign_walker_ids</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_graphs</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assign_state_ids</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_graphs</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_batch</span> <span class="o">=</span> <span class="n">batch</span>
+        <span class="n">full</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n_graphs</span><span class="p">,),</span> <span class="n">step</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;sampling_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">full</span>
+        <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;sampling_epoch&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">full</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">steps_per_epoch</span>
+        <span class="n">interval</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span><span class="o">.</span><span class="n">attempt_interval</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">steps_per_epoch</span>
+        <span class="p">)</span>
+        <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;exchange_segment&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">n_graphs</span><span class="p">,),</span> <span class="n">step</span> <span class="o">//</span> <span class="n">interval</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="BiasHook">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BiasHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Evaluate every bias against one unmodified model output, then apply.</span>
+
+<span class="sd">    The single hook the bias family needs.  It defines ``_runs_on_stage`` so</span>
+<span class="sd">    the registry lets one object serve both ``AFTER_COMPUTE`` (evaluate and</span>
+<span class="sd">    apply) and ``AFTER_STEP`` (observe, deliver ``update()``, re-prime),</span>
+<span class="sd">    which keeps the ordering guarantees in one place rather than spread</span>
+<span class="sd">    across separately-registered hooks whose relative order would then depend</span>
+<span class="sd">    on registration sequence.</span>
+
+<span class="sd">    It is also the *orchestrator* for the biases, in the sense</span>
+<span class="sd">    :class:`~nvalchemi.training.hooks.update.TrainingUpdateHook` establishes:</span>
+<span class="sd">    an adaptive bias carries the</span>
+<span class="sd">    :class:`~nvalchemi.hooks.StatefulHook` attributes (``frequency``,</span>
+<span class="sd">    ``stage``, ``read_only``, ``commit``) but dispatches through ``update``</span>
+<span class="sd">    rather than ``__call__``, because a bias is also an ``nn.Module`` whose</span>
+<span class="sd">    ``__call__`` is its model forward.  This object owns protocol compliance</span>
+<span class="sd">    on their behalf: it is the thing the registry sees, and it reads those</span>
+<span class="sd">    attributes to decide when each bias is due.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    biases:</span>
+<span class="sd">        Mapping of unique name to bias.  May be empty, which reduces this</span>
+<span class="sd">        hook to a no-op — what pure temperature replica exchange needs.</span>
+<span class="sd">    prime_after_update:</span>
+<span class="sd">        When ``True`` (default), re-evaluate the biases and rewrite the</span>
+<span class="sd">        batch&#39;s total forces after an ``update()`` bumps a bias&#39;s state</span>
+<span class="sd">        version, so that anything reading ``batch.forces`` between steps sees</span>
+<span class="sd">        the current bias rather than the previous one.</span>
+<span class="sd">    compile_biases:</span>
+<span class="sd">        When ``True``, ``torch.compile`` each conservative bias&#39;s</span>
+<span class="sd">        ``energy()``.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    last_outputs:</span>
+<span class="sd">        Diagnostics from the most recent force evaluation — ``physical/*``</span>
+<span class="sd">        (model only), ``bias/&lt;name&gt;/*`` (one bias&#39;s contribution),</span>
+<span class="sd">        ``bias_total/*`` (the sum across biases) and ``total/*`` (physical</span>
+<span class="sd">        plus bias, read back from the batch).</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Bias *state* is not part of :meth:`state_dict`.  A checkpoint writes each</span>
+<span class="sd">    bias into its own ``biases/&lt;name&gt;`` group so the pieces can be inspected</span>
+<span class="sd">    and restored individually; what this hook owns is the per-bias delivery</span>
+<span class="sd">    bookkeeping that keeps ``update()`` exactly-once across a restart.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">biases</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">prime_after_update</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">compile_biases</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># stage=None plus _runs_on_stage: one object, two stages.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">read_only</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">biases</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">biases</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prime_after_update</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">prime_after_update</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_outputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c1"># Per-bias observation captured at the bias&#39;s stage, consumed by the</span>
+        <span class="c1"># next update() call.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BiasContext</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c1"># Per-bias contributions from the most recent force evaluation. Held</span>
+        <span class="c1"># because an AFTER_STEP capture happens after that evaluation has</span>
+        <span class="c1"># returned, and update() is documented to receive the contribution its</span>
+        <span class="c1"># bias produced during it.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ModelOutputs</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_update_step</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_seen_version</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_physical</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sync_seen_versions</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">compile_biases</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_compile_bias_energies</span><span class="p">()</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Registry protocol</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether this hook fires at *stage*.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        stage:</span>
+<span class="sd">            The stage being dispatched.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            ``True`` at ``AFTER_COMPUTE`` and ``AFTER_STEP``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BiasHook.on_register">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.on_register">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Remember the engine this hook was registered on.</span>
+
+<span class="sd">        The engine is the authority on the current step, supplies the model a</span>
+<span class="sd">        bias&#39;s ``update`` context names, and is what</span>
+<span class="sd">        :meth:`reprime_from_scratch` drives through a fresh force evaluation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        workflow:</span>
+<span class="sd">            The ``BaseDynamics`` doing the registering.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span> <span class="o">=</span> <span class="n">workflow</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dispatch to the phase for *stage*.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx:</span>
+<span class="sd">            The dynamics hook context.</span>
+<span class="sd">        stage:</span>
+<span class="sd">            The stage being dispatched.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">stage</span> <span class="ow">is</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_and_apply</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">stage</span> <span class="ow">is</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">observe_and_update</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BiasHook.commit">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.commit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">commit</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Publish every adaptive bias&#39;s pending state.</span>
+
+<span class="sd">        The :class:`~nvalchemi.hooks.StatefulHook` synchronisation point, fanned</span>
+<span class="sd">        out to the biases.  Called by :class:`EpochCommitHook` at a consistency</span>
+<span class="sd">        epoch boundary, never on the hot path.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">bias</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">adaptive_biases</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">commit</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;commit&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">commit</span><span class="p">):</span>
+                <span class="n">commit</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="BiasHook.state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the delivery bookkeeping that must survive a restart.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Mapping[str, Any]</span>
+<span class="sd">            The step at which each bias last received ``update()``, which is</span>
+<span class="sd">            what keeps delivery exactly-once across the boundary.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;last_update_step&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">step</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_update_step</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">}</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="BiasHook.load_state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.load_state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore the delivery bookkeeping.</span>
+
+<span class="sd">        Does **not** re-baseline the seen-version cache: the biases&#39; own</span>
+<span class="sd">        states are loaded separately, and the cache is only meaningful once</span>
+<span class="sd">        they have been.  Call :meth:`sync_seen_versions` after that.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state:</span>
+<span class="sd">            A mapping produced by :meth:`state_dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_update_step</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;last_update_step&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the engine&#39;s current step, or ``0`` before registration.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="p">,</span> <span class="s2">&quot;step_count&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Setup helpers</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compile_bias_energies</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compile each conservative bias&#39;s ``energy()`` in place.</span>
+
+<span class="sd">        Assigning the compiled callable as an instance attribute shadows the</span>
+<span class="sd">        bound method, so ``forward()`` picks it up without an indirection the</span>
+<span class="sd">        eager path would also pay.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">bias</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">biases</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">):</span>
+                <span class="n">bias</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">bias</span><span class="o">.</span><span class="n">energy</span><span class="p">)</span>  <span class="c1"># type: ignore[method-assign]</span>
+
+<div class="viewcode-block" id="BiasHook.sync_seen_versions">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.sync_seen_versions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sync_seen_versions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Re-baseline the cached per-bias state versions from the live biases.</span>
+
+<span class="sd">        The cache answers &quot;has this bias changed since the hook last looked&quot;,</span>
+<span class="sd">        which is what decides whether forces need re-priming.  It must be</span>
+<span class="sd">        re-baselined after anything that changes a bias&#39;s version without the</span>
+<span class="sd">        hook observing it — construction, and a restore, which loads a saved</span>
+<span class="sd">        version straight onto the bias.</span>
+
+<span class="sd">        Called from both, rather than inlined, so the two cannot drift: a</span>
+<span class="sd">        restore that skipped this would leave the cache at ``0`` against a</span>
+<span class="sd">        restored version of ``N``, and the first post-restore ``update()``</span>
+<span class="sd">        would re-prime on a change that never happened.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_seen_version</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;state_version&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">bias</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">biases</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="BiasHook.adaptive_biases">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.adaptive_biases">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">adaptive_biases</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the biases that implement the stateful-hook ``update``.</span>
+
+<span class="sd">        Detection is structural (``hasattr``), so a bias satisfies the</span>
+<span class="sd">        adaptive contract without inheriting ``AdaptivePotentialMixin``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, BaseModelMixin]</span>
+<span class="sd">            Name to bias, for adaptive biases only.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="n">bias</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">bias</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">biases</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;update&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+        <span class="p">}</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Phase 1 — evaluate and apply (AFTER_COMPUTE)</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="BiasHook.evaluate_and_apply">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.evaluate_and_apply">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_and_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate every bias against the unmodified batch, then apply the sum.</span>
+
+<span class="sd">        Implements steps 1-7 of the documented force-step ordering.  The</span>
+<span class="sd">        ordering is the whole point: every bias sees the same physical</span>
+<span class="sd">        outputs, so no bias can observe another&#39;s contribution and the result</span>
+<span class="sd">        does not depend on registration order.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch, immediately after the model forward pass.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">biases</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># 1. Capture the physical outputs before anything is added.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_physical</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">key</span><span class="p">:</span> <span class="n">value</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">value</span> <span class="o">:=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">}</span>
+
+        <span class="c1"># 2-3. Evaluate each bias against the same unmodified batch.</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_contributions</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+        <span class="c1"># 4. Capture AFTER_COMPUTE observations while batch.forces still</span>
+        <span class="c1">#    holds unbiased physical forces.  ABF depends on this: an</span>
+        <span class="c1">#    estimator fed its own output diverges.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_capture</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">results</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">)</span>
+
+        <span class="c1"># 5-6. Namespace diagnostics, then sum once.</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="n">aggregate_contributions</span><span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_namespace</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record_diagnostics</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
+
+        <span class="c1"># 7. Apply the total contribution, then record the combined result.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">total</span><span class="p">,</span> <span class="n">results</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record_totals</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_contributions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ModelOutputs</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate every bias against *batch* and check what each returned.</span>
+
+<span class="sd">        Validation lives here rather than in each bias because this is where</span>
+<span class="sd">        an unchecked contribution does damage: the next thing that happens to</span>
+<span class="sd">        it is being added into a batch buffer, retained in a capture, or</span>
+<span class="sd">        written to a checkpoint.  One enforcement point also covers biases</span>
+<span class="sd">        that never call the checker themselves — a hand-written one, or a</span>
+<span class="sd">        non-conservative one such as ABF.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch, unmodified by any bias.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, ModelOutputs]</span>
+<span class="sd">            Name to contribution.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If any contribution violates the ``ModelOutputs`` conventions —</span>
+<span class="sd">            an attached grad graph, a wrong shape, a NaN.  See</span>
+<span class="sd">            :func:`~nvalchemi.models._utils.validate_contribution`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ModelOutputs</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">bias</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">biases</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="n">bias</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="c1"># Checked per bias, not on the aggregate: summing absorbs a</span>
+            <span class="c1"># broadcastable shape ([4, 3] + [1, 3] is [4, 3]), so by the time</span>
+            <span class="c1"># the total reaches the batch it looks right and the bias that</span>
+            <span class="c1"># was wrong can no longer be named.</span>
+            <span class="n">validate_contribution</span><span class="p">(</span>
+                <span class="n">outputs</span><span class="p">,</span>
+                <span class="n">source</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">bias</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">num_atoms</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span>
+                <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">results</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">outputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_results</span> <span class="o">=</span> <span class="n">results</span>
+        <span class="k">return</span> <span class="n">results</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_namespace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">ModelOutputs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return *result* with its diagnostics keyed by contributing bias.</span>
+
+<span class="sd">        ``diagnostics/&lt;key&gt;`` becomes ``diagnostics/bias/&lt;name&gt;/&lt;key&gt;``.</span>
+<span class="sd">        Namespacing has to happen before aggregation, because</span>
+<span class="sd">        :func:`~nvalchemi.models._utils.aggregate_contributions` rejects</span>
+<span class="sd">        duplicate diagnostic keys rather than silently dropping one — two</span>
+<span class="sd">        biases of the same type would otherwise collide on identical names.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name:</span>
+<span class="sd">            The bias name.</span>
+<span class="sd">        result:</span>
+<span class="sd">            The bias&#39;s contribution.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ModelOutputs</span>
+<span class="sd">            A copy with namespaced diagnostics, or *result* unchanged when it</span>
+<span class="sd">            has none.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">DIAGNOSTIC_PREFIX</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">result</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">result</span>
+        <span class="n">renamed</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">DIAGNOSTIC_PREFIX</span><span class="p">):</span>
+                <span class="n">suffix</span> <span class="o">=</span> <span class="n">key</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">DIAGNOSTIC_PREFIX</span><span class="p">)</span> <span class="p">:]</span>
+                <span class="n">renamed</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">DIAGNOSTIC_PREFIX</span><span class="si">}</span><span class="s2">bias/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">suffix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">renamed</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">renamed</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_record_diagnostics</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ModelOutputs</span><span class="p">],</span> <span class="n">total</span><span class="p">:</span> <span class="n">ModelOutputs</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Populate :attr:`last_outputs` with the physical and bias views.</span>
+
+<span class="sd">        Writes ``physical/*``, ``bias/&lt;name&gt;/*``, and ``bias_total/*``.</span>
+<span class="sd">        ``total/*`` is *not* written here: at this point the bias has not</span>
+<span class="sd">        been applied yet, so there is no combined value to record.</span>
+<span class="sd">        :meth:`_record_totals` adds it afterwards.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        results:</span>
+<span class="sd">            Per-bias results, un-namespaced.</span>
+<span class="sd">        total:</span>
+<span class="sd">            The aggregated bias result — the sum across biases, **not**</span>
+<span class="sd">            physical plus bias.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">outputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_physical</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">outputs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;physical/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">label</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">key</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">DIAGNOSTIC_PREFIX</span><span class="p">)</span> <span class="p">:]</span>
+                    <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">DIAGNOSTIC_PREFIX</span><span class="p">)</span>
+                    <span class="k">else</span> <span class="n">key</span>
+                <span class="p">)</span>
+                <span class="n">outputs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;bias/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">,</span> <span class="s2">&quot;virial&quot;</span><span class="p">):</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">total</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">outputs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;bias_total/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_outputs</span> <span class="o">=</span> <span class="n">outputs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_record_totals</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Record ``total/*`` — physical plus bias — from the live batch.</span>
+
+<span class="sd">        Must run *after* :meth:`_apply`.  Reading the batch rather than</span>
+<span class="sd">        adding ``physical/*`` and ``bias_total/*`` back together keeps the</span>
+<span class="sd">        record faithful to what was actually written, including any reshape</span>
+<span class="sd">        :meth:`_apply` performed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch, immediately after the bias has been applied.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        This is the state as this hook leaves it, not necessarily the state</span>
+<span class="sd">        the integrator sees.  The hook is deliberately ahead of caller-supplied</span>
+<span class="sd">        hooks at ``AFTER_COMPUTE`` (so a force clamp acts on the total rather</span>
+<span class="sd">        than on the model force alone), which means any later hook at that</span>
+<span class="sd">        stage can still modify ``batch.forces`` afterwards.  Read the batch</span>
+<span class="sd">        directly if you need the value the integrator consumed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">):</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">last_outputs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;total/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">total</span><span class="p">:</span> <span class="n">ModelOutputs</span><span class="p">,</span>
+        <span class="n">results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ModelOutputs</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add the aggregated bias contribution to the batch, in place.</span>
+
+<span class="sd">        Every non-``None`` output must have a destination buffer.  Skipping a</span>
+<span class="sd">        field whose buffer is absent would discard that contribution in</span>
+<span class="sd">        silence — for ``stress`` that is precisely the barostat-invisibility</span>
+<span class="sd">        failure this API exists to remove, arrived at from a different</span>
+<span class="sd">        direction: the bias is computed correctly, applied nowhere, and the</span>
+<span class="sd">        cell evolves as though it did not exist.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        total:</span>
+<span class="sd">            The aggregated bias result.</span>
+<span class="sd">        results:</span>
+<span class="sd">            Per-bias results, used only to name the contributors in an error.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the aggregate carries a virial, or if any non-``None`` output</span>
+<span class="sd">            has no destination buffer on the batch.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">total</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;virial&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;EnhancedSampling: a bias returned &#39;virial&#39;, but the runner &quot;</span>
+                <span class="s2">&quot;applies &#39;stress&#39; to the batch. Convert W -&gt; sigma = -W/V in &quot;</span>
+                <span class="s2">&quot;the bias before returning it; the cell volume is the bias&#39;s &quot;</span>
+                <span class="s2">&quot;to supply.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_destinations</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">total</span><span class="p">,</span> <span class="n">results</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">total</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">energy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+            <span class="n">forces</span> <span class="o">=</span> <span class="n">total</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">forces</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># reshape, like energy and stress above: it raises on a numel</span>
+                <span class="c1"># mismatch, where a bare add_ would broadcast a single row</span>
+                <span class="c1"># onto every atom.</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">forces</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+            <span class="n">stress</span> <span class="o">=</span> <span class="n">total</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stress&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">stress</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">stress</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">stress</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">stress</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_destinations</span><span class="p">(</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="n">ModelOutputs</span><span class="p">,</span> <span class="n">results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ModelOutputs</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise if any produced output has nowhere to go on the batch.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        total:</span>
+<span class="sd">            The aggregated bias result.</span>
+<span class="sd">        results:</span>
+<span class="sd">            Per-bias results, used to name which biases produced each field.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            Listing every missing destination, the biases responsible, and</span>
+<span class="sd">            both ways to resolve it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">key</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">total</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">lines</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="n">contributors</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">who</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; (from </span><span class="si">{</span><span class="n">contributors</span><span class="si">}</span><span class="s2">)&quot;</span> <span class="k">if</span> <span class="n">contributors</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+            <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;</span><span class="si">{</span><span class="n">who</span><span class="si">}</span><span class="s2">: add </span><span class="si">{</span><span class="n">_ALLOCATION_HINT</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">}</span><span class="s2"> to AtomicData&quot;</span><span class="p">)</span>
+        <span class="n">detail</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span>
+        <span class="n">extra</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">if</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="n">extra</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">A bias that produces stress with nowhere to put it is &quot;</span>
+                <span class="s2">&quot;invisible to an NPT/NPH barostat — the cell would evolve as &quot;</span>
+                <span class="s2">&quot;if the bias were absent. If this run genuinely has no use for &quot;</span>
+                <span class="s2">&quot;a cell response (NVE/NVT), pass compute_stress=False to those &quot;</span>
+                <span class="s2">&quot;biases instead of leaving the output to be discarded.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;EnhancedSampling: bias output has no destination buffer on the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;batch, so it would be silently discarded:</span><span class="se">\n</span><span class="si">{</span><span class="n">detail</span><span class="si">}{</span><span class="n">extra</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Phase 2 — observe and update (AFTER_STEP)</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_capture</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ModelOutputs</span><span class="p">],</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Snapshot the batch for adaptive biases whose ``stage`` is *stage*.</span>
+
+<span class="sd">        The stored :class:`~nvalchemi.hooks.BiasContext` is</span>
+<span class="sd">        exactly what :meth:`AdaptivePotentialMixin.update` is documented to</span>
+<span class="sd">        receive: the frame at the bias&#39;s ``stage``, and the contribution that</span>
+<span class="sd">        bias returned during the preceding force evaluation.  An</span>
+<span class="sd">        ``AFTER_STEP`` capture happens after that evaluation has returned, so</span>
+<span class="sd">        the contributions are read from the retained results rather than</span>
+<span class="sd">        recomputed — a metadynamics bias sizing its next hill from the bias</span>
+<span class="sd">        energy it just applied needs the real value, not an empty</span>
+<span class="sd">        placeholder.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        results:</span>
+<span class="sd">            Per-bias contributions from the preceding force evaluation.</span>
+<span class="sd">        stage:</span>
+<span class="sd">            The stage being captured.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">bias</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">adaptive_biases</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;stage&quot;</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">stage</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">step</span> <span class="o">%</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;frequency&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bias_context</span><span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">results</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">step</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_bias_context</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">contribution</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BiasContext</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build the context handed to one bias&#39;s ``update``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The observed frame.</span>
+<span class="sd">        contribution:</span>
+<span class="sd">            What the bias returned during the preceding force evaluation, or</span>
+<span class="sd">            ``None`` when it has not been evaluated yet.</span>
+<span class="sd">        step:</span>
+<span class="sd">            The dynamics step the capture belongs to.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        BiasContext</span>
+<span class="sd">            Populated context; ``workflow`` is this hook, so a bias can reach</span>
+<span class="sd">            the engine and the full diagnostics dict if it needs to.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_rank</span>
+
+        <span class="k">return</span> <span class="n">BiasContext</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="n">global_rank</span><span class="o">=</span><span class="n">get_rank</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span>
+            <span class="n">workflow</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+            <span class="n">step_count</span><span class="o">=</span><span class="n">step</span><span class="p">,</span>
+            <span class="n">contribution</span><span class="o">=</span><span class="n">contribution</span> <span class="k">if</span> <span class="n">contribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">OrderedDict</span><span class="p">(),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="BiasHook.observe_and_update">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.observe_and_update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observe_and_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Capture post-step frames, deliver ``update()``, then re-prime.</span>
+
+<span class="sd">        Implements steps 10-12 of the force-step ordering.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch, after the integrator has finished.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">adaptive</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adaptive_biases</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">adaptive</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_capture</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_results</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">)</span>
+
+        <span class="n">changed</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">bias</span> <span class="ow">in</span> <span class="n">adaptive</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">step</span> <span class="o">%</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;frequency&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="c1"># Exactly once per step, even if this hook is dispatched twice.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_update_step</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">==</span> <span class="n">step</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">ctx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bias_context</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_results</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">step</span><span class="p">)</span>
+            <span class="n">bias</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;stage&quot;</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">))</span>  <span class="c1"># type: ignore[attr-defined]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_last_update_step</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span>
+
+            <span class="n">version</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;state_version&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">version</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_seen_version</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="mi">0</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_last_seen_version</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">version</span>
+                <span class="n">changed</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="n">changed</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">prime_after_update</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reprime</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reprime</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rewrite total forces from cached physical outputs and current biases.</span>
+
+<span class="sd">        A bias that just deposited a hill leaves ``batch.forces`` describing</span>
+<span class="sd">        the bias as it was *before* the deposition.  Anything reading the</span>
+<span class="sd">        batch between steps — a reporter, a convergence check — would see</span>
+<span class="sd">        stale values.  This restores the cached physical outputs and re-adds</span>
+<span class="sd">        a freshly evaluated bias contribution.</span>
+
+<span class="sd">        The physical part is reused rather than recomputed: this is</span>
+<span class="sd">        *evaluate-only* priming, so it costs one bias evaluation and no model</span>
+<span class="sd">        forward pass.  The physical forces are therefore the ones from the</span>
+<span class="sd">        start of the step, not from the post-step coordinates.  That is exact</span>
+<span class="sd">        only if the model forward were repeated, which is precisely the cost</span>
+<span class="sd">        this avoids; the next step recomputes them anyway.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_physical</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_physical</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">target</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">target</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">target</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_contributions</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="n">aggregate_contributions</span><span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_namespace</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record_diagnostics</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">total</span><span class="p">,</span> <span class="n">results</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record_totals</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BiasHook.replay">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.replay">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">replay</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Deliver each frame in *frames* to every adaptive bias, in order.</span>
+
+<span class="sd">        The mechanism behind a warm start: it reconstructs bias history from</span>
+<span class="sd">        prior frames, one graph at a time, without any dynamics behind it.</span>
+<span class="sd">        The per-step exactly-once bookkeeping is deliberately bypassed —</span>
+<span class="sd">        these are replayed frames, not steps of this run — and the frame</span>
+<span class="sd">        index stands in for the step count.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        frames:</span>
+<span class="sd">            Prior frames in chronological order, one graph per frame.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">adaptive</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adaptive_biases</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">adaptive</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">frames</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">):</span>
+            <span class="n">frame</span> <span class="o">=</span> <span class="n">frames</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">index</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">frames</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">bias</span> <span class="ow">in</span> <span class="n">adaptive</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bias_context</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+                <span class="n">bias</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span> <span class="s2">&quot;stage&quot;</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">))</span>  <span class="c1"># type: ignore[attr-defined]</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Services for the replica-exchange hook</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="BiasHook.bias_energy">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.bias_energy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bias_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">state_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the total bias energy per walker under *state_ids*.</span>
+
+<span class="sd">        Umbrella acceptance needs the bias evaluated under both the current</span>
+<span class="sd">        and the proposed labels, so the assignment is swapped in, the biases</span>
+<span class="sd">        re-evaluated, and the original restored in a ``finally``.</span>
+
+<span class="sd">        Raw energy, not reduced: multiplying by ``beta`` is thermodynamics and</span>
+<span class="sd">        belongs to whatever ladder is asking, which is also what keeps this</span>
+<span class="sd">        hook free of any temperature table.</span>
+
+<span class="sd">        Contributions are checked here as well as on the force path, and for</span>
+<span class="sd">        a reason specific to this one: it is the only place a bias is</span>
+<span class="sd">        evaluated under an assignment the run is *not* in.  A window bias can</span>
+<span class="sd">        be perfectly finite with every walker at home and overflow the moment</span>
+<span class="sd">        one is scored against another&#39;s window — which is precisely what</span>
+<span class="sd">        umbrella acceptance asks it to do — so the force path never sees it.</span>
+<span class="sd">        An unchecked non-finite energy here does not raise either: it makes</span>
+<span class="sd">        the acceptance exponent ``nan``, and ``nan`` compares false, so the</span>
+<span class="sd">        swap is silently rejected and the run looks like a ladder with poor</span>
+<span class="sd">        overlap.  The ``isfinite`` sync this costs is per exchange attempt,</span>
+<span class="sd">        not per step.</span>
+
+<span class="sd">        Only the energy is checked, because only the energy is read.  The</span>
+<span class="sd">        forces and stress computed alongside it are discarded, and a bias</span>
+<span class="sd">        can be finite under a foreign window while its derivative is</span>
+<span class="sd">        singular there — a square-root restraint scored at its own centre.</span>
+<span class="sd">        Refusing that would stop the run over a value nothing applies; the</span>
+<span class="sd">        force path checks the derivatives the integrator actually uses.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        state_ids:</span>
+<span class="sd">            Assignment to evaluate under, shape ``[B]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            ``E_bias`` per walker in eV, shape ``[B]``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If any bias returns an energy violating the ``ModelOutputs``</span>
+<span class="sd">            conventions under *state_ids*, naming the bias.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">original</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">thermodynamic_state_id</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;thermodynamic_state_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_ids</span>
+            <span class="n">total</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">bias</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">biases</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">energy</span> <span class="o">=</span> <span class="n">bias</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
+                <span class="n">validate_contribution</span><span class="p">(</span>
+                    <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">energy</span><span class="p">},</span>
+                    <span class="n">source</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">bias</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> under the proposed &quot;</span>
+                    <span class="s2">&quot;assignment&quot;</span><span class="p">,</span>
+                    <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">energy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">total</span> <span class="o">=</span> <span class="n">total</span> <span class="o">+</span> <span class="n">energy</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;thermodynamic_state_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">original</span>
+        <span class="k">return</span> <span class="n">total</span></div>
+
+
+<div class="viewcode-block" id="BiasHook.reprime_from_scratch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.BiasHook.html#nvalchemi.enhanced_sampling.BiasHook.reprime_from_scratch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reprime_from_scratch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Recompute the model and reapply the bias at fixed coordinates.</span>
+
+<span class="sd">        Unlike :meth:`_reprime`, which reuses the cached physical outputs,</span>
+<span class="sd">        this repeats the model forward pass — the caller has changed</span>
+<span class="sd">        something the model itself responds to.  An accepted replica-exchange</span>
+<span class="sd">        swap is that case: the forces in the batch were produced under the</span>
+<span class="sd">        previous labels, and the integrator reads them in its next half-step</span>
+<span class="sd">        before any model call.</span>
+
+<span class="sd">        Reproduces the prefix of ``BaseDynamics.step`` up to the model call,</span>
+<span class="sd">        including the ``BEFORE_COMPUTE`` hooks.  Those are not optional: a</span>
+<span class="sd">        cutoff model reaches ``adapt_input`` expecting a neighbor list that</span>
+<span class="sd">        ``NeighborListHook`` builds at exactly that stage, so calling</span>
+<span class="sd">        ``compute()`` bare would fail.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dynamics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamics</span>
+        <span class="n">dynamics</span><span class="o">.</span><span class="n">_ensure_state_initialized</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="n">dynamics</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_and_apply</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="EpochCommitHook">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.EpochCommitHook.html#nvalchemi.enhanced_sampling.EpochCommitHook">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">EpochCommitHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fire :meth:`StatefulHook.commit` on a consistency-epoch cadence.</span>
+
+<span class="sd">    The cadence is :attr:`frequency`, so the registry gates the dispatch and</span>
+<span class="sd">    nothing here re-implements &quot;has the boundary been crossed&quot;.  Commits stay</span>
+<span class="sd">    idempotent by epoch index regardless, because the boundary is also reached</span>
+<span class="sd">    eagerly when a checkpoint drains a completed epoch.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    targets:</span>
+<span class="sd">        The stateful hooks to commit — for enhanced sampling, the single</span>
+<span class="sd">        :class:`BiasHook`, which fans out to its adaptive biases.</span>
+<span class="sd">    frequency:</span>
+<span class="sd">        Steps per consistency epoch.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StatefulHook</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">targets</span> <span class="o">=</span> <span class="n">targets</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">committed_epoch</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Commit the epoch that has just completed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx:</span>
+<span class="sd">            The dynamics hook context.</span>
+<span class="sd">        stage:</span>
+<span class="sd">            The stage being dispatched.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">commit_epoch</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s2">&quot;step_count&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+<div class="viewcode-block" id="EpochCommitHook.state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.EpochCommitHook.html#nvalchemi.enhanced_sampling.EpochCommitHook.state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the boundary cursor that must survive a restart.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Mapping[str, Any]</span>
+<span class="sd">            The last epoch committed.  Restarting at ``-1`` would re-commit</span>
+<span class="sd">            epochs whose shared history was already published, which a bias</span>
+<span class="sd">            that merges pending deposits would double-count.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;committed_epoch&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">committed_epoch</span><span class="p">)}</span></div>
+
+
+<div class="viewcode-block" id="EpochCommitHook.load_state_dict">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.EpochCommitHook.html#nvalchemi.enhanced_sampling.EpochCommitHook.load_state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore the boundary cursor.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state:</span>
+<span class="sd">            A mapping produced by :meth:`state_dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">committed_epoch</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;committed_epoch&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="EpochCommitHook.commit_epoch">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.enhanced_sampling.EpochCommitHook.html#nvalchemi.enhanced_sampling.EpochCommitHook.commit_epoch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">commit_epoch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Commit *epoch*, at most once.</span>
+
+<span class="sd">        Idempotent by design: the boundary is reached from two directions —</span>
+<span class="sd">        the cadence, and a checkpoint draining a completed epoch — and a</span>
+<span class="sd">        shared-history bias that merged its pending deposits twice would</span>
+<span class="sd">        double-count them.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        epoch:</span>
+<span class="sd">            Index of the completed epoch.  Negative, or already committed, is</span>
+<span class="sd">            a no-op.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">epoch</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">epoch</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">committed_epoch</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">for</span> <span class="n">target</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">targets</span><span class="p">:</span>
+            <span class="n">commit</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">&quot;commit&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">commit</span><span class="p">):</span>
+                <span class="n">commit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">committed_epoch</span> <span class="o">=</span> <span class="n">epoch</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

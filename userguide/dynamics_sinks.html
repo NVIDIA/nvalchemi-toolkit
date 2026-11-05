@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Data Sinks &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Data Sinks &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,11 +55,11 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/dynamics_sinks';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Distributed Simulations" href="distributed.html" />
-    <link rel="prev" title="Optimization and Integrators" href="dynamics_simulations.html" />
+    <link rel="next" title="Enhanced Sampling" href="enhanced_sampling.html" />
+    <link rel="prev" title="Reaction Paths and NEB" href="dynamics_mep.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -597,7 +605,7 @@ survive the process, be shared across machines, or feed back into analysis.</p>
 <h2>Putting it together<a class="headerlink" href="#putting-it-together" title="Link to this heading">#</a></h2>
 <p>A typical dynamics setup combines multiple hooks and sinks to capture different
 aspects of the simulation:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">ConvergedSnapshotHook</span><span class="p">,</span>
     <span class="n">LoggingHook</span><span class="p">,</span>
@@ -605,9 +613,9 @@ aspects of the simulation:</p>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">GPUBuffer</span><span class="p">,</span> <span class="n">ZarrData</span>
 
-<span class="k">with</span> <span class="n">FIRE</span><span class="p">(</span>
+<span class="k">with</span> <span class="n">FIRE2</span><span class="p">(</span>
     <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-    <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
     <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
         <span class="c1"># Stop when converged</span>
@@ -652,20 +660,20 @@ your workload.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="dynamics_simulations.html"
+       href="dynamics_mep.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Optimization and Integrators</p>
+        <p class="prev-next-title">Reaction Paths and NEB</p>
       </div>
     </a>
     <a class="right-next"
-       href="distributed.html"
+       href="enhanced_sampling.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Distributed Simulations</p>
+        <p class="prev-next-title">Enhanced Sampling</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

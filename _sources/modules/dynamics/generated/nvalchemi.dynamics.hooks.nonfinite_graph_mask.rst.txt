@@ -1,0 +1,6 @@
+﻿nvalchemi.dynamics.hooks.nonfinite\_graph\_mask
+===============================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autofunction:: nonfinite_graph_mask

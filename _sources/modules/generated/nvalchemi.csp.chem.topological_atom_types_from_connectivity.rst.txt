@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.chem.topological\_atom\_types\_from\_connectivity
+===============================================================
+
+.. currentmodule:: nvalchemi.csp.chem
+
+.. autofunction:: topological_atom_types_from_connectivity

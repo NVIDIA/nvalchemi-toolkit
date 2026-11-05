@@ -1,0 +1,1305 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemiops.torch.lbfgs &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemiops/torch/lbfgs';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemiops...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemiops.torch.lbfgs</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;PyTorch bindings for the batched L-BFGS geometry optimizer.</span>
+
+<span class="sd">L-BFGS reaches a given force tolerance in far fewer force evaluations than the</span>
+<span class="sd">FIRE optimizers -- the cost that dominates relaxation with a machine-learned</span>
+<span class="sd">potential.</span>
+
+<span class="sd">Usage</span>
+<span class="sd">-----</span>
+<span class="sd">You own the loop and the stopping rule. Each call consumes exactly one force</span>
+<span class="sd">evaluation and mutates ``positions`` and the state in place::</span>
+
+<span class="sd">    from nvalchemiops.torch.lbfgs import lbfgs_prepare_state, lbfgs_step_coord</span>
+
+<span class="sd">    state = lbfgs_prepare_state(num_atoms, num_systems, device=positions.device)</span>
+<span class="sd">    for _ in range(max_steps):</span>
+<span class="sd">        forces = model(positions)</span>
+<span class="sd">        if forces.norm(dim=1).max() &lt; force_tol:</span>
+<span class="sd">            break</span>
+<span class="sd">        lbfgs_step_coord(positions, forces, state, batch_idx, maxstep=0.2)</span>
+
+<span class="sd">Test before stepping, as above: after the step the forces you passed describe</span>
+<span class="sd">the previous point. The optimizer owns no tolerance and has no terminal</span>
+<span class="sd">status, matching FIRE2, and reads no energy -- so a model whose forces are not</span>
+<span class="sd">the gradient of its energy relaxes just as well.</span>
+
+<span class="sd">These operations mutate their inputs and are not differentiable; they are</span>
+<span class="sd">registered as PyTorch custom operators, so they trace under ``torch.compile``.</span>
+
+<span class="sd">State</span>
+<span class="sd">-----</span>
+<span class="sd">:func:`lbfgs_prepare_state` allocates, initializes and validates the whole</span>
+<span class="sd">state in one call; calling it again is how you reset. Nothing is allocated per</span>
+<span class="sd">step. The tensors stay yours --</span>
+<span class="sd">:class:`~nvalchemiops.dynamics.optimizers.lbfgs.LBFGSState` is a plain</span>
+<span class="sd">dataclass, so you can build one from tensors you already own; see</span>
+<span class="sd">:mod:`nvalchemiops.dynamics.optimizers.lbfgs` for shapes and required initial</span>
+<span class="sd">contents.</span>
+
+<span class="sd">Every array follows the coordinate dtype, so ``torch.float32`` gives an</span>
+<span class="sd">end-to-end fp32 state and ``torch.float64`` an fp64 one.</span>
+
+<span class="sd">CUDA graphs</span>
+<span class="sd">-----------</span>
+<span class="sd">A step captures with nothing special required of the caller::</span>
+
+<span class="sd">    with torch.cuda.graph(graph):</span>
+<span class="sd">        lbfgs_step_coord(positions, forces, state, batch_idx, maxstep=0.2)</span>
+
+<span class="sd">The registered operators bind Warp to PyTorch&#39;s current stream themselves, and</span>
+<span class="sd">during capture that *is* the capture stream, so an outer</span>
+<span class="sd">``wp.ScopedStream(wp.stream_from_torch(...))`` is redundant -- harmless, but</span>
+<span class="sd">not what makes capture work. A raw Warp launch of your own in the same</span>
+<span class="sd">captured region still needs the caller to bind the stream.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">nvalchemiops.dynamics.optimizers.lbfgs : the Warp implementation, which</span>
+<span class="sd">    documents the algorithm, sign convention and precision policy.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">wp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.batch_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">atom_ptr_to_batch_idx</span> <span class="k">as</span> <span class="n">_wp_atom_ptr_to_batch_idx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.dynamics.optimizers.lbfgs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_CELL_BUFFERS</span><span class="p">,</span>
+    <span class="n">_CELL_SCRATCH</span><span class="p">,</span>
+    <span class="n">_OPTIMIZER_BUFFERS</span><span class="p">,</span>
+    <span class="n">LBFGSCellState</span><span class="p">,</span>
+    <span class="n">LBFGSState</span><span class="p">,</span>
+    <span class="n">_check_against_state</span><span class="p">,</span>
+    <span class="n">_resolve_curvature_eps</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.dynamics.optimizers.lbfgs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_check_packed_topology</span> <span class="k">as</span> <span class="n">_wp_check_packed_topology</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.dynamics.optimizers.lbfgs</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lbfgs_cell_kappa</span> <span class="k">as</span> <span class="n">_wp_cell_kappa</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.dynamics.optimizers.lbfgs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_lbfgs_set_reference_cell</span> <span class="k">as</span> <span class="n">_wp_set_reference_cell</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.dynamics.optimizers.lbfgs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_lbfgs_step_coord_cell_impl</span> <span class="k">as</span> <span class="n">_wp_step_cell</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.dynamics.optimizers.lbfgs</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lbfgs_step_impl</span> <span class="k">as</span> <span class="n">_wp_step</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.dynamics.utils.cell_filter</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">extend_atom_ptr</span> <span class="k">as</span> <span class="n">_wp_extend_atom_ptr</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch._warp_op_helpers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">register_noop_fake</span><span class="p">,</span>
+    <span class="n">scoped_warp_stream</span><span class="p">,</span>
+    <span class="n">torch_custom_op</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;LBFGSCellState&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LBFGSState&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;lbfgs_prepare_cell_state&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;lbfgs_prepare_state&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;lbfgs_step_coord&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;lbfgs_step_coord_cell&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">_TORCH_TO_WP_VEC</span> <span class="o">=</span> <span class="p">{</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">vec3f</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">vec3d</span><span class="p">}</span>
+<span class="n">_TORCH_TO_WP_MAT</span> <span class="o">=</span> <span class="p">{</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">mat33f</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">mat33d</span><span class="p">}</span>
+<span class="n">_TORCH_TO_WP_SCALAR</span> <span class="o">=</span> <span class="p">{</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">:</span> <span class="n">wp</span><span class="o">.</span><span class="n">float64</span><span class="p">}</span>
+<span class="n">_CELL_ALIGNMENT_ERROR</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;cell must be aligned: entries strictly above the diagonal must be zero. &quot;</span>
+    <span class="s2">&quot;Call nvalchemiops.dynamics.utils.cell_filter.align_cell once before &quot;</span>
+    <span class="s2">&quot;reference-cell setup.&quot;</span>
+<span class="p">)</span>
+
+<span class="c1">#: Every tensor the coordinate step writes to. Derived from the shared buffer</span>
+<span class="c1">#: order so the two cannot drift apart.</span>
+<span class="n">_MUTATED</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;positions&quot;</span><span class="p">,)</span> <span class="o">+</span> <span class="n">_OPTIMIZER_BUFFERS</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_wp</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">dtype</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;View a Torch tensor as a Warp array, without copying.</span>
+
+<span class="sd">    Deliberately refuses non-contiguous input rather than calling</span>
+<span class="sd">    ``.contiguous()`` for you. These operations write through the view, so a</span>
+<span class="sd">    silent copy would discard every update and leave the caller watching an</span>
+<span class="sd">    optimizer that never moves. Call ``.contiguous()`` yourself if you need to.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">tensor</span><span class="o">.</span><span class="n">is_contiguous</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;L-BFGS tensors must be contiguous, because the optimizer writes &quot;</span>
+            <span class="s2">&quot;through them in place; a non-contiguous tensor would be copied and &quot;</span>
+            <span class="s2">&quot;the updates lost. Call .contiguous() on the argument first.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+
+
+<span class="nd">@torch_custom_op</span><span class="p">(</span><span class="s2">&quot;nvalchemiops::lbfgs_step&quot;</span><span class="p">,</span> <span class="n">mutates_args</span><span class="o">=</span><span class="n">_MUTATED</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_lbfgs_step_op</span><span class="p">(</span>
+    <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">forces</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">x_base</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">force_base</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">direction</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">s_history</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">y_history</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ys</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">yy</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">alpha_hist</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">beta_hist</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ss</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">gg</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">d0</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">dmax</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">dquad</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">alpha_step</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">iteration</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">end</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">n_loop</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">history_count</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">maxstep</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">curvature_eps</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">compute_reductions</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run one registered L-BFGS step. All tensors are passed positionally.</span>
+
+<span class="sd">    Launches are bound to PyTorch&#39;s current stream so that the step can be</span>
+<span class="sd">    captured in a CUDA graph. Without this Warp would use its own stream and a</span>
+<span class="sd">    capture would record nothing.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">vec</span> <span class="o">=</span> <span class="n">_TORCH_TO_WP_VEC</span><span class="p">[</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+    <span class="n">sc</span> <span class="o">=</span> <span class="n">_TORCH_TO_WP_SCALAR</span><span class="p">[</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+    <span class="k">with</span> <span class="n">scoped_warp_stream</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
+        <span class="n">_wp_step</span><span class="p">(</span>
+            <span class="n">positions</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">forces</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">forces</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">batch_idx</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">x_base</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">x_base</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">force_base</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">force_base</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">direction</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">direction</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">s_history</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">s_history</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">y_history</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">y_history</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">ys</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ys</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">yy</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">yy</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">alpha_hist</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">alpha_hist</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">beta_hist</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">beta_hist</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">ss</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ss</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">gg</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">gg</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">d0</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">d0</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">dmax</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">dmax</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">dquad</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">dquad</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">alpha_step</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">alpha_step</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">iteration</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">iteration</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">end</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">end</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">n_loop</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">n_loop</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">history_count</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">history_count</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">maxstep</span><span class="o">=</span><span class="n">maxstep</span><span class="p">,</span>
+            <span class="n">curvature_eps</span><span class="o">=</span><span class="n">curvature_eps</span><span class="p">,</span>
+            <span class="n">compute_reductions</span><span class="o">=</span><span class="n">compute_reductions</span><span class="p">,</span>
+        <span class="p">)</span>
+
+
+<span class="n">register_noop_fake</span><span class="p">(</span><span class="n">_lbfgs_step_op</span><span class="p">)</span>
+
+<span class="c1"># The operator signature is written out by hand, so pin its parameter names to</span>
+<span class="c1"># the shared buffer order. Registration already rejects a name in</span>
+<span class="c1"># ``mutates_args`` that does not exist, but only this catches a *reordering*,</span>
+<span class="c1"># which would silently swap two tensors.</span>
+<span class="c1"># positions, forces, batch_idx</span>
+<span class="n">_STATE_SLICE</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">_OPTIMIZER_BUFFERS</span><span class="p">))</span>
+<span class="n">_op_buffer_params</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">_lbfgs_step_op</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="p">)[</span><span class="n">_STATE_SLICE</span><span class="p">]</span>
+<span class="k">if</span> <span class="n">_op_buffer_params</span> <span class="o">!=</span> <span class="n">_OPTIMIZER_BUFFERS</span><span class="p">:</span>
+    <span class="c1"># Raised rather than asserted so the guard survives `python -O`.</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="s2">&quot;_OPTIMIZER_BUFFERS and _lbfgs_step_op parameters have diverged:</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;  expected: </span><span class="si">{</span><span class="n">_OPTIMIZER_BUFFERS</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;  operator: </span><span class="si">{</span><span class="n">_op_buffer_params</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">lbfgs_prepare_state</span><span class="p">(</span>
+    <span class="n">num_dofs</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">num_systems</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">history_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LBFGSState</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Allocate, initialize and validate a complete optimizer state.</span>
+
+<span class="sd">    The three fields that do not start at zero -- ``alpha_step``,</span>
+<span class="sd">    ``iteration`` -- are set for you. Calling this again is how you</span>
+<span class="sd">    reset. :class:`LBFGSState` is a plain dataclass, so you can equally build</span>
+<span class="sd">    one from tensors you already own and call</span>
+<span class="sd">    :meth:`~nvalchemiops.dynamics.optimizers.lbfgs.LBFGSState.validate`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    num_dofs : int</span>
+<span class="sd">        Degrees of freedom. On the variable-cell path this is</span>
+<span class="sd">        ``num_atoms + 2 * num_systems``.</span>
+<span class="sd">    num_systems : int</span>
+<span class="sd">        Independent systems in the batch.</span>
+<span class="sd">    dtype : torch.dtype, optional</span>
+<span class="sd">        Coordinate precision. Every per-system scalar follows it, so this</span>
+<span class="sd">        selects an end-to-end fp32 or fp64 state.</span>
+<span class="sd">    device : optional</span>
+<span class="sd">        Torch device.</span>
+<span class="sd">    history_size : int, optional</span>
+<span class="sd">        Stored curvature pairs.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    LBFGSState</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_TORCH_TO_WP_VEC</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;dtype must be float32 or float64; got </span><span class="si">{</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">history_size</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;history_size must be &gt;= 1; got </span><span class="si">{</span><span class="n">history_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">sc</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">dtype</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device</span><span class="p">}</span>
+    <span class="n">i32</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device</span><span class="p">}</span>
+    <span class="n">kw</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">dtype</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device</span><span class="p">}</span>
+    <span class="n">m</span><span class="p">,</span> <span class="n">p_</span><span class="p">,</span> <span class="n">n</span> <span class="o">=</span> <span class="n">history_size</span><span class="p">,</span> <span class="n">num_dofs</span><span class="p">,</span> <span class="n">num_systems</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">LBFGSState</span><span class="p">(</span>
+        <span class="n">x_base</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">p_</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">force_base</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">p_</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">direction</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">p_</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">s_history</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">p_</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">y_history</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">p_</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">ys</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">yy</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">alpha_hist</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">beta_hist</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">ss</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">gg</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">d0</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">dmax</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">dquad</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">alpha_step</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">sc</span><span class="p">),</span>
+        <span class="n">iteration</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n</span><span class="p">,),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">i32</span><span class="p">),</span>
+        <span class="n">end</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">i32</span><span class="p">),</span>
+        <span class="n">n_loop</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">i32</span><span class="p">),</span>
+        <span class="n">history_count</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">i32</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">state</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">state</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">lbfgs_prepare_cell_state</span><span class="p">(</span>
+    <span class="n">atom_ptr</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">cell_force_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">alignment_atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LBFGSCellState</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a complete, ready-to-step variable-cell chart from atom topology.</span>
+
+<span class="sd">    One call: give it the ordinary ``atom_ptr`` and aligned cells, and it</span>
+<span class="sd">    derives the packed topology, captures the reference chart and computes</span>
+<span class="sd">    ``kappa``. Alignment is checked before the reference cell is captured.</span>
+
+<span class="sd">    Ragged batches are unaffected -- ``atom_ptr`` already carries each</span>
+<span class="sd">    system&#39;s atom count, so nothing here assumes an even split.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    atom_ptr : torch.Tensor, shape (num_systems + 1,), int32</span>
+<span class="sd">        CSR-style atom pointer for the batch.</span>
+<span class="sd">    cell : torch.Tensor, shape (num_systems, 3, 3)</span>
+<span class="sd">        Reference lattice per system, aligned.</span>
+<span class="sd">    cell_force_scale : float, optional</span>
+<span class="sd">        Multiplier on the atom count in ``kappa``.</span>
+<span class="sd">    dtype : torch.dtype, optional</span>
+<span class="sd">        Coordinate precision.</span>
+<span class="sd">    device : optional</span>
+<span class="sd">        Defaults to ``atom_ptr.device``.</span>
+<span class="sd">    alignment_atol : float, optional</span>
+<span class="sd">        Absolute tolerance for entries strictly above the cell diagonal.</span>
+<span class="sd">        Defaults to ``1e-4`` for float32 cells and ``1e-8`` for float64 cells.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    LBFGSCellState</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    nvalchemiops.dynamics.optimizers.lbfgs : the variable-cell contract,</span>
+<span class="sd">        including the requirement that the cells be aligned first.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_TORCH_TO_WP_VEC</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;dtype must be float32 or float64; got </span><span class="si">{</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">atom_ptr</span><span class="o">.</span><span class="n">device</span>
+    <span class="c1"># A host tensor handed to a device kernel is a segmentation fault, not an</span>
+    <span class="c1"># error. ``torch.empty(0, ...)`` resolves an index-less ``&quot;cuda&quot;`` to the</span>
+    <span class="c1"># current device so that spelling is not wrongly refused.</span>
+    <span class="n">resolved</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">device</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="p">((</span><span class="s2">&quot;atom_ptr&quot;</span><span class="p">,</span> <span class="n">atom_ptr</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="n">cell</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">resolved</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is on </span><span class="si">{</span><span class="n">tensor</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">, but the state is being built &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;on </span><span class="si">{</span><span class="n">resolved</span><span class="si">}</span><span class="s2">; preparation does not move inputs between &quot;</span>
+                <span class="s2">&quot;devices&quot;</span>
+            <span class="p">)</span>
+
+    <span class="n">ptr</span> <span class="o">=</span> <span class="n">atom_ptr</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ptr</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;atom_ptr must have num_systems + 1 &gt;= 2 entries; got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ptr</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="n">num_systems</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ptr</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="n">num_atoms</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ptr</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">ptr</span><span class="p">[</span><span class="n">s</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="n">ptr</span><span class="p">[</span><span class="n">s</span><span class="p">])</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_systems</span><span class="p">)]</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">c</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">counts</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;atom_ptr must be non-decreasing; got </span><span class="si">{</span><span class="n">ptr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">kw</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">dtype</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device</span><span class="p">}</span>
+    <span class="n">i32</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device</span><span class="p">}</span>
+    <span class="n">n</span><span class="p">,</span> <span class="n">packed</span> <span class="o">=</span> <span class="n">num_systems</span><span class="p">,</span> <span class="n">num_atoms</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">num_systems</span>
+
+    <span class="c1"># Derived, not carried: a function of the topology alone.</span>
+    <span class="n">ext_atom_ptr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">i32</span><span class="p">)</span>
+    <span class="n">ext_batch_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">packed</span><span class="p">,</span> <span class="o">**</span><span class="n">i32</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">scoped_warp_stream</span><span class="p">(</span><span class="n">device</span><span class="p">):</span>
+        <span class="n">_wp_extend_atom_ptr</span><span class="p">(</span>
+            <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">atom_ptr</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">ext_atom_ptr</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">_wp_atom_ptr_to_batch_idx</span><span class="p">(</span>
+            <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">ext_atom_ptr</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">ext_batch_idx</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="n">state</span> <span class="o">=</span> <span class="n">LBFGSCellState</span><span class="p">(</span>
+        <span class="n">ref_cell</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">ref_cell_inv</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">kappa</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">ext_batch_idx</span><span class="o">=</span><span class="n">ext_batch_idx</span><span class="p">,</span>
+        <span class="n">ext_atom_ptr</span><span class="o">=</span><span class="n">ext_atom_ptr</span><span class="p">,</span>
+        <span class="n">phi</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">phi_inv</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">d_phi</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">cell_dof_a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">cell_dof_b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">cell_force_a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">cell_force_b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">ext_positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">packed</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+        <span class="n">ext_forces</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">packed</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">state</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">num_atoms</span><span class="o">=</span><span class="n">num_atoms</span><span class="p">)</span>
+    <span class="n">_wp_check_packed_topology</span><span class="p">(</span>
+        <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">ext_atom_ptr</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+        <span class="n">wp</span><span class="o">.</span><span class="n">from_torch</span><span class="p">(</span><span class="n">ext_batch_idx</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+        <span class="n">n</span><span class="p">,</span>
+        <span class="n">packed</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="o">**</span><span class="n">i32</span><span class="p">)</span>
+    <span class="n">_lbfgs_set_reference_cell</span><span class="p">(</span>
+        <span class="n">cell</span><span class="p">,</span>
+        <span class="n">state</span><span class="o">.</span><span class="n">ref_cell</span><span class="p">,</span>
+        <span class="n">state</span><span class="o">.</span><span class="n">ref_cell_inv</span><span class="p">,</span>
+        <span class="n">alignment_atol</span><span class="o">=</span><span class="n">alignment_atol</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">_lbfgs_cell_kappa</span><span class="p">(</span><span class="n">n_particles</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">kappa</span><span class="p">,</span> <span class="n">cell_force_scale</span><span class="o">=</span><span class="n">cell_force_scale</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">state</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_state_args</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The dataclass&#39;s tensors keyed by field name.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">state</span><span class="p">)}</span>
+
+
+<div class="viewcode-block" id="lbfgs_step_coord">
+<a class="viewcode-back" href="../../../modules/dynamics/methods.html#nvalchemiops.torch.lbfgs.lbfgs_step_coord">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">lbfgs_step_coord</span><span class="p">(</span>
+    <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">forces</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">state</span><span class="p">:</span> <span class="n">LBFGSState</span><span class="p">,</span>
+    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">maxstep</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+    <span class="n">curvature_eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">compute_reductions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Advance one batched L-BFGS step, consuming one force evaluation.</span>
+
+<span class="sd">    Mutates ``positions`` and every field of ``state`` in place.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    positions, forces : torch.Tensor, shape (num_atoms, 3)</span>
+<span class="sd">        Current geometry and the forces there. Forces, not gradients.</span>
+<span class="sd">    state : LBFGSState</span>
+<span class="sd">        From :func:`lbfgs_prepare_state`, or built from your own tensors.</span>
+<span class="sd">    batch_idx : torch.Tensor, shape (num_atoms,), dtype int32</span>
+<span class="sd">        Sorted system index per atom.</span>
+<span class="sd">    maxstep : float, optional</span>
+<span class="sd">        Largest distance any atom may move in one step.</span>
+<span class="sd">    curvature_eps : float, optional</span>
+<span class="sd">        Relative threshold below which a curvature pair is discarded. Defaults</span>
+<span class="sd">        to ``1e-6`` for float32 coordinates and ``1e-10`` for float64: ``ys``</span>
+<span class="sd">        is accumulated at the coordinate precision, so one value cannot serve</span>
+<span class="sd">        both.</span>
+<span class="sd">    compute_reductions : bool, optional</span>
+<span class="sd">        Set ``False`` only if you have already filled the reduction fields of</span>
+<span class="sd">        ``state`` yourself for this geometry.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If this call&#39;s inputs are incompatible with the prepared state.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_validate</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">forces</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+    <span class="n">_lbfgs_step_op</span><span class="p">(</span>
+        <span class="n">positions</span><span class="p">,</span> <span class="n">forces</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="o">**</span><span class="n">_state_args</span><span class="p">(</span><span class="n">state</span><span class="p">),</span>
+        <span class="n">maxstep</span><span class="o">=</span><span class="n">maxstep</span><span class="p">,</span>
+        <span class="n">curvature_eps</span><span class="o">=</span><span class="n">_resolve_curvature_eps</span><span class="p">(</span><span class="n">curvature_eps</span><span class="p">,</span> <span class="n">_TORCH_TO_WP_SCALAR</span><span class="p">[</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">]),</span>
+        <span class="n">compute_reductions</span><span class="o">=</span><span class="n">compute_reductions</span><span class="p">,</span>
+    <span class="p">)</span>  <span class="c1"># fmt: skip</span></div>
+
+
+
+<div class="viewcode-block" id="lbfgs_step_coord_cell">
+<a class="viewcode-back" href="../../../modules/dynamics/methods.html#nvalchemiops.torch.lbfgs.lbfgs_step_coord_cell">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">lbfgs_step_coord_cell</span><span class="p">(</span>
+    <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">forces</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">stress</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">state</span><span class="p">:</span> <span class="n">LBFGSState</span><span class="p">,</span>
+    <span class="n">cell_state</span><span class="p">:</span> <span class="n">LBFGSCellState</span><span class="p">,</span>
+    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">maxstep</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+    <span class="n">curvature_eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Advance one variable-cell step, relaxing coordinates and cell together.</span>
+
+<span class="sd">    Mutates ``positions``, ``cell`` and both states in place. ``state`` must be</span>
+<span class="sd">    sized for ``num_atoms + 2 * num_systems`` degrees of freedom.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cell : torch.Tensor, shape (num_systems, 3, 3)</span>
+<span class="sd">        Lattice vectors as columns, aligned by ``align_cell`` before the</span>
+<span class="sd">        first step. See :ref:`the variable-cell contract &lt;lbfgs-cell-contract&gt;`</span>
+<span class="sd">        in :mod:`nvalchemiops.dynamics.optimizers.lbfgs`, which is the single</span>
+<span class="sd">        authoritative statement of the cell rules.</span>
+<span class="sd">    stress : torch.Tensor, shape (num_systems, 3, 3)</span>
+<span class="sd">        Cauchy stress, which drives the cell degrees of freedom.</span>
+<span class="sd">    state, cell_state : LBFGSState, LBFGSCellState</span>
+<span class="sd">        From the preparation functions, or built from your own tensors.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    _lbfgs_set_reference_cell : must be called first.</span>
+<span class="sd">    _lbfgs_cell_kappa : must be called first.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_validate_cell</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">forces</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">stress</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">cell_state</span><span class="p">)</span>
+    <span class="n">_lbfgs_step_coord_cell_op</span><span class="p">(</span>
+        <span class="n">forces</span><span class="p">,</span> <span class="n">stress</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">_state_args</span><span class="p">(</span><span class="n">state</span><span class="p">),</span> <span class="o">**</span><span class="n">_state_args</span><span class="p">(</span><span class="n">cell_state</span><span class="p">),</span>
+        <span class="n">maxstep</span><span class="o">=</span><span class="n">maxstep</span><span class="p">,</span>
+        <span class="n">curvature_eps</span><span class="o">=</span><span class="n">_resolve_curvature_eps</span><span class="p">(</span><span class="n">curvature_eps</span><span class="p">,</span> <span class="n">_TORCH_TO_WP_SCALAR</span><span class="p">[</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">]),</span>
+    <span class="p">)</span>  <span class="c1"># fmt: skip</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">forces</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Confirm this call&#39;s inputs match the prepared state.</span>
+
+<span class="sd">    Shapes only -- no device reads. The state re-checks itself too, since its</span>
+<span class="sd">    fields can be reassigned between steps.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">state</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>
+    <span class="n">_check_against_state</span><span class="p">(</span>
+        <span class="n">state</span><span class="p">,</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="p">((</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="n">positions</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="n">forces</span><span class="p">)),</span>
+        <span class="n">indices</span><span class="o">=</span><span class="p">((</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">),),</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_TORCH_TO_WP_VEC</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;positions must be float32 or float64; got </span><span class="si">{</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">forces</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;forces shape </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">forces</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2"> != positions shape &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">state</span><span class="o">.</span><span class="n">num_dofs</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;positions has </span><span class="si">{</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> degrees of freedom but the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;state was prepared for </span><span class="si">{</span><span class="n">state</span><span class="o">.</span><span class="n">num_dofs</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;batch_idx length </span><span class="si">{</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> != positions length &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="n">_CELL_MUTATED</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="n">_OPTIMIZER_BUFFERS</span> <span class="o">+</span> <span class="n">_CELL_SCRATCH</span>
+
+
+<span class="nd">@torch_custom_op</span><span class="p">(</span><span class="s2">&quot;nvalchemiops::lbfgs_step_coord_cell&quot;</span><span class="p">,</span> <span class="n">mutates_args</span><span class="o">=</span><span class="n">_CELL_MUTATED</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_lbfgs_step_coord_cell_op</span><span class="p">(</span>
+    <span class="n">forces</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">stress</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">x_base</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">force_base</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">direction</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">s_history</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">y_history</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ys</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">yy</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">alpha_hist</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">beta_hist</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ss</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">gg</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">d0</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">dmax</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">dquad</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">alpha_step</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">iteration</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">end</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">n_loop</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">history_count</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ref_cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ref_cell_inv</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">kappa</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ext_batch_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ext_atom_ptr</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">phi</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">phi_inv</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">d_phi</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">cell_dof_a</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">cell_dof_b</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">cell_force_a</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">cell_force_b</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ext_positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ext_forces</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">maxstep</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">curvature_eps</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run one registered variable-cell L-BFGS step.&quot;&quot;&quot;</span>
+    <span class="n">vec</span> <span class="o">=</span> <span class="n">_TORCH_TO_WP_VEC</span><span class="p">[</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+    <span class="n">mat</span> <span class="o">=</span> <span class="n">_TORCH_TO_WP_MAT</span><span class="p">[</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+    <span class="n">sc</span> <span class="o">=</span> <span class="n">_TORCH_TO_WP_SCALAR</span><span class="p">[</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+    <span class="k">with</span> <span class="n">scoped_warp_stream</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
+        <span class="n">_wp_step_cell</span><span class="p">(</span>
+            <span class="n">positions</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">forces</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">forces</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">cell</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">cell</span><span class="p">,</span> <span class="n">mat</span><span class="p">),</span>
+            <span class="n">stress</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">stress</span><span class="p">,</span> <span class="n">mat</span><span class="p">),</span>
+            <span class="n">batch_idx</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">x_base</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">x_base</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">force_base</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">force_base</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">direction</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">direction</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">s_history</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">s_history</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">y_history</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">y_history</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">ys</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ys</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">yy</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">yy</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">alpha_hist</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">alpha_hist</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">beta_hist</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">beta_hist</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">ss</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ss</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">gg</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">gg</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">d0</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">d0</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">dmax</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">dmax</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">dquad</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">dquad</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">alpha_step</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">alpha_step</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">iteration</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">iteration</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">end</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">end</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">n_loop</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">n_loop</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">history_count</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">history_count</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">ref_cell</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ref_cell</span><span class="p">,</span> <span class="n">mat</span><span class="p">),</span>
+            <span class="n">ref_cell_inv</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ref_cell_inv</span><span class="p">,</span> <span class="n">mat</span><span class="p">),</span>
+            <span class="n">kappa</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">kappa</span><span class="p">,</span> <span class="n">sc</span><span class="p">),</span>
+            <span class="n">ext_batch_idx</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ext_batch_idx</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">ext_atom_ptr</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ext_atom_ptr</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">phi</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">phi</span><span class="p">,</span> <span class="n">mat</span><span class="p">),</span>
+            <span class="n">phi_inv</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">phi_inv</span><span class="p">,</span> <span class="n">mat</span><span class="p">),</span>
+            <span class="n">d_phi</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">d_phi</span><span class="p">,</span> <span class="n">mat</span><span class="p">),</span>
+            <span class="n">cell_dof_a</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">cell_dof_a</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">cell_dof_b</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">cell_dof_b</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">cell_force_a</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">cell_force_a</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">cell_force_b</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">cell_force_b</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">ext_positions</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ext_positions</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">ext_forces</span><span class="o">=</span><span class="n">_wp</span><span class="p">(</span><span class="n">ext_forces</span><span class="p">,</span> <span class="n">vec</span><span class="p">),</span>
+            <span class="n">maxstep</span><span class="o">=</span><span class="n">maxstep</span><span class="p">,</span>
+            <span class="n">curvature_eps</span><span class="o">=</span><span class="n">curvature_eps</span><span class="p">,</span>
+        <span class="p">)</span>
+
+
+<span class="n">register_noop_fake</span><span class="p">(</span><span class="n">_lbfgs_step_coord_cell_op</span><span class="p">)</span>
+
+<span class="n">_n_opt</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">_OPTIMIZER_BUFFERS</span><span class="p">)</span>
+<span class="n">_cell_params</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">_lbfgs_step_coord_cell_op</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">_cell_params</span><span class="p">[</span><span class="mi">5</span> <span class="p">:</span> <span class="mi">5</span> <span class="o">+</span> <span class="n">_n_opt</span><span class="p">]</span> <span class="o">!=</span> <span class="n">_OPTIMIZER_BUFFERS</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;_OPTIMIZER_BUFFERS and the cell operator have diverged&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">_cell_params</span><span class="p">[</span><span class="mi">5</span> <span class="o">+</span> <span class="n">_n_opt</span> <span class="p">:</span> <span class="mi">5</span> <span class="o">+</span> <span class="n">_n_opt</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">_CELL_BUFFERS</span><span class="p">)]</span> <span class="o">!=</span> <span class="n">_CELL_BUFFERS</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;_CELL_BUFFERS and the cell operator have diverged&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_lbfgs_check_cell_alignment</span><span class="p">(</span>
+    <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">alignment_atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check upper-triangle cell entries before reference-cell capture.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">3</span> <span class="ow">or</span> <span class="n">cell</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;cell must have shape (num_systems, 3, 3); got </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">cell</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_TORCH_TO_WP_MAT</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cell must be float32 or float64; got </span><span class="si">{</span><span class="n">cell</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">alignment_atol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">alignment_atol</span> <span class="o">=</span> <span class="mf">1e-4</span> <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span> <span class="k">else</span> <span class="mf">1e-8</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">alignment_atol</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">alignment_atol</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">OverflowError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;alignment_atol must be finite and non-negative; got </span><span class="si">{</span><span class="n">alignment_atol</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">alignment_atol</span><span class="p">)</span> <span class="ow">or</span> <span class="n">alignment_atol</span> <span class="o">&lt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;alignment_atol must be finite and non-negative; got </span><span class="si">{</span><span class="n">alignment_atol</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="n">max_upper</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">cell</span><span class="p">,</span> <span class="n">diagonal</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+    <span class="n">aligned</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">max_upper</span> <span class="o">&lt;=</span> <span class="n">alignment_atol</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">is_compiling</span><span class="p">():</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_assert_async</span><span class="p">(</span><span class="n">aligned</span><span class="p">,</span> <span class="n">_CELL_ALIGNMENT_ERROR</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">aligned</span><span class="o">.</span><span class="n">item</span><span class="p">()):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">_CELL_ALIGNMENT_ERROR</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_lbfgs_set_reference_cell</span><span class="p">(</span>
+    <span class="n">cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ref_cell</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">ref_cell_inv</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">alignment_atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Capture the reference cell that defines the variable-cell chart.</span>
+
+<span class="sd">    Writes the caller&#39;s ``ref_cell`` and ``ref_cell_inv`` buffers in place.</span>
+
+<span class="sd">    Coordinates are measured relative to a cell held fixed for the whole</span>
+<span class="sd">    relaxation, which is what makes history pairs from different iterations</span>
+<span class="sd">    comparable. Call this once, before the first step. Calling it again</span>
+<span class="sd">    re-references the chart and invalidates every stored curvature pair, so</span>
+<span class="sd">    restore the optimizer buffers to their initial contents if you do.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cell : torch.Tensor, shape (num_systems, 3, 3)</span>
+<span class="sd">        Current cell, lattice vectors as columns. Alignment is checked before</span>
+<span class="sd">        capturing the reference cell.</span>
+<span class="sd">    ref_cell, ref_cell_inv : torch.Tensor, shape (num_systems, 3, 3)</span>
+<span class="sd">        OUTPUT. Caller-owned buffers for the reference cell and its inverse.</span>
+<span class="sd">    alignment_atol : float, optional</span>
+<span class="sd">        Absolute tolerance for entries strictly above the cell diagonal.</span>
+<span class="sd">        Defaults to ``1e-4`` for float32 cells and ``1e-8`` for float64 cells.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_lbfgs_check_cell_alignment</span><span class="p">(</span><span class="n">cell</span><span class="p">,</span> <span class="n">alignment_atol</span><span class="p">)</span>
+    <span class="n">mat</span> <span class="o">=</span> <span class="n">_TORCH_TO_WP_MAT</span><span class="p">[</span><span class="n">cell</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+    <span class="c1"># Bind Warp to PyTorch&#39;s current stream, as the step operators do. Without</span>
+    <span class="c1"># it the launch sits on Warp&#39;s own stream and, on a non-default Torch</span>
+    <span class="c1"># stream, can race the producer of `cell` or the next consumer of the</span>
+    <span class="c1"># outputs.</span>
+    <span class="k">with</span> <span class="n">scoped_warp_stream</span><span class="p">(</span><span class="n">cell</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
+        <span class="n">_wp_set_reference_cell</span><span class="p">(</span>
+            <span class="n">_wp</span><span class="p">(</span><span class="n">cell</span><span class="p">,</span> <span class="n">mat</span><span class="p">),</span> <span class="n">_wp</span><span class="p">(</span><span class="n">ref_cell</span><span class="p">,</span> <span class="n">mat</span><span class="p">),</span> <span class="n">_wp</span><span class="p">(</span><span class="n">ref_cell_inv</span><span class="p">,</span> <span class="n">mat</span><span class="p">)</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_lbfgs_cell_kappa</span><span class="p">(</span>
+    <span class="n">n_particles</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">kappa</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">cell_force_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fill the per-system cell coordinate scaling, in place.</span>
+
+<span class="sd">    The cell coordinate is ``kappa * Phi`` and its conjugate force is divided</span>
+<span class="sd">    by the same ``kappa``, which is what keeps ``g . dx`` independent of the</span>
+<span class="sd">    scaling. Depends only on topology, so compute it once and reuse it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_particles : torch.Tensor, shape (num_systems,), dtype int32</span>
+<span class="sd">        Atom count per system.</span>
+<span class="sd">    kappa : torch.Tensor, shape (num_systems,)</span>
+<span class="sd">        OUTPUT. Must match the **coordinate** precision, not float64, because</span>
+<span class="sd">        it scales matrices.</span>
+<span class="sd">    cell_force_scale : float, optional</span>
+<span class="sd">        Multiplier on the atom count. Larger values make the cell move less per</span>
+<span class="sd">        step relative to the atoms; ``1 / atoms_per_system`` puts the two on a</span>
+<span class="sd">        comparable footing.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">kappa</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_TORCH_TO_WP_SCALAR</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;kappa must be float32 or float64; got </span><span class="si">{</span><span class="n">kappa</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">scoped_warp_stream</span><span class="p">(</span><span class="n">kappa</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
+        <span class="n">_wp_cell_kappa</span><span class="p">(</span>
+            <span class="n">_wp</span><span class="p">(</span><span class="n">n_particles</span><span class="p">,</span> <span class="n">wp</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">_wp</span><span class="p">(</span><span class="n">kappa</span><span class="p">,</span> <span class="n">_TORCH_TO_WP_SCALAR</span><span class="p">[</span><span class="n">kappa</span><span class="o">.</span><span class="n">dtype</span><span class="p">]),</span>
+            <span class="n">cell_force_scale</span><span class="o">=</span><span class="n">cell_force_scale</span><span class="p">,</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_cell</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">forces</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">stress</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">cell_state</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Confirm this call&#39;s inputs match both prepared states.&quot;&quot;&quot;</span>
+    <span class="n">state</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>
+    <span class="n">cell_state</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">num_atoms</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">_check_against_state</span><span class="p">(</span>
+        <span class="n">state</span><span class="p">,</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="p">(</span>
+            <span class="p">(</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="n">positions</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="n">forces</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="n">cell</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">&quot;stress&quot;</span><span class="p">,</span> <span class="n">stress</span><span class="p">),</span>
+        <span class="p">),</span>  <span class="c1"># fmt: skip</span>
+        <span class="n">indices</span><span class="o">=</span><span class="p">((</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">),),</span>
+        <span class="n">extra_states</span><span class="o">=</span><span class="p">((</span><span class="s2">&quot;cell_state&quot;</span><span class="p">,</span> <span class="n">cell_state</span><span class="p">),),</span>
+    <span class="p">)</span>
+    <span class="n">num_systems</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">num_systems</span>
+    <span class="k">if</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_TORCH_TO_WP_VEC</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;positions must be float32 or float64; got </span><span class="si">{</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">forces</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;forces shape </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">forces</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2"> != positions shape &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">num_systems</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;cell must have shape (</span><span class="si">{</span><span class="n">num_systems</span><span class="si">}</span><span class="s2">, 3, 3); got </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">cell</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">stress</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">cell</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;stress shape </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">stress</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2"> != cell shape </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">cell</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">cell</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">or</span> <span class="n">stress</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cell and stress must share the dtype of positions&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;batch_idx length </span><span class="si">{</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> != positions length &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="n">expected</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">num_systems</span>
+    <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">num_dofs</span> <span class="o">!=</span> <span class="n">expected</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;state is sized for </span><span class="si">{</span><span class="n">state</span><span class="o">.</span><span class="n">num_dofs</span><span class="si">}</span><span class="s2"> degrees of freedom, but the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;variable-cell path needs </span><span class="si">{</span><span class="n">expected</span><span class="si">}</span><span class="s2"> (num_atoms + 2 * num_systems)&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">cell_state</span><span class="o">.</span><span class="n">num_packed_dofs</span> <span class="o">!=</span> <span class="n">expected</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;cell state is packed for </span><span class="si">{</span><span class="n">cell_state</span><span class="o">.</span><span class="n">num_packed_dofs</span><span class="si">}</span><span class="s2"> degrees of &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;freedom, expected </span><span class="si">{</span><span class="n">expected</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

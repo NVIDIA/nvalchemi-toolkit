@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.training.losses.terms &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.training.losses.terms &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/losses/terms';</script>
-    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -478,7 +478,7 @@ document.write(`
     <span class="n">DTypePolicy</span><span class="p">,</span>
     <span class="n">ReductionContext</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses.reductions</span><span class="w"> </span><span class="kn">import</span> <span class="n">per_graph_sum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses.reductions</span><span class="w"> </span><span class="kn">import</span> <span class="n">_require_metadata</span><span class="p">,</span> <span class="n">per_graph_sum</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
@@ -490,13 +490,6 @@ document.write(`
 <span class="n">_DenseForceMask</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V 3&quot;</span><span class="p">]</span>
 <span class="n">_PaddedForceMask</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B V_max 3&quot;</span><span class="p">]</span>
 <span class="n">_PerGraphValues</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">]</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_require_metadata</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">loss_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return required loss metadata or raise a focused error.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">loss_name</span><span class="si">}</span><span class="s2"> requires </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">=... metadata.&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">value</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_node_counts</span><span class="p">(</span>
@@ -1051,6 +1044,16 @@ document.write(`
 <span class="sd">        How to handle prediction/target dtype mismatches before validation.</span>
 <span class="sd">        ``&quot;strict&quot;`` raises; the other policies cast one tensor to match the</span>
 <span class="sd">        other.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Both sides of the reduction accumulate in at least fp32 on the padded</span>
+<span class="sd">    layout as well as the dense one, starting with the sum over an atom&#39;s three</span>
+<span class="sd">    Cartesian components, so an fp16 total past the half-precision ceiling of</span>
+<span class="sd">    65504 no longer saturates to ``inf`` before it is normalized. A</span>
+<span class="sd">    half-precision input therefore returns an fp32 loss and</span>
+<span class="sd">    :attr:`per_sample_loss` whichever layout it arrives in; fp32 and fp64</span>
+<span class="sd">    inputs are unchanged.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">requires_eval_grad</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1121,14 +1124,17 @@ document.write(`
             <span class="k">if</span> <span class="n">num_graphs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">num_graphs</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;num_graphs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalize_by_atom_count</span><span class="p">:</span>
+            <span class="n">acc_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">residual</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">residual</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
-                <span class="n">per_graph_num</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
-                <span class="n">per_graph_den</span> <span class="o">=</span> <span class="n">valid_components</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+                <span class="n">per_graph_num</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span>
+                <span class="n">per_graph_den</span> <span class="o">=</span> <span class="n">valid_components</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">per_sample_loss</span> <span class="o">=</span> <span class="p">(</span>
                     <span class="n">per_graph_num</span> <span class="o">/</span> <span class="n">per_graph_den</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
                 <span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
                 <span class="k">return</span> <span class="n">per_graph_num</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">per_graph_den</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">valid_components</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span> <span class="o">/</span> <span class="n">valid_components</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
         <span class="n">per_graph_num</span><span class="p">,</span> <span class="n">per_graph_den</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_per_graph_force_terms</span><span class="p">(</span>
             <span class="n">residual</span><span class="p">,</span> <span class="n">valid_components</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span>
         <span class="p">)</span>
@@ -1183,8 +1189,9 @@ document.write(`
         <span class="n">num_graphs</span> <span class="o">=</span> <span class="n">_require_metadata</span><span class="p">(</span>
             <span class="n">num_graphs</span><span class="p">,</span> <span class="s2">&quot;num_graphs&quot;</span><span class="p">,</span> <span class="n">loss_name</span><span class="o">=</span><span class="s2">&quot;ForceMSELoss&quot;</span>
         <span class="p">)</span>
-        <span class="n">per_atom_se</span> <span class="o">=</span> <span class="n">squared_error</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">per_atom_valid</span> <span class="o">=</span> <span class="n">valid_components</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">acc_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">squared_error</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">per_atom_se</span> <span class="o">=</span> <span class="n">squared_error</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span>
+        <span class="n">per_atom_valid</span> <span class="o">=</span> <span class="n">valid_components</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span>
         <span class="n">per_graph_se_sum</span> <span class="o">=</span> <span class="n">per_graph_sum</span><span class="p">(</span><span class="n">per_atom_se</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">num_graphs</span><span class="p">)</span>
         <span class="n">per_graph_valid</span> <span class="o">=</span> <span class="n">per_graph_sum</span><span class="p">(</span>
             <span class="n">per_atom_valid</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">num_graphs</span>
@@ -1200,7 +1207,11 @@ document.write(`
         <span class="n">num_graphs</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>  <span class="c1"># noqa: ARG002</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">_PerGraphValues</span><span class="p">,</span> <span class="n">_PerGraphValues</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return padded-force per-graph numerators and denominators.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">squared_error</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)),</span> <span class="n">valid_components</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">acc_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">squared_error</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">squared_error</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">),</span>
+            <span class="n">valid_components</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">),</span>
+        <span class="p">)</span>
 
     <span class="nd">@dispatch</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_per_graph_force_terms</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
@@ -1269,6 +1280,12 @@ document.write(`
 <span class="sd">        How to handle prediction/target dtype mismatches before validation.</span>
 <span class="sd">        ``&quot;strict&quot;`` raises; the other policies cast one tensor to match the</span>
 <span class="sd">        other.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The inherited reduction widens its sums exactly as :class:`ForceMSELoss`</span>
+<span class="sd">    does, so a half-precision input returns an fp32 loss on the dense and the</span>
+<span class="sd">    padded force layout alike.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -1364,6 +1381,15 @@ document.write(`
 <span class="sd">        How to handle prediction/target dtype mismatches before validation.</span>
 <span class="sd">        ``&quot;strict&quot;`` raises; the other policies cast one tensor to match the</span>
 <span class="sd">        other.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Per-atom norms and their atom counts accumulate in at least fp32 on the</span>
+<span class="sd">    padded layout as well as the dense one, so an fp16 total past the</span>
+<span class="sd">    half-precision ceiling of 65504 no longer saturates to ``inf`` before it is</span>
+<span class="sd">    normalized. A half-precision input therefore returns an fp32 loss and</span>
+<span class="sd">    :attr:`per_sample_loss` whichever layout it arrives in; fp32 and fp64</span>
+<span class="sd">    inputs are unchanged.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -1437,12 +1463,17 @@ document.write(`
             <span class="k">if</span> <span class="n">num_graphs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">num_graphs</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;num_graphs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalize_by_atom_count</span><span class="p">:</span>
+            <span class="n">acc_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">residual</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">residual</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
-                <span class="n">per_graph_counts</span> <span class="o">=</span> <span class="n">atom_weights</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+                <span class="n">per_graph_counts</span> <span class="o">=</span> <span class="n">atom_weights</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span>
+                    <span class="mf">1.0</span>
+                <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">per_sample_loss</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">per_graph_counts</span>
+                    <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span> <span class="o">/</span> <span class="n">per_graph_counts</span>
                 <span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
-            <span class="k">return</span> <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">atom_weights</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span> <span class="o">/</span> <span class="n">atom_weights</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
         <span class="n">per_graph_sum_l2</span><span class="p">,</span> <span class="n">per_graph_counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_per_graph_atom_terms</span><span class="p">(</span>
             <span class="n">residual</span><span class="p">,</span> <span class="n">atom_weights</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span>
         <span class="p">)</span>
@@ -1486,7 +1517,11 @@ document.write(`
                 <span class="n">per_graph_sum</span><span class="p">(</span><span class="n">per_atom_values</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">num_graphs</span><span class="p">),</span>
                 <span class="n">per_graph_sum</span><span class="p">(</span><span class="n">atom_weights</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">num_graphs</span><span class="p">),</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="n">per_atom_values</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span> <span class="n">atom_weights</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">acc_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">per_atom_values</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">per_atom_values</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">),</span>
+            <span class="n">atom_weights</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">),</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="ForceL2NormLoss.extra_repr">
 <a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.ForceL2NormLoss.html#nvalchemi.training.ForceL2NormLoss.extra_repr">[docs]</a>

@@ -1,0 +1,768 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.models.gen.base &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/models/gen/base';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.mo...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.models.gen.base</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Model-side generative API: config and mixin.</span>
+
+<span class="sd">This is the *non-energy* counterpart to</span>
+<span class="sd">:class:`~nvalchemi.models.base.BaseModelMixin`. Where ``BaseModelMixin`` is</span>
+<span class="sd">MLIP/energy-oriented (energy, forces, stress, neighbor lists, autograd,</span>
+<span class="sd">pipeline composition), a generative model owns a family-specific sampling</span>
+<span class="sd">procedure (a diffusion sampler&#39;s loop, a GAN decoder pass, a packing or</span>
+<span class="sd">population loop) and shares none of that energy machinery. The two are</span>
+<span class="sd">kept separate: a generative model builds on this mixin, not</span>
+<span class="sd">``BaseModelMixin``.</span>
+
+<span class="sd">Two pieces live here:</span>
+
+<span class="sd">* :class:`GenerativeModelConfig` — a pydantic config schema describing a</span>
+<span class="sd">  generative model&#39;s capability surface: batch-field declarations and</span>
+<span class="sd">  prediction-output keys. It is set as ``self.model_config``</span>
+<span class="sd">  in a wrapper&#39;s ``__init__``, mirroring the ``BaseModelMixin`` pattern (the</span>
+<span class="sd">  config lives with the model, not on the</span>
+<span class="sd">  :class:`~nvalchemi.gen.generator.AtomisticGenerator`).</span>
+<span class="sd">* :class:`GenerativeModelMixin` — the model mixin providing</span>
+<span class="sd">  ``forward`` (raw output) and ``adapt_output`` (raw -&gt; :class:`ModelOutputs`).</span>
+<span class="sd">  It owns no conditioning, scheduler, sampler, or guidance.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;GenerativeModelConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;GenerativeModelMixin&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="GenerativeModelConfig">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.models.gen.GenerativeModelConfig.html#nvalchemi.models.gen.GenerativeModelConfig">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GenerativeModelConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Pydantic config schema for a generative (non-energy) model.</span>
+
+<span class="sd">    A :class:`GenerativeModelConfig` is the contract between a generative model</span>
+<span class="sd">    wrapper and the rest of nvalchemi. Every</span>
+<span class="sd">    :class:`GenerativeModelMixin` subclass must set a ``self.model_config``</span>
+<span class="sd">    instance in its ``__init__`` (no class-level default,</span>
+<span class="sd">    so each wrapper owns its own config object — mirroring</span>
+<span class="sd">    :class:`~nvalchemi.models.base.BaseModelMixin`).</span>
+
+<span class="sd">    The base schema holds only the three capability fields below. Models with</span>
+<span class="sd">    model-specific runtime fields should subclass it (e.g. ``class</span>
+<span class="sd">    ClariConfig(GenerativeModelConfig): temperature: float = 1.0``) — the</span>
+<span class="sd">    mixin&#39;s ``isinstance`` enforcement accepts subclasses.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    required_inputs</span>
+<span class="sd">        Batch fields the model&#39;s conditioning reads (empty means</span>
+<span class="sd">        unconditional). Declared here so a</span>
+<span class="sd">        :class:`~nvalchemi.gen.pipeline.GenerationPipeline` can validate stage</span>
+<span class="sd">        links at construction; a generator writes *something* by definition,</span>
+<span class="sd">        so declarations are required, not optional.</span>
+<span class="sd">    outputs</span>
+<span class="sd">        Batch fields the model&#39;s generated output carries (written or</span>
+<span class="sd">        forwarded). Distinct namespace from</span>
+<span class="sd">        :attr:`prediction_outputs`, which keys ``ModelOutputs`` (e.g.</span>
+<span class="sd">        ``&quot;flow&quot;``), not batch fields.</span>
+<span class="sd">    prediction_outputs</span>
+<span class="sd">        Output keys the model predicts (e.g. ``{&quot;flow&quot;}``). ``None`` defaults</span>
+<span class="sd">        to ``{&quot;flow&quot;}`` at use time.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.models.gen.base import GenerativeModelConfig</span>
+<span class="sd">    &gt;&gt;&gt; cfg = GenerativeModelConfig(</span>
+<span class="sd">    ...     required_inputs=frozenset({&quot;positions&quot;, &quot;atomic_numbers&quot;}),</span>
+<span class="sd">    ...     outputs=frozenset({&quot;positions&quot;, &quot;atomic_numbers&quot;, &quot;cell&quot;}),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; cfg.prediction_outputs is None</span>
+<span class="sd">    True</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    ``extra=&quot;forbid&quot;``: unknown constructor keywords raise</span>
+<span class="sd">    :class:`pydantic.ValidationError`, matching the</span>
+<span class="sd">    :class:`~nvalchemi.models.base.ModelConfig` pattern.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="n">required_inputs</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Batch fields the model&#39;s conditioning reads (empty = &quot;</span>
+                <span class="s2">&quot;unconditional). Required: feeds GenerationPipeline link &quot;</span>
+                <span class="s2">&quot;validation.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">outputs</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Batch fields the model&#39;s generated output carries &quot;</span>
+                <span class="s2">&quot;(written or forwarded). Required: feeds GenerationPipeline &quot;</span>
+                <span class="s2">&quot;link validation.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">prediction_outputs</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Output keys the model predicts (e.g. {&#39;flow&#39;}). None &quot;</span>
+                <span class="s2">&quot;defaults to {&#39;flow&#39;} at use time.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="GenerativeModelMixin">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.models.gen.GenerativeModelMixin.html#nvalchemi.models.gen.GenerativeModelMixin">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GenerativeModelMixin</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mixin class for models designed for generative workflows.</span>
+
+<span class="sd">    This is the counterpart to :class:`~nvalchemi.models.base.BaseModelMixin`.</span>
+<span class="sd">    It mirrors the two-step output pattern — ``forward`` returns raw output,</span>
+<span class="sd">    :meth:`adapt_output` structures it into :class:`ModelOutputs` — with none</span>
+<span class="sd">    of the energy machinery (no neighbor lists, no autograd plumbing).</span>
+
+<span class="sd">    Concrete implementations must provide:</span>
+
+<span class="sd">    - ``model_config`` attribute — a :class:`GenerativeModelConfig` (or a</span>
+<span class="sd">      subclass of it) set in ``__init__`` (enforced by</span>
+<span class="sd">      :meth:`__init_subclass__`).</span>
+<span class="sd">    - :meth:`forward` — raw model output for one forward call.</span>
+
+<span class="sd">    The mixin provides defaults for:</span>
+
+<span class="sd">    - :meth:`adapt_output`: maps raw output to :class:`ModelOutputs`, keyed</span>
+<span class="sd">      by :attr:`GenerativeModelConfig.prediction_outputs` (defaulting to</span>
+<span class="sd">      ``{&quot;flow&quot;}``).</span>
+
+<span class="sd">    ``forward`` / :meth:`adapt_output` are the model-side contract: the</span>
+<span class="sd">    :class:`~nvalchemi.gen.generator.AtomisticGenerator` never reads them;</span>
+<span class="sd">    the generating function calls them. Materialization and conditioning</span>
+<span class="sd">    belong to the procedure, so the mixin defines neither. A model may define</span>
+<span class="sd">    a ``to_batch(sample, cond_batch=None) -&gt; Batch`` helper for its</span>
+<span class="sd">    generating function to call (the demos do); nothing in the framework</span>
+<span class="sd">    looks for it.</span>
+
+<span class="sd">    Classes using this mixin do not own the generation process: that lives</span>
+<span class="sd">    with the :class:`~nvalchemi.gen.generator.GeneratingFunction` (driven by</span>
+<span class="sd">    the :class:`~nvalchemi.gen.generator.AtomisticGenerator`); the model is what</span>
+<span class="sd">    the function samples from.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span><span class="p">:</span> <span class="n">GenerativeModelConfig</span>
+
+    <span class="c1"># model_config must be set as an instance attribute in each subclass</span>
+    <span class="c1"># __init__: self.model_config = GenerativeModelConfig(...). There is</span>
+    <span class="c1"># intentionally NO class-level default (see BaseModelMixin for the same</span>
+    <span class="c1"># rationale). __init_subclass__ wraps __init__ to enforce this at</span>
+    <span class="c1"># construction time.</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Hook applied to every concrete subclass at class-creation time.</span>
+
+<span class="sd">        Wraps the subclass ``__init__`` so that after construction,</span>
+<span class="sd">        ``self.model_config`` is verified to exist and be a</span>
+<span class="sd">        :class:`GenerativeModelConfig`. This catches the common mistake of</span>
+<span class="sd">        forgetting to set ``model_config`` with a clear error instead of a late</span>
+<span class="sd">        ``AttributeError`` deep in a forward pass.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to the superclass hook.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="c1"># Inject extra_repr onto the concrete class so it takes precedence over</span>
+        <span class="c1"># ``nn.Module.extra_repr`` (which precedes this mixin in the MRO when a</span>
+        <span class="c1"># wrapper is declared as ``class W(nn.Module, GenerativeModelMixin)``).</span>
+        <span class="k">if</span> <span class="s2">&quot;extra_repr&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">extra_repr</span> <span class="o">=</span> <span class="n">GenerativeModelMixin</span><span class="o">.</span><span class="n">_config_extra_repr</span>
+        <span class="k">if</span> <span class="s2">&quot;__init__&quot;</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+
+            <span class="n">original_init</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span>
+
+            <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">original_init</span><span class="p">)</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">_checked_init</span><span class="p">(</span><span class="bp">self</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">original_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">)</span>
+                <span class="n">cfg</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;model_config&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">GenerativeModelConfig</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.__init__() must set &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;self.model_config = GenerativeModelConfig(...). &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;See GenerativeModelMixin docstring for details.&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span> <span class="o">=</span> <span class="n">_checked_init</span>  <span class="c1"># type: ignore[attr-defined]</span>
+
+<div class="viewcode-block" id="GenerativeModelMixin.adapt_output">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.models.gen.GenerativeModelMixin.html#nvalchemi.models.gen.GenerativeModelMixin.adapt_output">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">adapt_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Map raw model output to :class:`ModelOutputs`.</span>
+
+<span class="sd">        The default builds an :class:`OrderedDict` keyed by</span>
+<span class="sd">        :attr:`GenerativeModelConfig.prediction_outputs` (defaulting to</span>
+<span class="sd">        ``{&quot;flow&quot;}``). A dict-like ``raw`` fills matching keys; a single</span>
+<span class="sd">        :class:`~torch.Tensor` is placed under the ``&quot;flow&quot;`` key (or the</span>
+<span class="sd">        single configured key).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        raw</span>
+<span class="sd">            Raw output from :meth:`forward`.</span>
+<span class="sd">        data</span>
+<span class="sd">            Source structure data (for context/metadata).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ModelOutputs</span>
+<span class="sd">            ``OrderedDict`` with the active prediction outputs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">prediction_outputs</span> <span class="ow">or</span> <span class="p">{</span><span class="s2">&quot;flow&quot;</span><span class="p">}</span>
+        <span class="n">output</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">keys</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">output</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">raw</span><span class="p">:</span>
+                    <span class="n">output</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;flow&quot;</span> <span class="k">if</span> <span class="s2">&quot;flow&quot;</span> <span class="ow">in</span> <span class="n">output</span> <span class="k">else</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">output</span><span class="p">))</span>
+            <span class="n">output</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw</span>
+        <span class="k">return</span> <span class="n">output</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_config_extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Format the generative config for ``nn.Module.__repr__``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        self</span>
+<span class="sd">            The wrapper instance (injected onto concrete subclasses).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            A short summary of the declared batch-field contracts.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;model_config&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">GenerativeModelConfig</span><span class="p">):</span>
+            <span class="k">return</span> <span class="s2">&quot;model_config=&lt;not set&gt;&quot;</span>
+        <span class="n">consumes</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">required_inputs</span><span class="p">))</span>
+        <span class="n">produces</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">outputs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;required_inputs=</span><span class="se">{{</span><span class="si">{</span><span class="n">consumes</span><span class="si">}</span><span class="se">}}</span><span class="s2">, outputs=</span><span class="se">{{</span><span class="si">{</span><span class="n">produces</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

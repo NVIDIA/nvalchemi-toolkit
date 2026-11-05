@@ -1,0 +1,6 @@
+﻿nvalchemi.training.move\_to\_devices
+====================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: move_to_devices

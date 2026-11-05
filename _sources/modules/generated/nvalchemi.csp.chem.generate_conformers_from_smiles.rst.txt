@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.chem.generate\_conformers\_from\_smiles
+=====================================================
+
+.. currentmodule:: nvalchemi.csp.chem
+
+.. autofunction:: generate_conformers_from_smiles

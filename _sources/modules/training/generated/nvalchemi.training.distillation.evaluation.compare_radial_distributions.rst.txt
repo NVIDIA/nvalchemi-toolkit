@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.evaluation.compare\_radial\_distributions
+=========================================================================
+
+.. currentmodule:: nvalchemi.training.distillation.evaluation
+
+.. autofunction:: compare_radial_distributions

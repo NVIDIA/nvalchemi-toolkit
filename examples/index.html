@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Examples &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Examples &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/index';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Basic Examples" href="basic/index.html" />
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -472,16 +483,17 @@ document.write(`
 familiar with tools like ASE.  Each script focuses on one feature set
 and runs end-to-end on a single GPU in under 60 seconds.</p>
 <p><strong>01 — Data Structures</strong>: AtomicData and Batch API.
-<strong>02 — Geometry Optimization</strong>: FIRE optimizer with NeighborListHook and ConvergenceHook.
+<strong>02 — Geometry Optimization</strong>: FIRE2 optimizer with NeighborListHook and ConvergenceHook.
 <strong>03 — ASE Integration</strong>: Loading ASE structures, FreezeAtomsHook on a surface system.
 <strong>04 — NVE MD</strong>: Microcanonical dynamics, WrapPeriodicHook, EnergyDriftMonitorHook.
-<strong>05 — NVT MD</strong>: Langevin thermostat, thermalization, LoggingHook to CSV.</p>
+<strong>05 — NVT MD</strong>: Langevin thermostat, thermalization, LoggingHook to CSV.
+<strong>06 — L-BFGS Optimization</strong>: LBFGS as a drop-in for FIRE2, relaxing a batch of argon clusters.</p>
 <div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example walks through the full API of AtomicData and Batch: construction, properties, indexing, mutation, device movement, and serialization."><img alt="" src="../_images/sphx_glr_01_data_structures_thumb.png" />
 <p><a class="reference internal" href="basic/01_data_structures.html"><span class="doc">AtomicData and Batch: Graph-structured molecular data</span></a></p>
   <div class="sphx-glr-thumbnail-title">AtomicData and Batch: Graph-structured molecular data</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE algorithm on a batch of argon clusters described by the Lennard-Jones potential."><img alt="" src="../_images/sphx_glr_02_geometry_optimization_thumb.png" />
-<p><a class="reference internal" href="basic/02_geometry_optimization.html"><span class="doc">FIRE Geometry Optimization with Lennard-Jones Argon</span></a></p>
-  <div class="sphx-glr-thumbnail-title">FIRE Geometry Optimization with Lennard-Jones Argon</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE2 algorithm on a batch of argon clusters described by the Lennard-Jones potential."><img alt="" src="../_images/sphx_glr_02_geometry_optimization_thumb.png" />
+<p><a class="reference internal" href="basic/02_geometry_optimization.html"><span class="doc">FIRE2 Geometry Optimization with Lennard-Jones Argon</span></a></p>
+  <div class="sphx-glr-thumbnail-title">FIRE2 Geometry Optimization with Lennard-Jones Argon</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="This example shows how to load real atomic structures from ASE into the nvalchemi-toolkit workflow.  ASE provides a rich library of molecular and crystal builders, file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting ase.Atoms objects via AtomicData.from_atoms."><img alt="" src="../_images/sphx_glr_03_ase_integration_thumb.png" />
 <p><a class="reference internal" href="basic/03_ase_integration.html"><span class="doc">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</span></a></p>
   <div class="sphx-glr-thumbnail-title">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</div>
@@ -491,6 +503,9 @@ and runs end-to-end on a single GPU in under 60 seconds.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="The NVT ensemble (constant Number of atoms, Volume, and Temperature) samples the canonical distribution.  A thermostat couples the system to a heat bath, injecting or removing kinetic energy to maintain the target temperature."><img alt="" src="../_images/sphx_glr_05_nvt_langevin_thumb.png" />
 <p><a class="reference internal" href="basic/05_nvt_langevin.html"><span class="doc">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</span></a></p>
   <div class="sphx-glr-thumbnail-title">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="LBFGS is a drop-in alternative to FIRE2: same constructor shape, same hooks, same convergence criterion, one force evaluation per step.  It builds a quasi-Newton direction from the last history_size position/force differences, so it usually needs far fewer steps."><img alt="" src="../_images/sphx_glr_06_geometry_optimization_lbfgs_thumb.png" />
+<p><a class="reference internal" href="basic/06_geometry_optimization_lbfgs.html"><span class="doc">L-BFGS Geometry Optimization with Lennard-Jones Argon</span></a></p>
+  <div class="sphx-glr-thumbnail-title">L-BFGS Geometry Optimization with Lennard-Jones Argon</div>
 </div></div></section>
 <section id="intermediate-examples">
 <h1>Intermediate Examples<a class="headerlink" href="#intermediate-examples" title="Link to this heading">#</a></h1>
@@ -515,7 +530,17 @@ selection.</p>
 <p><strong>07 — Rich Training Reporting</strong>: Live Rich dashboard driven by synthetic
 training losses, validation metrics, progress counters, and learning-rate
 scheduler values.</p>
-<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages."><img alt="" src="../_images/sphx_glr_01_multistage_pipeline_thumb.png" />
+<p><strong>08 — LoRA Fine-Tuning</strong>: Download the LPSC dataset in EXTXYZ format, convert
+it to in-memory atomic data, create training and validation subsets, fit atomic
+reference energies, and fine-tune <code class="docutils literal notranslate"><span class="pre">medium-mpa-0</span></code> with LoRA adapters.</p>
+<p><strong>09 — Offline Distillation</strong>: Labeling a dataset with a frozen foundation
+teacher, streaming the labeled Zarr store, and distilling energy, force, and
+per-atom energy signals into a student with DistillationStrategy.</p>
+<p><strong>10 — On-Policy Distillation</strong>: Generate-label-train segments driven by the
+student’s own Langevin propagator, teacher labeling of visited frames, and a
+replay buffer mixed with a teacher-labeled reference dataset at a fixed replay
+ratio.</p>
+<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE2) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages."><img alt="" src="../_images/sphx_glr_01_multistage_pipeline_thumb.png" />
 <p><a class="reference internal" href="intermediate/01_multistage_pipeline.html"><span class="doc">Multi-Stage Dynamics Pipelines with FusedStage</span></a></p>
   <div class="sphx-glr-thumbnail-title">Multi-Stage Dynamics Pipelines with FusedStage</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Zarr is a chunked, compressed array format designed for large scientific datasets.  nvalchemi uses it as the on-disk representation for trajectories: each dynamics snapshot is serialised into a CSR-style layout (pointer arrays + concatenated fields) so that random-access reads and incremental appends are both efficient."><img alt="" src="../_images/sphx_glr_02_trajectory_zarr_io_thumb.png" />
@@ -524,7 +549,7 @@ scheduler values.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="A clear test that the NPT barostat is working correctly: start two identical FCC argon crystals at different volumes — one compressed below equilibrium, one expanded above it — and run both under the same NPT conditions (T=10 K, P=0).  The barostat must drive both toward the same zero-pressure equilibrium volume, one by expanding and one by contracting."><img alt="" src="../_images/sphx_glr_03_npt_barostat_validation_thumb.png" />
 <p><a class="reference internal" href="intermediate/03_npt_barostat_validation.html"><span class="doc">NPT Barostat Validation: Expansion and Contraction</span></a></p>
   <div class="sphx-glr-thumbnail-title">NPT Barostat Validation: Expansion and Contraction</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput."><img alt="" src="../_images/sphx_glr_04_inflight_batching_thumb.png" />
+</div><div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE2 → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput."><img alt="" src="../_images/sphx_glr_04_inflight_batching_thumb.png" />
 <p><a class="reference internal" href="intermediate/04_inflight_batching.html"><span class="doc">Processing Large Datasets with Inflight Batching</span></a></p>
   <div class="sphx-glr-thumbnail-title">Processing Large Datasets with Inflight Batching</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Numerical instabilities are a fact of life in machine-learning molecular dynamics.  ML potentials are trained on a finite region of configuration space; geometries outside that region can produce enormous forces, NaN gradients, or energy drift that silently corrupts a long trajectory."><img alt="" src="../_images/sphx_glr_05_safety_and_monitoring_thumb.png" />
@@ -536,6 +561,18 @@ scheduler values.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="This example shows how the hook-native reporting API turns training state into Rich terminal dashboards. It uses synthetic losses instead of a real model so that the moving parts are visible: a workflow emits a TrainContext, a ReportingOrchestrator decides when reporting runs, and RichReporter renders the scalar snapshot."><img alt="" src="../_images/sphx_glr_07_rich_training_reporting_thumb.png" />
 <p><a class="reference internal" href="intermediate/07_rich_training_reporting.html"><span class="doc">Rich Training Reporting</span></a></p>
   <div class="sphx-glr-thumbnail-title">Rich Training Reporting</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example illustrates how to fine-tune a model with LoRA adapters using FineTuningStrategy with LoRAConfig. It fine-tunes the MACE medium-mpa-0 foundation model on the li/data/LPSC_600.extxyz subset from the public ev-tlt/MACE_finetuning_supplementary Hugging Face dataset. Dataset attribution: li/data/LPSC_600.extxyz comes from ev-tlt/MACE_finetuning_supplementary; the dataset lists li/data/ as CC BY 4.0, sourced from Zenodo 15686940 / Kim et al. See https://huggingface.co/datasets/ev-tlt/MACE_finetuning_supplementary and https://creativecommons.org/licenses/by/4.0/."><img alt="" src="../_images/sphx_glr_08_lora_finetuning_thumb.png" />
+<p><a class="reference internal" href="intermediate/08_lora_finetuning.html"><span class="doc">LoRA Fine-Tuning MACE on LPSC dataset</span></a></p>
+  <div class="sphx-glr-thumbnail-title">LoRA Fine-Tuning MACE on LPSC dataset</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="The generative driver runs any callable that matches the GeneratingFunction protocol: (inputs=None, , num_samples=1, rng=None, *kwargs) -&gt; Batch."><img alt="" src="../_images/sphx_glr_09_generative_samplers_thumb.png" />
+<p><a class="reference internal" href="intermediate/09_generative_samplers.html"><span class="doc">Generative workflows: model-owning samplers</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Generative workflows: model-owning samplers</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example distills a small student potential from a frozen foundation teacher, offline: the teacher scores the dataset once, label_dataset writes its signals into a Zarr store as ordinary teacher_* fields, and training then streams that store through the normal reader/dataset/loader path with no teacher forward passes at all."><img alt="" src="../_images/sphx_glr_09_offline_distillation_thumb.png" />
+<p><a class="reference internal" href="intermediate/09_offline_distillation.html"><span class="doc">Offline Knowledge Distillation</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Offline Knowledge Distillation</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Offline distillation (see 09_offline_distillation) trains a student on whatever structures the dataset happens to hold. On-policy distillation trains it on the structures the student itself visits. The student&#x27;s own propagator generates frames, the frozen teacher labels them, and the labeled frames accumulate in a replay buffer. Every training batch is a mixture of replay-buffer frames and samples from a reference dataset, a fixed teacher-labeled dataset."><img alt="" src="../_images/sphx_glr_10_onpolicy_distillation_thumb.png" />
+<p><a class="reference internal" href="intermediate/10_onpolicy_distillation.html"><span class="doc">On-Policy Knowledge Distillation</span></a></p>
+  <div class="sphx-glr-thumbnail-title">On-Policy Knowledge Distillation</div>
 </div></div></section>
 <section id="advanced-examples">
 <h1>Advanced Examples<a class="headerlink" href="#advanced-examples" title="Link to this heading">#</a></h1>
@@ -552,6 +589,9 @@ neighbor list wiring via ModelConfig; LJ fallback for CI.</p>
 <p><strong>05 — Custom Integrator</strong>: Subclassing BaseDynamics to implement a
 velocity-rescaling thermostat; the pre_update/post_update contract;
 _init_state for stateful integrators.</p>
+<p><strong>06 — Ewald Electrostatics</strong>: Long-range electrostatics with Ewald
+summation on a rock-salt crystal, checked against the analytical Madelung
+energy.</p>
 <p><strong>07 — Composable Model Composition</strong>: Combining LJ + Ewald models with
 the <code class="docutils literal notranslate"><span class="pre">+</span></code> operator; PipelineModelWrapper for dependent pipelines.</p>
 <p><strong>08 — AIMNet2 + Ewald Pipeline</strong>: Composing AIMNet2 with Ewald
@@ -562,6 +602,27 @@ molecules via task selection on <code class="docutils literal notranslate"><span
 <p><strong>10 — MACE Training</strong>: Training a ScaleShiftMACE model with the ALCHEMI
 training stack; Zarr dataloading, scheduled Huber losses, EMA, checkpointing,
 validation, and distributed launch patterns.</p>
+<p><strong>11 — Batched NEB</strong>: Batched nudged elastic band with AIMNet2-rxn; IDPP
+initial paths, then a two-stage climbing-image NEB over several reactions
+at once.</p>
+<p><strong>12 — Umbrella Sampling</strong>: Batched umbrella sampling with
+<code class="docutils literal notranslate"><span class="pre">EnhancedSampling</span></code>; per-window centers selected by
+<code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code>, composing a restraint with a wall, and reading
+per-bias diagnostics for WHAM/MBAR.</p>
+<p><strong>13 — Replica Exchange</strong>: Temperature REMD over a geometric ladder; the
+even/odd pair schedule, Metropolis acceptance, per-pair acceptance rates for
+ladder tuning, and confirming the integrator target follows the assignment.</p>
+<p><strong>14 — Metadynamics</strong>: Multiple-walker well-tempered metadynamics along a
+pair-distance CV; shared hill history across walkers, storage-policy choice,
+the well-tempered height decay, and free-energy reconstruction.</p>
+<p><strong>15 — RMSD Metadynamics</strong>: xTB-style structure exploration with no
+collective variable; optimal-alignment RMSD over retained references, FIFO
+retention, and an unbiased control run to separate exploration from thermal
+scatter.</p>
+<p><strong>16 — Adaptive Biasing Force</strong>: Measuring and cancelling the mean force
+along a pair distance; the metric correction demonstrated against an analytic
+answer, sample thresholds and force ramps, and why a force-only bias cannot
+join a replica-exchange ladder.</p>
 <div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="Standard MD explores configuration space according to the Boltzmann distribution, which concentrates sampling near free-energy minima.  Many physically important processes — protein folding, nucleation, diffusion across a barrier — are rare events on MD timescales.  Biased sampling adds an external potential that encourages the system to explore regions it would not visit spontaneously."><img alt="" src="../_images/sphx_glr_01_biased_potential_thumb.png" />
 <p><a class="reference internal" href="advanced/01_biased_potential.html"><span class="doc">Biased Sampling with BiasedPotentialHook</span></a></p>
   <div class="sphx-glr-thumbnail-title">Biased Sampling with BiasedPotentialHook</div>
@@ -592,6 +653,24 @@ validation, and distributed launch patterns.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="This example walks through a complete model-training lifecycle on the ALCHEMI Toolkit, using a baseline ScaleShiftMACE model trained on the MatPES r2SCAN dataset as the reference workflow. The training script run configuration is loaded with Hydra from 10_vanilla_mace.yaml."><img alt="" src="../_images/sphx_glr_10_mace_training_thumb.png" />
 <p><a class="reference internal" href="advanced/10_mace_training.html"><span class="doc">MACE Training with ALCHEMI Training Utilities</span></a></p>
   <div class="sphx-glr-thumbnail-title">MACE Training with ALCHEMI Training Utilities</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Nudged elastic band (NEB) finds the minimum-energy path — and therefore the transition-state estimate — between a reactant and a product. It represents the path as an ordered band of molecular structures called images. This example uses the NEB API to optimize eight reaction paths together on a GPU. Grouping every image in one Batch lets the model evaluate the paths in parallel."><img alt="" src="../_images/sphx_glr_11_batched_neb_thumb.png" />
+<p><a class="reference internal" href="advanced/11_batched_neb.html"><span class="doc">Batched NEB with AIMNet2-rxn</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Batched NEB with AIMNet2-rxn</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Umbrella sampling computes a free-energy profile along a reaction coordinate by running several simulations, each restrained to a different value of that coordinate.  The restraints keep the system in regions it would otherwise never visit; the resulting biased histograms are recombined afterwards with WHAM or MBAR."><img alt="" src="../_images/sphx_glr_12_umbrella_sampling_thumb.png" />
+<p><a class="reference internal" href="advanced/12_umbrella_sampling.html"><span class="doc">Batched Umbrella Sampling with EnhancedSampling</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Batched Umbrella Sampling with EnhancedSampling</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A single low-temperature trajectory gets stuck: the barrier it needs to cross is many k_BT high, so it may never be crossed in the time available. Replica exchange runs a ladder of temperatures at once and periodically swaps which walker sits at which temperature.  A configuration that wanders up the ladder crosses barriers easily at high temperature, and when it comes back down it lands in a basin the cold replica might never have reached on its own."><img alt="" src="../_images/sphx_glr_13_replica_exchange_thumb.png" />
+<p><a class="reference internal" href="advanced/13_replica_exchange.html"><span class="doc">Temperature Replica Exchange (REMD)</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Temperature Replica Exchange (REMD)</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Metadynamics fills the free-energy basin the system is sitting in with Gaussian hills, until the barrier out of it is no longer a barrier.  Where umbrella sampling needs you to know in advance which values of the reaction coordinate to restrain to, metadynamics discovers them: it goes wherever it has not already been."><img alt="" src="../_images/sphx_glr_14_metadynamics_thumb.png" />
+<p><a class="reference internal" href="advanced/14_metadynamics.html"><span class="doc">Multiple-Walker Well-Tempered Metadynamics</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Multiple-Walker Well-Tempered Metadynamics</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Every method so far has needed a collective variable: a scalar you already know matters.  That is the assumption RMSD metadynamics drops.  Its history is a set of retained structures, and the bias pushes the system away from all of them at once:"><img alt="" src="../_images/sphx_glr_15_rmsd_metadynamics_thumb.png" />
+<p><a class="reference internal" href="advanced/15_rmsd_metadynamics.html"><span class="doc">xTB-Style RMSD Metadynamics for Structure Exploration</span></a></p>
+  <div class="sphx-glr-thumbnail-title">xTB-Style RMSD Metadynamics for Structure Exploration</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Umbrella sampling restrains, and metadynamics fills.  ABF does neither: it measures the mean force along the collective variable in each bin, and applies its negative.  Once a bin is well sampled the residual force along the CV averages to zero, so the walker diffuses across the coordinate instead of being held or pushed."><img alt="" src="../_images/sphx_glr_16_adaptive_biasing_force_thumb.png" />
+<p><a class="reference internal" href="advanced/16_adaptive_biasing_force.html"><span class="doc">Adaptive Biasing Force Along a Pair Distance</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Adaptive Biasing Force Along a Pair Distance</div>
 </div></div></section>
 <section id="distributed-examples">
 <h1>Distributed Examples<a class="headerlink" href="#distributed-examples" title="Link to this heading">#</a></h1>
@@ -614,19 +693,17 @@ build.  To run them, use <code class="docutils literal notranslate"><span class=
 <p>A <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a> maps GPU ranks to
 dynamics stages.  Systems flow between stages via fixed-size NCCL
 communication buffers:</p>
-<div class="graphviz"><object data="../_images/graphviz-f21b92f4beb153499acc27ccc6d3ff98aefcdf0c.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">digraph distributed_pipeline {
+digraph distributed_pipeline {
     rankdir=LR;
     node [shape=box, style=&quot;rounded,filled&quot;, fillcolor=&quot;#e8f4fd&quot; fontcolor=&quot;#111111&quot;,
           fontname=&quot;Helvetica&quot;, fontsize=11];
     edge [fontname=&quot;Helvetica&quot;, fontsize=10];
 
-    rank0 [label=&quot;Rank 0: FIRE\n(upstream)&quot;];
+    rank0 [label=&quot;Rank 0: FIRE2\n(upstream)&quot;];
     rank1 [label=&quot;Rank 1: Langevin\n(downstream + sink)&quot;];
 
     rank0 -&gt; rank1 [label=&quot;NCCL&quot;];
-}</p></object></div>
-<p>Key concepts:</p>
+}<p>Key concepts:</p>
 <ul class="simple">
 <li><p><strong>Upstream ranks</strong> (<code class="docutils literal notranslate"><span class="pre">prior_rank=None</span></code>): hold a
 <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.SizeAwareSampler.html#nvalchemi.dynamics.SizeAwareSampler" title="nvalchemi.dynamics.SizeAwareSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SizeAwareSampler</span></code></a> and push graduated
@@ -641,7 +718,7 @@ process runs only the stage assigned to its rank.</p></li>
 </section>
 <section id="running-the-examples">
 <h2>Running the Examples<a class="headerlink" href="#running-the-examples" title="Link to this heading">#</a></h2>
-<p><strong>01 — Parallel FIRE → Langevin</strong> (4 GPUs required):</p>
+<p><strong>01 — Parallel FIRE2 → Langevin</strong> (4 GPUs required):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span class="m">4</span><span class="w"> </span>examples/distributed/01_distributed_pipeline.py
 
 <span class="c1"># CPU/debug mode (set backend=&quot;gloo&quot; in the script first):</span>
@@ -658,7 +735,7 @@ written to the working directory.  Rank 0 also prints a collated summary.</p>
 <section id="example-descriptions">
 <h2>Example Descriptions<a class="headerlink" href="#example-descriptions" title="Link to this heading">#</a></h2>
 <dl class="simple">
-<dt><strong>01 — Distributed Pipeline</strong></dt><dd><p>Two independent FIRE → NVTLangevin sub-pipelines running on 4 GPUs.
+<dt><strong>01 — Distributed Pipeline</strong></dt><dd><p>Two independent FIRE2 → NVTLangevin sub-pipelines running on 4 GPUs.
 Demonstrates DistributedPipeline wiring, BufferConfig, and HostMemory sinks.</p>
 </dd>
 <dt><strong>02 — Distributed Monitoring</strong></dt><dd><p>Same topology as example 01, augmented with per-rank LoggingHook and
@@ -689,7 +766,7 @@ torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span cl
 <dl class="simple">
 <dt><strong>03 — MACE NVT Distributed</strong></dt><dd><p>End-to-end distributed MD with a stock
 <a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a>: a short
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code> trajectory under
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.NVTLangevin.html#nvalchemi.dynamics.NVTLangevin" title="nvalchemi.dynamics.NVTLangevin"><code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code></a> trajectory under
 <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>, with per-step neighbour-list rebuild and xyz
 snapshot logging from rank 0.  No distributed-aware code at the user
 layer.</p>
@@ -706,7 +783,7 @@ kernel’s distribution semantics once via
 <code class="xref py py-class docutils literal notranslate"><span class="pre">OpAdapter</span></code>.</p>
 </dd>
 <dt><strong>06 — MACE NPT Distributed</strong></dt><dd><p>The constant-pressure sibling of example 03: a
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code> trajectory (Nosé–Hoover thermostat +
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.NPT.html#nvalchemi.dynamics.NPT" title="nvalchemi.dynamics.NPT"><code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code></a> trajectory (Nosé–Hoover thermostat +
 isotropic barostat) under <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>, with the cell relaxing
 toward equilibrium.  The barostat/thermostat couple to <em>global</em>
 quantities (total kinetic energy, degrees of freedom, pressure
@@ -716,9 +793,9 @@ user change from example 03 is requesting <code class="docutils literal notransl
 <code class="docutils literal notranslate"><span class="pre">NPT</span></code>.</p>
 </dd>
 <dt><strong>07 — 2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</strong></dt><dd><p>The 2-D generalization of example 01: a FIRE relaxation →
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code> MD pipeline where <em>each stage
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.NVTLangevin.html#nvalchemi.dynamics.NVTLangevin" title="nvalchemi.dynamics.NVTLangevin"><code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code></a> MD pipeline where <em>each stage
 is itself domain-decomposed</em>.  A <code class="docutils literal notranslate"><span class="pre">(pipeline,</span> <span class="pre">domain)</span></code>
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.device_mesh.DeviceMesh" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeviceMesh</span></code></a> gives each stage a
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.device_mesh.DeviceMesh" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeviceMesh</span></code></a> gives each stage a
 whole domain sub-mesh row; a stage is just <code class="docutils literal notranslate"><span class="pre">DomainParallel(dynamics)</span></code>
 handed to <code class="docutils literal notranslate"><span class="pre">DistributedPipeline(stages,</span> <span class="pre">mesh=mesh)</span></code>.  <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code>
 overrides the pipeline’s communication seam so the group <em>lead</em> performs
@@ -738,10 +815,10 @@ dynamics coordinator all-reduces within each stage’s domain group.</p>
 domain-decomposition path live in <code class="docutils literal notranslate"><span class="pre">benchmark/distributed/</span></code> (two
 config-driven runners covering LJ, Ewald, PME, MACE, AIMNet2, and UMA).
 See <code class="docutils literal notranslate"><span class="pre">benchmark/distributed/README.md</span></code>.</p>
-<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example orchestrates two independent FIRE → NVTLangevin pipelines running in parallel across 4 GPUs using DistributedPipeline."><img alt="" src="../_images/sphx_glr_01_distributed_pipeline_thumb.png" />
-<p><a class="reference internal" href="distributed/01_distributed_pipeline.html"><span class="doc">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="Building on 01_distributed_pipeline, this example adds comprehensive observability to the FIRE → NVTLangevin topology:"><img alt="" src="../_images/sphx_glr_02_distributed_monitoring_thumb.png" />
+<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example orchestrates two independent FIRE2 → NVTLangevin pipelines running in parallel across 4 GPUs using DistributedPipeline."><img alt="" src="../_images/sphx_glr_01_distributed_pipeline_thumb.png" />
+<p><a class="reference internal" href="distributed/01_distributed_pipeline.html"><span class="doc">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Building on 01_distributed_pipeline, this example adds comprehensive observability to the FIRE2 → NVTLangevin topology:"><img alt="" src="../_images/sphx_glr_02_distributed_monitoring_thumb.png" />
 <p><a class="reference internal" href="distributed/02_distributed_monitoring.html"><span class="doc">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</span></a></p>
   <div class="sphx-glr-thumbnail-title">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="End-to-end distributed MD: load a MACE foundation-model checkpoint, run a short NVTLangevin trajectory across multiple ranks under DomainParallel, and record the trajectory to an xyz file from rank 0."><img alt="" src="../_images/sphx_glr_03_mace_nvt_distributed_thumb.png" />

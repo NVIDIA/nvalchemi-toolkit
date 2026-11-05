@@ -30,6 +30,17 @@ near a target position.  In a production umbrella-sampling workflow you would
 sweep the target position along a reaction coordinate and post-process the
 windowed histograms with WHAM or MBAR.
 
+.. note::
+
+    :class:`~nvalchemi.hooks.BiasedPotentialHook` is **deprecated** in favour
+    of :mod:`nvalchemi.enhanced_sampling`, which derives bias forces *and*
+    stress from a single energy definition by autograd.  A ``bias_fn`` bias
+    contributes no stress, so it is invisible to an NPT/NPH barostat — fine
+    for the NVT run below, silently wrong under a barostat.  The equivalent
+    with the new API is in ``12_umbrella_sampling.py``; see
+    :mod:`nvalchemi.enhanced_sampling` for the full comparison.  This hook
+    stays functional and no removal date is set.
+
 Key concepts demonstrated
 -------------------------
 * Implementing a ``bias_fn(batch) -> (energy, forces)`` closure.

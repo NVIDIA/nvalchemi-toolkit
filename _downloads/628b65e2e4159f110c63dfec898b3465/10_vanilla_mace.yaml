@@ -1,0 +1,173 @@
+# Vanilla MACE training config for 10_mace_training.py
+# Run: uv run torchrun ... examples/advanced/10_mace_training.py --config-name=10_vanilla_mace
+
+data:
+  zarr_path: /path/to/r2scan-2025.2-train.zarr  # training Zarr dataset
+  validation_zarr_path: /path/to/r2scan-2025.2-valid.zarr  # validation Zarr dataset
+  stress_unit: kBar  # stress label units in Zarr; converted to eV/A^3 for the loss (also GPa, eV/A^3)
+  stress_opposite_sign_convention: true  # flip stress sign to match model convention, i.e. tensile-positive
+
+training:
+  seed: 42  # RNG seed for torch and distributed sampler
+  epochs: null  # must be null; training is step-based only
+  steps: 68000  # total optimizer steps
+  batch_size: 256  # per-process training batch size; global batch = batch_size * nproc_per_node
+  neighbor_list_method: batch_naive_tile  # explicit method avoids slower auto-selection
+  log_every_steps: 100  # train metrics logging interval
+  logging:
+    jsonl_path: outputs/metrics.jsonl  # JSONL metrics output; null disables file logging
+    logger_axis: step  # x-axis for logged metrics
+  checkpoint:
+    enabled: true
+    dir: outputs/checkpoints
+    step_interval: 10000  # save every N optimizer steps
+    save_final: true  # rank 0 saves a final checkpoint after training
+  dataloader:
+    drop_last: true  # drop incomplete trailing train batches
+  validation:
+    enabled: true
+    every_steps: 1000  # validate every N optimizer steps
+    batch_size: 512  # per-process validation batch size
+  ema:
+    enabled: true  # exponential moving average of model weights
+    decay: 0.995  # EMA decay (higher = slower update)
+    update_every: 1  # update EMA every N optimizer steps
+    start_step: 0  # first step to begin EMA updates
+  restart:
+    enabled: false  # resume from checkpoint before training
+    dir: outputs/checkpoints  # checkpoint directory to restore from
+  distributed:
+    enabled: false  # wrap model with DDP
+    backend: nccl  # PyTorch distributed backend for GPU
+  loss:
+    energy_weight: 1.0  # stage-1 per-atom energy Huber weight
+    force_weight: 10.0  # stage-1 force Huber weight; 0 disables force loss/output
+    stress_weight: 100.0  # stage-1 stress Huber weight; 0 disables stress loss/output
+    huber_delta: 0.01  # Huber transition threshold for all loss terms
+    stage_two:
+      start_step: 54400  # optimizer step where loss weights switch (80% of steps)
+      energy_weight: 10.0  # stage-2 energy weight (energy-focused fine-tuning)
+      force_weight: 1.0  # stage-2 force weight
+      stress_weight: 10.0  # stage-2 stress weight
+  optimizer:
+    lr: 0.005  # AdamW initial learning rate (stage 1)
+    stage_two_lr: 0.001  # constant LR after cosine stage
+    weight_decay: 1e-3  # AdamW L2 penalty
+    clip_grad: 2.0  # global gradient norm clip; 0 or null disables
+  scheduler:
+    # TwoStageCosineConstantLR: cosine-anneal LR, then hold optimizer.stage_two_lr
+    first_stage_steps: 54400  # keep aligned with training.loss.stage_two.start_step
+    eta_min: 0.001  # minimum LR at end of the cosine phase
+
+model:
+  model_type: mace  # vanilla ScaleShiftMACE
+  dtype: float32  # model parameter dtype
+  hidden_irreps: "128x0e + 128x1o"  # hidden feature irreps per interaction block
+  num_interactions: 2  # message-passing interaction blocks
+  num_bessel: 10  # radial basis functions for edge distances
+  num_polynomial_cutoff: 5  # polynomial cutoff envelope order
+  max_ell: 3  # max spherical-harmonic order in tensor products
+  mlp_irreps: "16x0e"  # irreps for readout MLPs
+  correlation: 3  # body-order correlation in equivariant products
+  cueq:
+    enabled: true  # NVIDIA cuEquivariance kernels in MACE blocks
+    optimize_all: true  # enable all supported cuEq optimizations
+  use_reduced_cg: false  # use full Clebsch-Gordan tensor products in MACE blocks
+  interaction: RealAgnosticDensityResidualInteractionBlock
+  interaction_first: RealAgnosticDensityInteractionBlock
+  r_max: 6.0  # neighbor cutoff radius (Angstrom); drives neighbor list
+  # The quantities below are metadata derived from the dataset prior to training
+  avg_num_neighbors: 54.5 # compute based on r_max entered above
+  atomic_inter_shift: 0.145741179795108  # additive shift on interaction energies (ScaleShiftMACE)
+  atomic_inter_scale: 1.822297094894926  # multiplicative scale on interaction energies (~force RMS)
+  # Elements and the corresponding reference energies (eV) derived using least-squares fitting
+  E0s:
+    1: -3.73752908163329
+    2: -2.512176168371525
+    3: -4.280498196996816
+    4: -3.819236573466627
+    5: -6.817851025976331
+    6: -9.080869863894051
+    7: -6.325167945965177
+    8: -8.054245312123513
+    9: -6.438238560874836
+    10: -1.912126370022293
+    11: -4.199461322889693
+    12: -4.096946947424335
+    13: -7.542247971225947
+    14: -9.284584763391161
+    15: -9.997781526516942
+    16: -8.990030040740038
+    17: -6.912176384815067
+    18: -4.856982900007885
+    19: -6.705989110532222
+    20: -10.83867376764764
+    21: -12.20754926646943
+    22: -14.86929746702152
+    23: -14.93159284137413
+    24: -15.14458567681099
+    25: -15.27845065374002
+    26: -13.9286552755728
+    27: -12.71687305282924
+    28: -10.95766526169468
+    29: -10.14525932944346
+    30: -8.98184639748697
+    31: -12.02777582119783
+    32: -13.79686837944261
+    33: -14.4552965517151
+    34: -14.97229899552701
+    35: -13.9348468091318
+    36: -3.402476582132689
+    37: -14.59963299307432
+    38: -17.66514327424041
+    39: -22.50818329630673
+    40: -23.7345433977552
+    41: -24.98746981363559
+    42: -25.79068219475952
+    43: -23.92983950501717
+    44: -24.41328742668473
+    45: -23.6676103517722
+    46: -22.41977241736084
+    47: -19.99632805310478
+    48: -20.406046405267
+    49: -22.78346458370329
+    50: -24.73605169624585
+    51: -25.59181748197754
+    52: -25.58859863689408
+    53: -24.76138476265792
+    54: -11.05333240431234
+    55: -26.12375974013329
+    56: -30.39673579821198
+    57: -32.96459519633877
+    58: -32.51112007315848
+    59: -34.88089977070131
+    60: -36.84421413944673
+    61: -35.09051679470377
+    62: -39.93940022744987
+    63: -41.75283691803309
+    64: -44.61078017546065
+    65: -41.75013965437688
+    66: -41.7280721705915
+    67: -40.93964494470302
+    68: -40.216941577555
+    69: -39.0141805059242
+    70: -37.02970391504186
+    71: -39.89017627370704
+    72: -45.45968471569184
+    73: -48.80439827214433
+    74: -50.32513862216567
+    75: -50.74127612013004
+    76: -51.36557274948567
+    77: -49.66110148469311
+    78: -50.84984919066859
+    79: -49.86948713392803
+    80: -47.99686188289299
+    81: -52.63497361352618
+    82: -56.03410078177259
+    83: -58.04959830015081
+    89: -68.03641779083632
+    90: -73.67387405022794
+    91: -76.23561292389564
+    92: -81.03439044373094
+    93: -82.88176079520179
+    94: -86.05587118492707

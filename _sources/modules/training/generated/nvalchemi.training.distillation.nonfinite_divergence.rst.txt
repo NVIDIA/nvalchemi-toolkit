@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.nonfinite\_divergence
+=====================================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autofunction:: nonfinite_divergence

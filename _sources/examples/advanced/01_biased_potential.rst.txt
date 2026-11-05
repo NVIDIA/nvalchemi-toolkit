@@ -35,6 +35,17 @@ near a target position.  In a production umbrella-sampling workflow you would
 sweep the target position along a reaction coordinate and post-process the
 windowed histograms with WHAM or MBAR.
 
+.. note::
+
+    :class:`~nvalchemi.hooks.BiasedPotentialHook` is **deprecated** in favour
+    of :mod:`nvalchemi.enhanced_sampling`, which derives bias forces *and*
+    stress from a single energy definition by autograd.  A ``bias_fn`` bias
+    contributes no stress, so it is invisible to an NPT/NPH barostat — fine
+    for the NVT run below, silently wrong under a barostat.  The equivalent
+    with the new API is in ``12_umbrella_sampling.py``; see
+    :mod:`nvalchemi.enhanced_sampling` for the full comparison.  This hook
+    stays functional and no removal date is set.
+
 Key concepts demonstrated
 -------------------------
 * Implementing a ``bias_fn(batch) -> (energy, forces)`` closure.
@@ -49,7 +60,7 @@ Applications
 * **Wall potentials** — confining atoms to a region (e.g. a slab).
 * **Metadynamics** — accumulating a time-dependent Gaussian bias.
 
-.. GENERATED FROM PYTHON SOURCE LINES 47-63
+.. GENERATED FROM PYTHON SOURCE LINES 58-74
 
 .. code-block:: Python
 
@@ -76,14 +87,14 @@ Applications
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 64-68
+.. GENERATED FROM PYTHON SOURCE LINES 75-79
 
 LJ argon model
 --------------
 Standard argon parameters; ``max_neighbors=32`` is sufficient for a
 small (8-atom) non-periodic cluster.
 
-.. GENERATED FROM PYTHON SOURCE LINES 68-80
+.. GENERATED FROM PYTHON SOURCE LINES 79-91
 
 .. code-block:: Python
 
@@ -106,7 +117,7 @@ small (8-atom) non-periodic cluster.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 81-86
+.. GENERATED FROM PYTHON SOURCE LINES 92-97
 
 System builder — 2×2×2 argon cluster
 --------------------------------------
@@ -114,7 +125,7 @@ Eight argon atoms on a simple-cubic lattice, slightly perturbed so that
 the initial forces are non-zero and the thermostat has something to work
 with immediately.
 
-.. GENERATED FROM PYTHON SOURCE LINES 86-115
+.. GENERATED FROM PYTHON SOURCE LINES 97-126
 
 .. code-block:: Python
 
@@ -154,7 +165,7 @@ with immediately.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 116-136
+.. GENERATED FROM PYTHON SOURCE LINES 127-147
 
 Defining a harmonic COM restraint
 ----------------------------------
@@ -177,7 +188,7 @@ The force on atom *i* is:
 
 For a batched system each graph is treated independently.
 
-.. GENERATED FROM PYTHON SOURCE LINES 136-190
+.. GENERATED FROM PYTHON SOURCE LINES 147-201
 
 .. code-block:: Python
 
@@ -242,7 +253,7 @@ For a batched system each graph is treated independently.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 191-196
+.. GENERATED FROM PYTHON SOURCE LINES 202-207
 
 NVT simulation with COM restraint
 -----------------------------------
@@ -250,7 +261,7 @@ We anchor the cluster COM near the centroid of the initial configuration.
 A spring constant of 5.0 eV/Å² provides a noticeable but not overwhelming
 restoring force at the temperatures we are simulating (300 K ≈ 0.026 eV).
 
-.. GENERATED FROM PYTHON SOURCE LINES 196-252
+.. GENERATED FROM PYTHON SOURCE LINES 207-263
 
 .. code-block:: Python
 
@@ -320,18 +331,20 @@ restoring force at the temperatures we are simulating (300 K ≈ 0.026 eV).
 
     === Biased NVT run ===
     Target COM: [1.9942469596862793, 1.9935908317565918, 1.9866560697555542]
+    /home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/examples/advanced/01_biased_potential.py:226: DeprecationWarning: BiasedPotentialHook is deprecated in favour of nvalchemi.enhanced_sampling (EnhancedSampling / ConservativeBias), which derives forces and stress from a single energy definition. bias_fn returns only (energy, forces), so a bias applied through this hook contributes no stress and is invisible to the NPT/NPH barostat. It remains functional and no removal date is set; run new biases through EnhancedSampling instead.
+      bias_hook = BiasedPotentialHook(bias_fn=my_bias_fn, stage=DynamicsStage.AFTER_COMPUTE)
     Biased run complete: 200 steps
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 253-256
+.. GENERATED FROM PYTHON SOURCE LINES 264-267
 
 Comparing biased vs unbiased
 -----------------------------
 Run the same cluster without the bias hook and compare how far the COM drifts.
 
-.. GENERATED FROM PYTHON SOURCE LINES 256-292
+.. GENERATED FROM PYTHON SOURCE LINES 267-303
 
 .. code-block:: Python
 
@@ -391,14 +404,14 @@ Run the same cluster without the bias hook and compare how far the COM drifts.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 293-297
+.. GENERATED FROM PYTHON SOURCE LINES 304-308
 
 Optional plot: COM trajectory
 ------------------------------
 Set the environment variable ``NVALCHEMI_PLOT=1`` to display the figure.
 Sphinx-gallery will capture it automatically.
 
-.. GENERATED FROM PYTHON SOURCE LINES 297-322
+.. GENERATED FROM PYTHON SOURCE LINES 308-333
 
 .. code-block:: Python
 
@@ -442,7 +455,7 @@ Sphinx-gallery will capture it automatically.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.222 seconds)
+   **Total running time of the script:** (0 minutes 0.223 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_01_biased_potential.py:

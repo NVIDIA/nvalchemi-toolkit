@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.get\_space\_group\_candidates
+===========================================
+
+.. currentmodule:: nvalchemi.csp
+
+.. autofunction:: get_space_group_candidates

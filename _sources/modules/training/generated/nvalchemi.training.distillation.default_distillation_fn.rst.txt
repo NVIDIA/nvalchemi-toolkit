@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.default\_distillation\_fn
+=========================================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autofunction:: default_distillation_fn

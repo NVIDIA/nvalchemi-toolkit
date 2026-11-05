@@ -48,7 +48,7 @@ batching and size-aware sampling handle load balancing automatically.
 - **Bring your own model** --- wrap MACE, AIMNet2, or any PyTorch MLIP in a
   few lines with a standardized `ModelConfig` interface.
 - **Compose, don't configure** --- fuse stages on one GPU with `+`, distribute
-  across GPUs with `|`, and inject behavior at nine hook points per step.
+  across GPUs with `|`, and inject behavior at admission and per-step hook points.
 - **GPU-native data** --- `AtomicData` and `Batch` are Pydantic-validated,
   `jaxtyping`-annotated graph structures that live on-device.
 - **Inflight batching** --- converged samples are replaced mid-run so the GPU

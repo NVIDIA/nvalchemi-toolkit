@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.distributed._runtime &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.distributed._runtime &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/distributed/_runtime';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -433,9 +433,12 @@ document.write(`
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numbers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Integral</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Generic</span><span class="p">,</span> <span class="n">TypeVar</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">physicsnemo.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -449,10 +452,399 @@ document.write(`
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;DistributedManager&quot;</span><span class="p">,</span>
     <span class="s2">&quot;PhysicsNeMoUninitializedDistributedManagerWarning&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;CollectivePhase&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ProcessGroupContext&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;collective_error_sync&quot;</span><span class="p">,</span>
     <span class="s2">&quot;collective_device&quot;</span><span class="p">,</span>
     <span class="s2">&quot;resolve_global_rank&quot;</span><span class="p">,</span>
     <span class="s2">&quot;resolve_world_size&quot;</span><span class="p">,</span>
 <span class="p">]</span>
+
+
+<div class="viewcode-block" id="ProcessGroupContext">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ProcessGroupContext.html#nvalchemi.distributed.ProcessGroupContext">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ProcessGroupContext</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read-only topology and communication-device details for a supplied group.</span>
+
+<span class="sd">    The context never creates, destroys, or otherwise owns the process group.</span>
+<span class="sd">    Construct it after the caller has initialized the group and confirmed that</span>
+<span class="sd">    this process is a member.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    process_group : torch.distributed.ProcessGroup</span>
+<span class="sd">        An initialized process group that includes this process.</span>
+<span class="sd">    execution_device : torch.device or str, optional</span>
+<span class="sd">        Communication-device hint. Gloo always uses CPU. NCCL resolves a CUDA</span>
+<span class="sd">        hint first, then an initialized ``DistributedManager`` CUDA device,</span>
+<span class="sd">        then the caller&#39;s current CUDA device.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If *process_group* is not a concrete PyTorch process group.</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If distributed is uninitialized, the group is unusable, or NCCL has no</span>
+<span class="sd">        usable CUDA device.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the process is not a member or an explicit CUDA index is invalid.</span>
+<span class="sd">    NotImplementedError</span>
+<span class="sd">        If the group&#39;s backend is neither Gloo nor NCCL.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">process_group</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">ProcessGroup</span>
+    <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">collective_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">process_group</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">ProcessGroup</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">execution_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">process_group</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">ProcessGroup</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;process_group must be an actual torch ProcessGroup&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;torch.distributed must be initialized first&quot;</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">process_group</span><span class="p">)</span>
+            <span class="n">world_size</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">process_group</span><span class="p">)</span>
+            <span class="n">backend_value</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_backend</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">process_group</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;process_group is not initialized or usable&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">world_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;the current process is not a member of process_group&quot;</span><span class="p">)</span>
+
+        <span class="n">backend</span> <span class="o">=</span> <span class="n">_normalize_backend</span><span class="p">(</span><span class="n">backend_value</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;gloo&quot;</span><span class="p">,</span> <span class="s2">&quot;nccl&quot;</span><span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;process-group backend </span><span class="si">{</span><span class="n">backend</span><span class="si">!r}</span><span class="s2"> is not supported&quot;</span>
+            <span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">_resolve_group_collective_device</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">execution_device</span><span class="p">)</span>
+
+        <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;process_group&quot;</span><span class="p">,</span> <span class="n">process_group</span><span class="p">)</span>
+        <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;rank&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">rank</span><span class="p">))</span>
+        <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;world_size&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">world_size</span><span class="p">))</span>
+        <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;backend&quot;</span><span class="p">,</span> <span class="n">backend</span><span class="p">)</span>
+        <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;collective_device&quot;</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ProcessGroupContext.global_rank">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ProcessGroupContext.html#nvalchemi.distributed.ProcessGroupContext.global_rank">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">global_rank</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">group_rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Translate a group-local rank to its global rank.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        group_rank : int</span>
+<span class="sd">            Rank within this context&#39;s process group.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            The corresponding global rank.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If *group_rank* is not a non-boolean integral value.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If *group_rank* is outside this group&#39;s rank range.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">group_rank</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">group_rank</span><span class="p">,</span> <span class="n">Integral</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;group_rank must be a non-boolean integer&quot;</span><span class="p">)</span>
+        <span class="n">local_rank</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">group_rank</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">local_rank</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">local_rank</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;group_rank must be in [0, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="si">}</span><span class="s2">), got </span><span class="si">{</span><span class="n">local_rank</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">get_global_rank</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="n">local_rank</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="ProcessGroupContext.communication_scope">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.ProcessGroupContext.html#nvalchemi.distributed.ProcessGroupContext.communication_scope">[docs]</a>
+    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">communication_scope</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Select NCCL&#39;s resolved device for scoped communication, then restore it.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;gloo&quot;</span><span class="p">:</span>
+            <span class="k">yield</span>
+            <span class="k">return</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collective_device</span><span class="p">):</span>
+            <span class="k">yield</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalize_backend</span><span class="p">(</span><span class="n">backend</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a stable lower-case backend name for PyTorch enum/string values.&quot;&quot;&quot;</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="n">backend</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">name</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_group_collective_device</span><span class="p">(</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">execution_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve a supplied group&#39;s device without changing CUDA&#39;s current device.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;gloo&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+
+    <span class="n">hint</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">execution_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">hint</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">execution_device</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;invalid execution_device </span><span class="si">{</span><span class="n">execution_device</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+    <span class="k">if</span> <span class="n">hint</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">hint</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_validated_cuda_device</span><span class="p">(</span><span class="n">hint</span><span class="p">,</span> <span class="n">explicit</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">hint</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">hint</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;execution_device must be a CPU or CUDA device&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">DistributedManager</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="n">manager_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">DistributedManager</span><span class="p">()</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">manager_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_validated_cuda_device</span><span class="p">(</span><span class="n">manager_device</span><span class="p">,</span> <span class="n">explicit</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;NCCL requires a usable CUDA device&quot;</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">current_index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">())</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;NCCL requires a usable current CUDA device&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">return</span> <span class="n">_validated_cuda_device</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">current_index</span><span class="p">),</span> <span class="n">explicit</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validated_cuda_device</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">explicit</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check CUDA availability and index, preserving explicit-hint failures.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">explicit</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;the explicit CUDA execution device is unavailable&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;NCCL requires a usable CUDA device&quot;</span><span class="p">)</span>
+    <span class="n">index</span> <span class="o">=</span> <span class="n">device</span><span class="o">.</span><span class="n">index</span>
+    <span class="k">if</span> <span class="n">index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">())</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;NCCL requires a usable current CUDA device&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="n">count</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">explicit</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;explicit CUDA device index </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> is outside [0, </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;CUDA device index </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> is outside [0, </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+
+
+<span class="n">_T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;_T&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validated_phase_label</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate and copy a phase label into an exact built-in string.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;phase must be a string&quot;</span><span class="p">)</span>
+    <span class="n">label</span> <span class="o">=</span> <span class="nb">str</span><span class="o">.</span><span class="fm">__str__</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">label</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;phase must be non-empty&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">label</span>
+
+
+<div class="viewcode-block" id="CollectivePhase">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.CollectivePhase.html#nvalchemi.distributed.CollectivePhase">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CollectivePhase</span><span class="p">(</span><span class="n">Generic</span><span class="p">[</span><span class="n">_T</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mutable local phase and metadata state yielded by ``collective_error_sync``.</span>
+
+<span class="sd">    Instances are created by the context-manager helper. Their ``records`` are</span>
+<span class="sd">    available only after every local member has completed the shared exchange.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;_phase&quot;</span><span class="p">,</span> <span class="s2">&quot;_metadata&quot;</span><span class="p">,</span> <span class="s2">&quot;_records&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;CollectivePhase instances are created by collective_error_sync&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">phase</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CollectivePhase</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="nb">object</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+        <span class="n">instance</span><span class="o">.</span><span class="n">_phase</span> <span class="o">=</span> <span class="n">phase</span>
+        <span class="n">instance</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">instance</span><span class="o">.</span><span class="n">_records</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">instance</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">phase</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Current local phase label used when reporting an ordinary failure.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_phase</span>
+
+    <span class="nd">@phase</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">phase</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_phase</span> <span class="o">=</span> <span class="n">_validated_phase_label</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_T</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Local control metadata to serialize once when the body exits.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span>
+
+    <span class="nd">@metadata</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">_T</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">records</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">_T</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Metadata snapshots ordered by group-local rank after successful exit.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_records</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;collective records are available only after success&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_records</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_complete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">records</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">_T</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_records</span> <span class="o">=</span> <span class="n">records</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_safe_exception_message</span><span class="p">(</span><span class="n">exc</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Format an exception message without letting a broken ``__str__`` escape.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="o">.</span><span class="fm">__str__</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;exception message unavailable&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_encode_error_envelope</span><span class="p">(</span><span class="n">phase</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Encode only primitive failure details; metadata is omitted on failure.&quot;&quot;&quot;</span>
+    <span class="n">envelope</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;error&quot;</span><span class="p">,</span>
+        <span class="n">_validated_phase_label</span><span class="p">(</span><span class="n">phase</span><span class="p">),</span>
+        <span class="nb">str</span><span class="o">.</span><span class="fm">__str__</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">),</span>
+        <span class="n">_safe_exception_message</span><span class="p">(</span><span class="n">exc</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">envelope</span><span class="p">,</span> <span class="n">protocol</span><span class="o">=</span><span class="n">pickle</span><span class="o">.</span><span class="n">HIGHEST_PROTOCOL</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_decode_envelope</span><span class="p">(</span><span class="n">encoded</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decode and minimally validate the primitive envelope from a peer.&quot;&quot;&quot;</span>
+    <span class="c1"># Process-group members exchange helper-generated envelopes as trusted peers.</span>
+    <span class="n">envelope</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">encoded</span><span class="p">)</span>  <span class="c1"># noqa: S301</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">envelope</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+        <span class="ow">or</span> <span class="ow">not</span> <span class="n">envelope</span>
+        <span class="ow">or</span> <span class="n">envelope</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;success&quot;</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">}</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;received an invalid collective error envelope&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">envelope</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;success&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">envelope</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">envelope</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="nb">str</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">envelope</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="nb">bytes</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;received an invalid success envelope&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="p">(</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">envelope</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">4</span>
+        <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">envelope</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="nb">str</span><span class="p">)</span>
+        <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">envelope</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="nb">str</span><span class="p">)</span>
+        <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">envelope</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;received an invalid error envelope&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">envelope</span>
+
+
+<div class="viewcode-block" id="collective_error_sync">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.distributed.collective_error_sync.html#nvalchemi.distributed.collective_error_sync">[docs]</a>
+<span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">collective_error_sync</span><span class="p">(</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">ProcessGroupContext</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">phase</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">error_type</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="ne">Exception</span><span class="p">]</span> <span class="o">=</span> <span class="ne">RuntimeError</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">CollectivePhase</span><span class="p">[</span><span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Agree ordinary local failures and exchange successful control metadata.</span>
+
+<span class="sd">    Every process-group member must enter matching calls in the same order.</span>
+<span class="sd">    Exactly one object all-gather carries either local failure details or the</span>
+<span class="sd">    pickled metadata bytes. The lowest failing group-local rank supplies the</span>
+<span class="sd">    shared diagnostic.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    context : ProcessGroupContext</span>
+<span class="sd">        Initialized group context shared by this rank.</span>
+<span class="sd">    phase : str</span>
+<span class="sd">        Initial non-empty phase label; the yielded object&#39;s label can change.</span>
+<span class="sd">    error_type : type[Exception], default RuntimeError</span>
+<span class="sd">        Exception class used for the same distributed diagnostic on every rank.</span>
+
+<span class="sd">    Yields</span>
+<span class="sd">    ------</span>
+<span class="sd">    CollectivePhase</span>
+<span class="sd">        Mutable phase and metadata state; ``records`` is populated only after</span>
+<span class="sd">        a successful group exchange.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError, ValueError</span>
+<span class="sd">        If the context, phase, or configured exception type is invalid.</span>
+<span class="sd">    Exception</span>
+<span class="sd">        The configured class if a rank&#39;s body or metadata serialization fails.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">ProcessGroupContext</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;context must be a ProcessGroupContext&quot;</span><span class="p">)</span>
+    <span class="n">phase</span> <span class="o">=</span> <span class="n">_validated_phase_label</span><span class="p">(</span><span class="n">phase</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">error_type</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">error_type</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;error_type must be an Exception subclass&quot;</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">error_type</span><span class="p">(</span><span class="s2">&quot;message validation&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;error_type must accept a message&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+    <span class="n">state</span> <span class="o">=</span> <span class="n">CollectivePhase</span><span class="o">.</span><span class="n">_create</span><span class="p">(</span><span class="n">phase</span><span class="p">)</span>
+    <span class="n">local_exception</span><span class="p">:</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">state</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="n">local_exception</span> <span class="o">=</span> <span class="n">exc</span>
+
+    <span class="k">if</span> <span class="n">local_exception</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">metadata_bytes</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+                <span class="n">state</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span> <span class="n">protocol</span><span class="o">=</span><span class="n">pickle</span><span class="o">.</span><span class="n">HIGHEST_PROTOCOL</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="n">local_exception</span> <span class="o">=</span> <span class="n">exc</span>
+
+    <span class="k">if</span> <span class="n">local_exception</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">encoded</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+            <span class="p">(</span><span class="s2">&quot;success&quot;</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">phase</span><span class="p">,</span> <span class="n">metadata_bytes</span><span class="p">),</span> <span class="n">protocol</span><span class="o">=</span><span class="n">pickle</span><span class="o">.</span><span class="n">HIGHEST_PROTOCOL</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">encoded</span> <span class="o">=</span> <span class="n">_encode_error_envelope</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">phase</span><span class="p">,</span> <span class="n">local_exception</span><span class="p">)</span>
+
+    <span class="n">gathered</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">context</span><span class="o">.</span><span class="n">world_size</span>
+    <span class="k">with</span> <span class="n">context</span><span class="o">.</span><span class="n">communication_scope</span><span class="p">():</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">all_gather_object</span><span class="p">(</span><span class="n">gathered</span><span class="p">,</span> <span class="n">encoded</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+
+    <span class="n">decoded</span> <span class="o">=</span> <span class="p">[</span><span class="n">_decode_envelope</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">gathered</span><span class="p">]</span>
+    <span class="n">failures</span> <span class="o">=</span> <span class="p">[(</span><span class="n">rank</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">rank</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">decoded</span><span class="p">)</span> <span class="k">if</span> <span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;error&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">failures</span><span class="p">:</span>
+        <span class="n">failing_rank</span><span class="p">,</span> <span class="n">envelope</span> <span class="o">=</span> <span class="n">failures</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">failed_phase</span><span class="p">,</span> <span class="n">exception_type</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="n">envelope</span>
+        <span class="n">diagnostic</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;distributed </span><span class="si">{</span><span class="n">failed_phase</span><span class="si">}</span><span class="s2"> failed at rank=</span><span class="si">{</span><span class="n">failing_rank</span><span class="si">}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;phase=</span><span class="si">{</span><span class="n">failed_phase</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exception_type</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="n">shared_exception</span> <span class="o">=</span> <span class="n">error_type</span><span class="p">(</span><span class="n">diagnostic</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">failing_rank</span> <span class="o">==</span> <span class="n">context</span><span class="o">.</span><span class="n">rank</span> <span class="ow">and</span> <span class="n">local_exception</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">shared_exception</span> <span class="kn">from</span><span class="w"> </span><span class="nn">local_exception</span>
+        <span class="k">raise</span> <span class="n">shared_exception</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+
+    <span class="c1"># Metadata is application-defined and exchanged only among trusted members.</span>
+    <span class="n">records</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">decoded</span><span class="p">)</span>  <span class="c1"># noqa: S301</span>
+    <span class="n">state</span><span class="o">.</span><span class="n">_complete</span><span class="p">(</span><span class="n">records</span><span class="p">)</span></div>
+
 
 
 <div class="viewcode-block" id="resolve_world_size">
@@ -519,7 +911,7 @@ document.write(`
 <span class="sd">    under reduced-precision fp32 (TF32) the backend can pick a different kernel</span>
 <span class="sd">    for each and the results separate by far more than fp32 rounding. Also sets</span>
 <span class="sd">    ``NVIDIA_TF32_OVERRIDE``, which is what reaches ``mp.spawn`` / ``torchrun``</span>
-<span class="sd">    workers — they inherit the environment, not the torch flags. Call before the</span>
+<span class="sd">    workers -- they inherit the environment, not the torch flags. Call before the</span>
 <span class="sd">    process builds a CUDA context.</span>
 
 <span class="sd">    Returns</span>

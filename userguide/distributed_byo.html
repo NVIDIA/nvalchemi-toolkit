@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Bring Your Own Model: Authoring a Distribution Spec &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Bring Your Own Model: Authoring a Distribution Spec &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/distributed_byo';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Distributed ML Potentials: Design Overview" href="distributed_design.html" />
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="current nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -510,7 +518,7 @@ construction.</p></li>
 reference workflow.</p>
 <section id="step-1-wrap-your-model">
 <h2>Step 1: Wrap your model<a class="headerlink" href="#step-1-wrap-your-model" title="Link to this heading">#</a></h2>
-<p>The wrapper inherits from <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> and
+<p>The wrapper inherits from <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> and
 <a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>. It declares a
 <a class="reference internal" href="../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a>, translates a
 <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> into the inner model’s kwargs in
@@ -844,7 +852,7 @@ deployment artefact, not a developer artefact.</p>
 in the model preserves the subclass; per-layer <code class="docutils literal notranslate"><span class="pre">scatter_add_</span></code> calls
 fire halo-correction. The wrapper’s only distributed-aware code is
 the autograd-leaf walk in <code class="docutils literal notranslate"><span class="pre">adapt_input</span></code> (because
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.autograd.grad.html#torch.autograd.grad" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.autograd.grad()</span></code></a> needs the underlying leaf, not the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.autograd.grad.html#torch.autograd.grad" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.autograd.grad()</span></code></a> needs the underlying leaf, not the
 ShardTensor alias).</p>
 <p>See <code class="docutils literal notranslate"><span class="pre">examples/distributed/04_byo_pytorch_mpnn.py</span></code>.</p>
 </section>
@@ -857,7 +865,7 @@ transform — typically <code class="docutils literal notranslate"><span class="
 transform (the wrapper passes already-halo-padded <code class="docutils literal notranslate"><span class="pre">positions</span></code>).</p>
 <p>If the kernel computes forces internally via a fused gradient,
 register an autograd formula via
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/library.html#torch.library.register_autograd" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.library.register_autograd()</span></code></a> so PyTorch’s autograd can
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/library.html#torch.library.register_autograd" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.library.register_autograd()</span></code></a> so PyTorch’s autograd can
 backprop through it.</p>
 <p>See <code class="docutils literal notranslate"><span class="pre">examples/distributed/05_byo_graph_transformer.py</span></code>.</p>
 </section>

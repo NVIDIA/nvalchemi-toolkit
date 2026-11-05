@@ -1,0 +1,6 @@
+﻿nvalchemi.training.ensure\_reiterable\_validation\_data
+=======================================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: ensure_reiterable_validation_data

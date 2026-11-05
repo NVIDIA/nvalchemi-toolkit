@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.estimate\_formula\_unit\_volume
+=============================================
+
+.. currentmodule:: nvalchemi.csp
+
+.. autofunction:: estimate_formula_unit_volume

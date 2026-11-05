@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.evaluation.build\_acceptance\_report
+====================================================================
+
+.. currentmodule:: nvalchemi.training.distillation.evaluation
+
+.. autofunction:: build_acceptance_report

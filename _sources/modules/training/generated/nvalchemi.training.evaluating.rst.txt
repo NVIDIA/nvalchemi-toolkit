@@ -1,0 +1,6 @@
+﻿nvalchemi.training.evaluating
+=============================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: evaluating

@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.get\_space\_group\_operations
+===========================================
+
+.. currentmodule:: nvalchemi.csp
+
+.. autofunction:: get_space_group_operations

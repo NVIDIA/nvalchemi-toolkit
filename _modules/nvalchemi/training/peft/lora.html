@@ -1,0 +1,823 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.peft.lora &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/peft/lora';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.peft.lora</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;LoRA integration for generic fine-tuning PEFT config.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Final</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Self</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">ValidationInfo</span><span class="p">,</span> <span class="n">field_validator</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._serialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">_cls_path_of</span><span class="p">,</span> <span class="n">_import_cls</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">_strategy_validation</span> <span class="k">as</span> <span class="n">strategy_validation</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">_peft</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">lora_wrappers</span> <span class="k">as</span> <span class="n">_lora_wrappers</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">PeftConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.lora_wrappers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CuEquivarianceLoRALinear</span><span class="p">,</span>
+    <span class="n">E3NNFullyConnectedLoRALayer</span><span class="p">,</span>
+    <span class="n">EquivariantLoRALinear</span><span class="p">,</span>
+    <span class="n">LoRALayer</span><span class="p">,</span>
+    <span class="n">LoRALinear</span><span class="p">,</span>
+    <span class="n">LoRAWrappableLayer</span><span class="p">,</span>
+    <span class="n">LoRAWrapper</span><span class="p">,</span>
+    <span class="n">LoRAWrapperRegistrations</span><span class="p">,</span>
+    <span class="n">available_lora_wrappers</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_peft_method</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;CuEquivarianceLoRALinear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;E3NNFullyConnectedLoRALayer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;EquivariantLoRALinear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LORA_PEFT_METHOD&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRAConfig&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRALayer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRALinear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRAWrappableLayer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRAWrapper&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRAWrapperRegistrations&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;available_lora_wrappers&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;is_lora_layer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;merge_lora_into_model&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;register_lora_method&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="k">if</span> <span class="s2">&quot;TransformerEngineLoRALinear&quot;</span> <span class="ow">in</span> <span class="n">_lora_wrappers</span><span class="o">.</span><span class="n">__all__</span><span class="p">:</span>
+    <span class="n">TransformerEngineLoRALinear</span> <span class="o">=</span> <span class="n">_lora_wrappers</span><span class="o">.</span><span class="n">TransformerEngineLoRALinear</span>
+    <span class="n">__all__</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;TransformerEngineLoRALinear&quot;</span><span class="p">)</span>
+
+<span class="n">LORA_PEFT_METHOD</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s2">&quot;lora&quot;</span>
+<span class="n">is_lora_layer</span> <span class="o">=</span> <span class="n">_peft</span><span class="o">.</span><span class="n">is_lora_layer</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Configuration</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="LoRAConfig">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.peft.lora.LoRAConfig.html#nvalchemi.training.peft.lora.LoRAConfig">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LoRAConfig</span><span class="p">(</span><span class="n">PeftConfig</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;ALCHEMI LoRA configuration for :class:`FineTuningStrategy`.</span>
+
+<span class="sd">    This configuration is passed to</span>
+<span class="sd">    :class:`~nvalchemi.training.FineTuningStrategy` to enable LoRA PEFT. The</span>
+<span class="sd">    strategy prepends a :class:`~nvalchemi.training.peft.lora_hook.LoRAHook` that applies the</span>
+<span class="sd">    adapters during workflow registration.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    peft_method : Literal[&quot;lora&quot;]</span>
+<span class="sd">        Fixed PEFT method name as ``&quot;lora&quot;``.</span>
+<span class="sd">    lora_target_patterns : tuple[str, ...]</span>
+<span class="sd">        Shell-style glob patterns matched against model-prefixed module names,</span>
+<span class="sd">        using the same ``*``, ``?``, and ``[...]`` syntax as</span>
+<span class="sd">        ``trainable_patterns``. Dots are literal path separators. For example,</span>
+<span class="sd">        ``&quot;main.model.projection&quot;`` selects exactly</span>
+<span class="sd">        ``&quot;main.model.projection&quot;``, ``&quot;student.model.*projection&quot;`` selects</span>
+<span class="sd">        projection-like modules under ``student.model``, and</span>
+<span class="sd">        ``&quot;main.model.readout*&quot;`` selects modules whose final path component</span>
+<span class="sd">        starts with ``readout``. Patterns without glob characters are exact</span>
+<span class="sd">        matches.</span>
+<span class="sd">    rank : int</span>
+<span class="sd">        Rank of the low-rank adapter factors. Defaults to ``8``.</span>
+<span class="sd">    alpha : float, optional</span>
+<span class="sd">        Scaling numerator for adapter updates. Defaults to ``1.0``.</span>
+<span class="sd">    lora_dropout : float, optional</span>
+<span class="sd">        Dropout probability on the adapter input path. Defaults to ``0.0``.</span>
+<span class="sd">    wrap_mlp : bool, optional</span>
+<span class="sd">        Also target supported feed-forward sub-blocks discovered by the adapter</span>
+<span class="sd">        implementation. This is only supported for single-model strategies.</span>
+<span class="sd">        Defaults to ``False``.</span>
+<span class="sd">    wrapper_registrations : LoRAWrapperRegistrations, optional</span>
+<span class="sd">        Custom layer-to-wrapper registrations installed before adapter</span>
+<span class="sd">        injection. Each pair maps a base layer class to the adapter wrapper</span>
+<span class="sd">        class that should handle it. The registrations only apply during</span>
+<span class="sd">        adapter injection, and the global wrapper registry is restored to its</span>
+<span class="sd">        prior state as soon as injection finishes. Replacing an existing wrapper</span>
+<span class="sd">        emits a ``UserWarning``; assigning two different wrappers to one layer class</span>
+<span class="sd">        in the same configuration raises ``ValueError``. Defaults to ``()``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Exact module names can be written as patterns without glob characters:</span>
+
+<span class="sd">    &gt;&gt;&gt; config = LoRAConfig(</span>
+<span class="sd">    ...     lora_target_patterns=(&quot;main.model.projection&quot;,),</span>
+<span class="sd">    ... )</span>
+
+<span class="sd">    Glob patterns match module names from ``model.named_modules()``, prefixed with</span>
+<span class="sd">    the model key such as ``&quot;main&quot;``:</span>
+
+<span class="sd">    &gt;&gt;&gt; config = LoRAConfig(</span>
+<span class="sd">    ...     lora_target_patterns=(&quot;main.model.*projection&quot;,),</span>
+<span class="sd">    ...     rank=4,</span>
+<span class="sd">    ...     alpha=1.0,</span>
+<span class="sd">    ... )</span>
+
+<span class="sd">    In multi-model workflows, the prefix helps to identify which model receives adapters:</span>
+
+<span class="sd">    &gt;&gt;&gt; config = LoRAConfig(</span>
+<span class="sd">    ...     lora_target_patterns=(&quot;student.model.projection&quot;,),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">peft_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;lora&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="n">LORA_PEFT_METHOD</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">lora_target_patterns</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">min_length</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">lora_dropout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">wrap_mlp</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">wrapper_registrations</span><span class="p">:</span> <span class="n">LoRAWrapperRegistrations</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;wrapper_registrations&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_deserialize_wrapper_registrations</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">info</span><span class="p">:</span> <span class="n">ValidationInfo</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Import wrapper class paths when validating a serialized PEFT spec.&quot;&quot;&quot;</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">context</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="s2">&quot;import_path_validator&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">context</span> <span class="ow">or</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">value</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;LoRAConfig wrapper_registrations must be a list or null.&quot;</span><span class="p">)</span>
+
+        <span class="n">import_path_validator</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s2">&quot;import_path_validator&quot;</span><span class="p">]</span>
+        <span class="n">wrapper_registrations</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+                <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span>
+                <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">item</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;LoRAConfig wrapper_registrations entries must be &quot;</span>
+                    <span class="s2">&quot;[layer_cls_path, wrapper_cls_path] lists.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">import_path_validator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">import_path_validator</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;LoRA wrapper layer class&quot;</span><span class="p">)</span>
+                <span class="n">import_path_validator</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s2">&quot;LoRA wrapper class&quot;</span><span class="p">)</span>
+            <span class="n">wrapper_registrations</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_import_cls</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">_import_cls</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">])))</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">wrapper_registrations</span><span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_wrapper_registrations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject conflicting wrappers for one layer within this config.&quot;&quot;&quot;</span>
+        <span class="n">selected</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span> <span class="nb">type</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">layer_cls</span><span class="p">,</span> <span class="n">wrapper_cls</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrapper_registrations</span> <span class="ow">or</span> <span class="p">():</span>
+            <span class="n">existing</span> <span class="o">=</span> <span class="n">selected</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">layer_cls</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">existing</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">existing</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">wrapper_cls</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Multiple LoRA wrappers configured for &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">layer_cls</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">layer_cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2">: &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">existing</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">existing</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2"> and &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">wrapper_cls</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">wrapper_cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">selected</span><span class="p">[</span><span class="n">layer_cls</span><span class="p">]</span> <span class="o">=</span> <span class="n">wrapper_cls</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+<div class="viewcode-block" id="LoRAConfig.to_spec_dict">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.peft.lora.LoRAConfig.html#nvalchemi.training.peft.lora.LoRAConfig.to_spec_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_spec_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a JSON-safe representation of this LoRA config.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            JSON-safe LoRA configuration data suitable for serialization.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">to_spec_dict</span><span class="p">()</span>
+        <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;lora_target_patterns&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_target_patterns</span><span class="p">)</span>
+        <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;wrapper_registrations&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">[</span><span class="n">_cls_path_of</span><span class="p">(</span><span class="n">layer_cls</span><span class="p">),</span> <span class="n">_cls_path_of</span><span class="p">(</span><span class="n">wrapper_cls</span><span class="p">)]</span>
+            <span class="k">for</span> <span class="n">layer_cls</span><span class="p">,</span> <span class="n">wrapper_cls</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrapper_registrations</span> <span class="ow">or</span> <span class="p">()</span>
+        <span class="p">]</span>
+        <span class="k">return</span> <span class="n">spec</span></div>
+</div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># # PEFT hooks for strategy</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_lora_setup_hooks</span><span class="p">(</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">PeftConfig</span><span class="p">,</span>
+    <span class="n">strategy_data</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build registration-time hooks for a LoRA config.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    config : PeftConfig</span>
+<span class="sd">        PEFT config used to build LoRA registration hooks.</span>
+<span class="sd">    strategy_data : Mapping[str, Any]</span>
+<span class="sd">        Strategy data used to validate model-dependent LoRA options.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list[Any]</span>
+<span class="sd">        Registration-time hooks needed to inject LoRA adapters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.lora_hook</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoRAHook</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">LoRAConfig</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported PEFT config type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">config</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+    <span class="n">normalized_models</span> <span class="o">=</span> <span class="n">strategy_validation</span><span class="o">.</span><span class="n">_normalize_models</span><span class="p">(</span>
+        <span class="n">strategy_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;models&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">wrap_mlp</span>
+        <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">normalized_models</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">normalized_models</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;LoRAConfig.wrap_mlp is not supported with multiple models. Use &quot;</span>
+            <span class="s2">&quot;explicit lora_target_patterns to select target modules for each &quot;</span>
+            <span class="s2">&quot;model instead.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">LoRAHook</span><span class="p">(</span><span class="n">lora_config</span><span class="o">=</span><span class="n">config</span><span class="p">)]</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Checkpoint loading</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">merge_lora_into_model</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Merge LoRA weights into ``model`` in place.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : torch.nn.Module</span>
+<span class="sd">        Model containing LoRA adapter layers to merge.</span>
+<span class="sd">    strict : bool, optional</span>
+<span class="sd">        If ``True``, raise when non-mergeable LoRA layers remain after merging.</span>
+<span class="sd">        If ``False``, warn and return the partially merged model. Defaults to</span>
+<span class="sd">        ``True``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.nn.Module</span>
+<span class="sd">        The model after merge has been attempted.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">merged</span> <span class="o">=</span> <span class="n">_peft</span><span class="o">.</span><span class="n">merge_lora</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="n">remaining</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">merged</span><span class="o">.</span><span class="n">named_modules</span><span class="p">()</span> <span class="k">if</span> <span class="n">_peft</span><span class="o">.</span><span class="n">is_lora_layer</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="n">remaining</span><span class="p">:</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;LoRA merge left non-mergeable adapter module(s) in model: </span><span class="si">{</span><span class="n">remaining</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">merged</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply_lora_from_checkpoint_metadata</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+    <span class="n">strategy_metadata</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">import_path_validator</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Inject LoRA adapters into ``model`` using checkpoint strategy metadata.&quot;&quot;&quot;</span>
+    <span class="n">raw_config</span> <span class="o">=</span> <span class="n">strategy_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;peft_config&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw_config</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Checkpoint strategy metadata does not contain peft_config.&quot;</span><span class="p">)</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">PeftConfig</span><span class="o">.</span><span class="n">from_spec_dict</span><span class="p">(</span>
+        <span class="n">raw_config</span><span class="p">,</span>
+        <span class="n">import_path_validator</span><span class="o">=</span><span class="n">import_path_validator</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">LoRAConfig</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported PEFT config type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">config</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.lora_hook</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoRAHook</span>
+
+    <span class="n">LoRAHook</span><span class="p">(</span><span class="n">lora_config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">register_parameters</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">on_register</span><span class="p">(</span>
+        <span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">models</span><span class="o">=</span><span class="p">{</span><span class="n">model_name</span><span class="p">:</span> <span class="n">model</span><span class="p">})</span>
+    <span class="p">)</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># PEFT Method Registration</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">register_lora_method</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Register the built-in LoRA implementation with the PEFT registry.&quot;&quot;&quot;</span>
+    <span class="n">register_peft_method</span><span class="p">(</span>
+        <span class="n">LORA_PEFT_METHOD</span><span class="p">,</span>
+        <span class="n">config_cls</span><span class="o">=</span><span class="n">LoRAConfig</span><span class="p">,</span>
+        <span class="n">build_peft_setup_hooks</span><span class="o">=</span><span class="n">_lora_setup_hooks</span><span class="p">,</span>
+        <span class="n">apply_peft_from_checkpoint_metadata</span><span class="o">=</span><span class="n">_apply_lora_from_checkpoint_metadata</span><span class="p">,</span>
+        <span class="n">merge_peft</span><span class="o">=</span><span class="n">merge_lora_into_model</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

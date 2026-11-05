@@ -1,0 +1,856 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Temperature Replica Exchange (REMD) &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/13_replica_exchange';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Multiple-Walker Well-Tempered Metadynamics" href="14_metadynamics.html" />
+    <link rel="prev" title="Batched Umbrella Sampling with EnhancedSampling" href="12_umbrella_sampling.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/05_byo_graph_transformer.html">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Advanced Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Temperature...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-advanced-13-replica-exchange-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="temperature-replica-exchange-remd">
+<span id="sphx-glr-examples-advanced-13-replica-exchange-py"></span><h1>Temperature Replica Exchange (REMD)<a class="headerlink" href="#temperature-replica-exchange-remd" title="Link to this heading">#</a></h1>
+<p>A single low-temperature trajectory gets stuck: the barrier it needs to cross
+is many <span class="math notranslate nohighlight">\(k_BT\)</span> high, so it may never be crossed in the time available.
+Replica exchange runs a ladder of temperatures at once and periodically swaps
+which walker sits at which temperature.  A configuration that wanders up the
+ladder crosses barriers easily at high temperature, and when it comes back
+down it lands in a basin the cold replica might never have reached on its own.</p>
+<p>The whole ladder is <strong>one batch</strong>: each graph is a walker, and
+<code class="docutils literal notranslate"><span class="pre">thermodynamic_state_id</span></code> records which rung it currently occupies.  One
+batched force evaluation advances every replica per step.</p>
+<p>Exchange swaps <strong>labels, not coordinates</strong>.  A walker keeps its execution
+slot, its velocities, and its integrator arrays; the temperature assigned to
+it changes.  That makes the move local — nothing is copied between rows —
+which is what allows it inside a batched GPU step.</p>
+<section id="key-concepts-demonstrated">
+<h2>Key concepts demonstrated<a class="headerlink" href="#key-concepts-demonstrated" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Building a geometric temperature ladder with
+<a class="reference internal" href="../../modules/generated/nvalchemi.enhanced_sampling.ThermodynamicState.html#nvalchemi.enhanced_sampling.ThermodynamicState" title="nvalchemi.enhanced_sampling.ThermodynamicState"><code class="xref py py-class docutils literal notranslate"><span class="pre">ThermodynamicState</span></code></a>.</p></li>
+<li><p>The even/odd pair schedule and the Metropolis acceptance rule.</p></li>
+<li><p>Reading per-pair acceptance rates, which is how a ladder is tuned.</p></li>
+<li><p>Confirming the integrator’s target temperature follows the assignment.</p></li>
+</ul>
+</section>
+<section id="applications">
+<h2>Applications<a class="headerlink" href="#applications" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Conformer and reaction-path exploration where barriers exceed a few kT.</p></li>
+<li><p>Crystal polymorph search and nucleation.</p></li>
+<li><p>Generating diverse training configurations for a potential.</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">KB_EV</span><span class="p">,</span> <span class="n">NVTLangevin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">EnhancedSampling</span><span class="p">,</span>
+    <span class="n">ReplicaExchange</span><span class="p">,</span>
+    <span class="n">ThermodynamicState</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.lj</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">LennardJonesModelWrapper</span></a>
+
+<span class="c1"># force=True: an earlier gallery example may have configured logging already.</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">DEVICE</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+<span class="n">N_STEPS</span> <span class="o">=</span> <span class="mi">80</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;NVALCHEMI_SPHINX_BUILD&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="mi">400</span>
+</pre></div>
+</div>
+</section>
+<section id="build-the-temperature-ladder">
+<h2>Build the temperature ladder<a class="headerlink" href="#build-the-temperature-ladder" title="Link to this heading">#</a></h2>
+<p>A geometric spacing keeps the acceptance rate roughly uniform across rungs:
+the acceptance depends on the <em>ratio</em> of neighbouring temperatures, not
+their difference, so evenly spaced temperatures would exchange readily at
+the cold end and almost never at the hot end.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">N_REPLICAS</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">BASE_TEMPERATURE</span> <span class="o">=</span> <span class="mf">80.0</span>  <span class="c1"># K — argon is liquid around here</span>
+<span class="n">LADDER_FACTOR</span> <span class="o">=</span> <span class="mf">1.25</span>
+
+<span class="n">states</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">ThermodynamicState</span><span class="p">(</span><span class="n">state_id</span><span class="o">=</span><span class="n">i</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="n">BASE_TEMPERATURE</span> <span class="o">*</span> <span class="n">LADDER_FACTOR</span><span class="o">**</span><span class="n">i</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N_REPLICAS</span><span class="p">)</span>
+<span class="p">]</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Temperature ladder (K): </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="p">[</span><span class="nb">round</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">states</span><span class="p">])</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Temperature ladder (K): [80.0, 100.0, 125.0, 156.2]
+</pre></div>
+</div>
+</section>
+<section id="one-walker-per-rung">
+<h2>One walker per rung<a class="headerlink" href="#one-walker-per-rung" title="Link to this heading">#</a></h2>
+<p>Output buffers must exist up front — dynamics writes model outputs back in
+place rather than creating the fields.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">N_ATOMS</span> <span class="o">=</span> <span class="mi">8</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_cluster</span><span class="p">(</span><span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return an argon cluster on a cube at the LJ minimum separation.&quot;&quot;&quot;</span>
+    <span class="n">spacing</span> <span class="o">=</span> <span class="mf">4.0</span>
+    <span class="n">grid</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">(</span>
+        <span class="p">[[</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">z</span> <span class="ow">in</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)]</span>
+    <span class="p">)</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">grid</span><span class="p">[:</span><span class="n">N_ATOMS</span><span class="p">]</span> <span class="o">*</span> <span class="n">spacing</span> <span class="o">+</span> <span class="mf">0.05</span> <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="n">N_ATOMS</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.full.html#torch.full" title="torch.full" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full</span></a><span class="p">((</span><span class="n">N_ATOMS</span><span class="p">,),</span> <span class="mi">18</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">long</span></a><span class="p">),</span>
+        <span class="n">atomic_masses</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.full.html#torch.full" title="torch.full" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full</span></a><span class="p">((</span><span class="n">N_ATOMS</span><span class="p">,),</span> <span class="mf">39.948</span><span class="p">),</span>
+        <span class="n">forces</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">N_ATOMS</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="n">energy</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">N_ATOMS</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">data</span>
+
+
+<span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">make_cluster</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span> <span class="k">for</span> <span class="n">seed</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N_REPLICAS</span><span class="p">)])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+    <span class="n">DEVICE</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="configure-the-exchange">
+<h2>Configure the exchange<a class="headerlink" href="#configure-the-exchange" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">initial_state_ids</span></code> must be a permutation: replica exchange presumes one
+walker per rung, and a duplicate would let two walkers claim the same
+temperature.  Acceptance randomness is derived from <code class="docutils literal notranslate"><span class="pre">random_seed</span></code> plus an
+attempt counter, so a run is reproducible and a checkpoint needs only two
+integers rather than an RNG blob.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">exchange</span> <span class="o">=</span> <span class="n">ReplicaExchange</span><span class="p">(</span>
+    <span class="n">states</span><span class="o">=</span><span class="n">states</span><span class="p">,</span>
+    <span class="n">initial_state_ids</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.arange.html#torch.arange" title="torch.arange" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">arange</span></a><span class="p">(</span><span class="n">N_REPLICAS</span><span class="p">),</span>
+    <span class="n">attempt_interval</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>  <span class="c1"># dynamics steps per exchange segment</span>
+    <span class="n">random_seed</span><span class="o">=</span><span class="mi">2024</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Acceptance rule inferred from the ladder: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exchange</span><span class="o">.</span><span class="n">acceptance</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Segment 0 pairs: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exchange</span><span class="o">.</span><span class="n">pair_schedule</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Segment 1 pairs: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exchange</span><span class="o">.</span><span class="n">pair_schedule</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Acceptance rule inferred from the ladder: temperature
+Segment 0 pairs: [(0, 1), (2, 3)]
+Segment 1 pairs: [(1, 2)]
+</pre></div>
+</div>
+</section>
+<section id="run">
+<h2>Run<a class="headerlink" href="#run" title="Link to this heading">#</a></h2>
+<p>The strategy validates up front that the engine can rebind a
+thermodynamic state.  An integrator that could only accept the new label
+would keep sampling the old temperature — wrong, and with no symptom the
+run would show — so <code class="docutils literal notranslate"><span class="pre">NVE</span></code> and friends are rejected rather than silently
+mis-sampled.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">LennardJonesModelWrapper</span></a><span class="p">(</span><span class="n">sigma</span><span class="o">=</span><span class="mf">3.4</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">0.0104</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">8.5</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+
+<span class="n">sampling</span> <span class="o">=</span> <span class="n">EnhancedSampling</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">engine</span><span class="o">=</span><span class="n">NVTLangevin</span><span class="p">,</span>
+    <span class="n">engine_kwargs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="n">BASE_TEMPERATURE</span><span class="p">,</span>
+        <span class="s2">&quot;friction&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">biases</span><span class="o">=</span><span class="p">{},</span>  <span class="c1"># pure temperature REMD; biases would compose here</span>
+    <span class="n">replica_exchange</span><span class="o">=</span><span class="n">exchange</span><span class="p">,</span>
+    <span class="n">steps_per_epoch</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">extra_hooks</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">make_neighbor_hooks</span><span class="p">()),</span>
+<span class="p">)</span>
+
+<span class="n">batch</span> <span class="o">=</span> <span class="n">sampling</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">N_STEPS</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="read-the-acceptance-statistics">
+<h2>Read the acceptance statistics<a class="headerlink" href="#read-the-acceptance-statistics" title="Link to this heading">#</a></h2>
+<p>Per-pair rates are what a ladder is tuned on.  A pair far below the others
+is a gap the walkers cannot cross, and the ladder needs another rung there;
+uniformly high rates mean the rungs are closer than they need to be and the
+ladder is wasting replicas.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+    <span class="s2">&quot;Overall acceptance: </span><span class="si">%d</span><span class="s2">/</span><span class="si">%d</span><span class="s2"> = </span><span class="si">%.2f</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">exchange</span><span class="o">.</span><span class="n">accepted</span><span class="p">,</span>
+    <span class="n">exchange</span><span class="o">.</span><span class="n">attempts</span><span class="p">,</span>
+    <span class="n">exchange</span><span class="o">.</span><span class="n">acceptance_rate</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">rate</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">exchange</span><span class="o">.</span><span class="n">pair_acceptance_rates</span><span class="p">()):</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;  states </span><span class="si">%d</span><span class="s2"> &lt;-&gt; </span><span class="si">%d</span><span class="s2"> (</span><span class="si">%.0f</span><span class="s2"> K &lt;-&gt; </span><span class="si">%.0f</span><span class="s2"> K): </span><span class="si">%.2f</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="n">index</span><span class="p">,</span>
+        <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">states</span><span class="p">[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
+        <span class="n">states</span><span class="p">[</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
+        <span class="n">rate</span><span class="p">,</span>
+    <span class="p">)</span>
+
+<span class="c1"># Expect near-unit acceptance here: an 8-atom cluster has energy fluctuations</span>
+<span class="c1"># far smaller than the spread between rungs, so the Metropolis exponent stays</span>
+<span class="c1"># close to zero and almost everything is accepted. That is the &quot;rungs closer</span>
+<span class="c1"># than they need to be&quot; regime — a production system of thousands of atoms</span>
+<span class="c1"># has much larger fluctuations, and the ladder would be widened until the</span>
+<span class="c1"># rates land near the usual 20-30% target.</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Overall acceptance: 11/11 = 1.00
+  states 0 &lt;-&gt; 1 (80 K &lt;-&gt; 100 K): 1.00
+  states 1 &lt;-&gt; 2 (100 K &lt;-&gt; 125 K): 1.00
+  states 2 &lt;-&gt; 3 (125 K &lt;-&gt; 156 K): 1.00
+</pre></div>
+</div>
+</section>
+<section id="confirm-the-swap-was-indivisible">
+<h2>Confirm the swap was indivisible<a class="headerlink" href="#confirm-the-swap-was-indivisible" title="Link to this heading">#</a></h2>
+<p>The label, the integrator’s target temperature, the velocity scaling, and
+the forces all have to move together.  A walker whose label says one rung
+while its thermostat still targets another would sample the wrong ensemble
+silently, so it is worth asserting rather than assuming.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">assignment</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">thermodynamic_state_id</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="n">engine</span> <span class="o">=</span> <span class="n">sampling</span><span class="o">.</span><span class="n">dynamics</span><span class="p">()</span>
+<span class="n">targets</span> <span class="o">=</span> <span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">temperature</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">KB_EV</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Final assignment (walker -&gt; state): </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">assignment</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">walker</span><span class="p">,</span> <span class="n">state_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">assignment</span><span class="p">):</span>
+    <span class="n">expected</span> <span class="o">=</span> <span class="n">states</span><span class="p">[</span><span class="n">state_id</span><span class="p">]</span><span class="o">.</span><span class="n">temperature</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;  walker </span><span class="si">%d</span><span class="s2"> holds state </span><span class="si">%d</span><span class="s2">: target </span><span class="si">%.1f</span><span class="s2"> K (ladder says </span><span class="si">%.1f</span><span class="s2"> K)&quot;</span><span class="p">,</span>
+        <span class="n">walker</span><span class="p">,</span>
+        <span class="n">state_id</span><span class="p">,</span>
+        <span class="n">targets</span><span class="p">[</span><span class="n">walker</span><span class="p">],</span>
+        <span class="n">expected</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Final assignment (walker -&gt; state): [0, 2, 1, 3]
+  walker 0 holds state 0: target 80.0 K (ladder says 80.0 K)
+  walker 1 holds state 2: target 125.0 K (ladder says 125.0 K)
+  walker 2 holds state 1: target 100.0 K (ladder says 100.0 K)
+  walker 3 holds state 3: target 156.3 K (ladder says 156.2 K)
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.075 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-13-replica-exchange-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/0aa66ef553dd406371295051ed8c14eb/13_replica_exchange.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">13_replica_exchange.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/7b243f088723d70b03715e33a08eeff5/13_replica_exchange.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">13_replica_exchange.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/ea95852c5b650574eb7a410d8292273c/13_replica_exchange.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">13_replica_exchange.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="12_umbrella_sampling.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Batched Umbrella Sampling with EnhancedSampling</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="14_metadynamics.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Multiple-Walker Well-Tempered Metadynamics</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#key-concepts-demonstrated">Key concepts demonstrated</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#applications">Applications</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#build-the-temperature-ladder">Build the temperature ladder</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#one-walker-per-rung">One walker per rung</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configure-the-exchange">Configure the exchange</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run">Run</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#read-the-acceptance-statistics">Read the acceptance statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#confirm-the-swap-was-indivisible">Confirm the swap was indivisible</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/advanced/13_replica_exchange.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

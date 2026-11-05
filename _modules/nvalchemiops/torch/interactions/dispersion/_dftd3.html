@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemiops.torch.interactions.dispersion._dftd3 &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemiops.torch.interactions.dispersion._dftd3 &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemiops/torch/interactions/dispersion/_dftd3';</script>
-    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -444,6 +444,7 @@ document.write(`
     <span class="n">dftd3_pbc</span> <span class="k">as</span> <span class="n">wp_dftd3_pbc</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">torch_custom_op</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch._warp_op_helpers</span><span class="w"> </span><span class="kn">import</span> <span class="n">scoped_torch_warp_stream</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_wp_dtype</span><span class="p">,</span> <span class="n">get_wp_mat_dtype</span><span class="p">,</span> <span class="n">get_wp_vec_dtype</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
@@ -512,7 +513,7 @@ document.write(`
 
 <span class="sd">    Create from a dictionary (e.g., loaded from file):</span>
 
-<span class="sd">    &gt;&gt;&gt; state_dict = torch.load(&quot;dftd3_parameters.pt&quot;)</span>
+<span class="sd">    &gt;&gt;&gt; state_dict = torch.load(&quot;dftd3_parameters.pt&quot;, weights_only=True)</span>
 <span class="sd">    &gt;&gt;&gt; params = D3Parameters(</span>
 <span class="sd">    ...     rcov=state_dict[&quot;rcov&quot;],</span>
 <span class="sd">    ...     r4r2=state_dict[&quot;r4r2&quot;],</span>
@@ -650,6 +651,7 @@ document.write(`
     <span class="s2">&quot;nvalchemiops::dftd3_matrix&quot;</span><span class="p">,</span>
     <span class="n">mutates_args</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;coord_num&quot;</span><span class="p">,</span> <span class="s2">&quot;virial&quot;</span><span class="p">),</span>
 <span class="p">)</span>
+<span class="nd">@scoped_torch_warp_stream</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_dftd3_matrix_op</span><span class="p">(</span>
     <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">numbers</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -879,6 +881,7 @@ document.write(`
     <span class="s2">&quot;nvalchemiops::dftd3_matrix_pbc&quot;</span><span class="p">,</span>
     <span class="n">mutates_args</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;coord_num&quot;</span><span class="p">,</span> <span class="s2">&quot;virial&quot;</span><span class="p">),</span>
 <span class="p">)</span>
+<span class="nd">@scoped_torch_warp_stream</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_dftd3_matrix_pbc_op</span><span class="p">(</span>
     <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">numbers</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -1135,6 +1138,7 @@ document.write(`
     <span class="s2">&quot;nvalchemiops::dftd3&quot;</span><span class="p">,</span>
     <span class="n">mutates_args</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;coord_num&quot;</span><span class="p">,</span> <span class="s2">&quot;virial&quot;</span><span class="p">),</span>
 <span class="p">)</span>
+<span class="nd">@scoped_torch_warp_stream</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_dftd3_op</span><span class="p">(</span>
     <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">numbers</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -1352,6 +1356,7 @@ document.write(`
     <span class="s2">&quot;nvalchemiops::dftd3_pbc&quot;</span><span class="p">,</span>
     <span class="n">mutates_args</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;coord_num&quot;</span><span class="p">,</span> <span class="s2">&quot;virial&quot;</span><span class="p">),</span>
 <span class="p">)</span>
+<span class="nd">@scoped_torch_warp_stream</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_dftd3_pbc_op</span><span class="p">(</span>
     <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">numbers</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>

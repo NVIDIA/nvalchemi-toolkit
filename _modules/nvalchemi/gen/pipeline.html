@@ -1,0 +1,1071 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.gen.pipeline &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/gen/pipeline';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.ge...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.gen.pipeline</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Sequential composition of generators and other batch-processing stages.</span>
+
+<span class="sd">A :class:`GenerationPipeline` is a thin orchestrator: it folds a</span>
+<span class="sd">conditioning input through an ordered list of stages -- generators, dynamics</span>
+<span class="sd">engines, or any ``Batch -&gt; Batch`` callable -- mirroring the dynamics</span>
+<span class="sd">``|`` sugar (:meth:`nvalchemi.dynamics.base.BaseDynamics.__or__` builds a</span>
+<span class="sd">``DistributedPipeline``; here ``AtomisticGenerator.__or__`` builds a</span>
+<span class="sd">``GenerationPipeline``).</span>
+
+<span class="sd">Examples</span>
+<span class="sd">--------</span>
+<span class="sd">::</span>
+
+<span class="sd">    pipe = gen_a | gen_b | optimizer</span>
+<span class="sd">    out = pipe(inputs)                    # one fold through the stages</span>
+<span class="sd">    for batch in pipe.stream(inputs):     # lazy per-item fold</span>
+<span class="sd">        ...</span>
+
+<span class="sd">Semantics:</span>
+
+<span class="sd">* **Stage 1 consumes the user&#39;s ``inputs``** (its generating function owns</span>
+<span class="sd">  conditioning); every later stage maps Batch -&gt; Batch.</span>
+<span class="sd">* **1:1 cardinality** per stage: filters may shrink a batch; nothing fans</span>
+<span class="sd">  out. An all-false filter can use :meth:`~nvalchemi.data.Batch.empty_like`</span>
+<span class="sd">  to retain materialized schema and capacities; ordinary empty Batch indexing</span>
+<span class="sd">  still raises ``IndexError``.</span>
+<span class="sd">* **Empty batches short-circuit**: when a stage yields a zero-graph Batch,</span>
+<span class="sd">  remaining stages are skipped for that item and the empty Batch is returned</span>
+<span class="sd">  as-is. ``DeduplicateHook`` uses ``Batch.empty_like`` for an all-false mask.</span>
+<span class="sd">* **Non-``Batch`` outputs are terminal-only**: a generating function returning</span>
+<span class="sd">  a non-``Batch`` container passes it through raw, so such a stage can only</span>
+<span class="sd">  be last (or feed plain callables); a dynamics stage fed a non-``Batch``</span>
+<span class="sd">  raises ``TypeError`` at the boundary (skipped under ``torch.compile``).</span>
+<span class="sd">* **Per-stage hooks**: each :class:`~nvalchemi.gen.generator.AtomisticGenerator`</span>
+<span class="sd">  stage keeps its own hooks and</span>
+<span class="sd">  :class:`~nvalchemi.hooks.GenerationContext`; the pipeline passes only</span>
+<span class="sd">  the batch between stages.</span>
+<span class="sd">* **Sessions and compile**: ``with pipe:`` creates one dedicated CUDA</span>
+<span class="sd">  stream (when the first AtomisticGenerator stage&#39;s resolved device is CUDA)</span>
+<span class="sd">  shared by every AtomisticGenerator stage that opts in -- sequential stages</span>
+<span class="sd">  serialize on it with no cross-stream sync. :meth:`compile` compiles each</span>
+<span class="sd">  AtomisticGenerator stage&#39;s generating function (non-AtomisticGenerator stages are</span>
+<span class="sd">  skipped); there is no whole-fold compile, since the Batch</span>
+<span class="sd">  plumbing between stages would graph-break for no real capture.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExitStack</span><span class="p">,</span> <span class="n">nullcontext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseModel</span><span class="p">,</span>
+    <span class="n">ConfigDict</span><span class="p">,</span>
+    <span class="n">Field</span><span class="p">,</span>
+    <span class="n">field_serializer</span><span class="p">,</span>
+    <span class="n">field_validator</span><span class="p">,</span>
+    <span class="n">model_validator</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._serialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">capture_callable_spec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen.generator</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomisticGenerator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_model_spec_from_json</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;GenerationPipeline&quot;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="GenerationPipeline">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.GenerationPipeline.html#nvalchemi.gen.GenerationPipeline">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GenerationPipeline</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sequential composition of generation and batch-processing stages.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    stages</span>
+<span class="sd">        Ordered pipeline stages: :class:`~nvalchemi.gen.generator.AtomisticGenerator`</span>
+<span class="sd">        instances, dynamics engines, or ``Batch -&gt; Batch`` callables.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    **Field-contract validation.** Every ``AtomisticGenerator`` stage must declare</span>
+<span class="sd">    ``required_inputs`` / ``outputs`` (set on the AtomisticGenerator directly</span>
+<span class="sd">    or defaulted from the generating function&#39;s attributes); construction</span>
+<span class="sd">    raises otherwise. For each adjacent AtomisticGenerator -&gt; AtomisticGenerator link,</span>
+<span class="sd">    the downstream stage&#39;s ``required_inputs`` must be covered by the upstream</span>
+<span class="sd">    stage&#39;s ``outputs``: the dynamics link contract</span>
+<span class="sd">    (AIMNet2 ``charges`` -&gt; Ewald) applied to generation. Authors of custom</span>
+<span class="sd">    generating functions own keeping their stage&#39;s declaration in sync with</span>
+<span class="sd">    what the function actually writes. Non-AtomisticGenerator stages carry no</span>
+<span class="sd">    declarations and are not validated (their outputs are unknown at</span>
+<span class="sd">    construction).</span>
+
+<span class="sd">    The first stage&#39;s ``required_inputs`` describe its *conditioning* input</span>
+<span class="sd">    and are not validated (the pipeline cannot know what a user&#39;s ``inputs``</span>
+<span class="sd">    carries).</span>
+
+<span class="sd">    **Sessions and compile.** ``GenerationPipeline`` is a context manager:</span>
+<span class="sd">    entry creates one dedicated CUDA stream (when the first</span>
+<span class="sd">    :class:`~nvalchemi.gen.generator.AtomisticGenerator` stage&#39;s resolved device</span>
+<span class="sd">    is CUDA) and shares it with every stage that follows the ``_stream``</span>
+<span class="sd">    convention -- AtomisticGenerator stages with ``dedicated_stream`` set,</span>
+<span class="sd">    and any other stage that accepts a pre-set stream (dynamics engines and</span>
+<span class="sd">    fused stages honor it) -- then enters each stage&#39;s own session.</span>
+
+<span class="sd">    **Stage calling convention.** A stage with a ``run`` method (a dynamics</span>
+<span class="sd">    engine or a fused stage) is driven to completion with</span>
+<span class="sd">    ``stage.run(batch, **kwargs)`` -- its own hooks fire inside its loop.</span>
+<span class="sd">    Any other stage is called as ``stage(batch, **kwargs)``. A dynamics</span>
+<span class="sd">    stage must carry its own exit criterion (convergence or ``n_steps``);</span>
+<span class="sd">    the fold offers no step budget of its own.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">stages</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">min_length</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Ordered stages: Generators, dynamics engines, or Batch -&gt; Batch callables.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_links</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GenerationPipeline</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate declarations and adjacent AtomisticGenerator stages.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        GenerationPipeline</span>
+<span class="sd">            The validated pipeline.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If an AtomisticGenerator stage lacks field declarations, or a</span>
+<span class="sd">            stage&#39;s ``required_inputs`` are not covered by the immediately</span>
+<span class="sd">            upstream AtomisticGenerator&#39;s ``outputs``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">stage</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Pipeline stage </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> has type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: stages &quot;</span>
+                    <span class="s2">&quot;must be AtomisticGenerator instances, dynamics engines, or &quot;</span>
+                    <span class="s2">&quot;Batch -&gt; Batch callables.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="n">AtomisticGenerator</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">consumes</span> <span class="o">=</span> <span class="n">stage</span><span class="o">.</span><span class="n">required_inputs</span>
+            <span class="n">produces</span> <span class="o">=</span> <span class="n">stage</span><span class="o">.</span><span class="n">outputs</span>
+            <span class="k">if</span> <span class="n">consumes</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">produces</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">missing</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">if</span> <span class="n">consumes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">missing</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;required_inputs&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">produces</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">missing</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;outputs&quot;</span><span class="p">)</span>
+                <span class="n">fn</span> <span class="o">=</span> <span class="n">stage</span><span class="o">.</span><span class="n">generator_func</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s2">&quot;__name__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Pipeline stage </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">) is missing declarations: &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span><span class="si">}</span><span class="s2">. Set them on the AtomisticGenerator or &quot;</span>
+                    <span class="s2">&quot;on the generating function.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">prev</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">[</span><span class="n">index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">index</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prev</span><span class="p">,</span> <span class="n">AtomisticGenerator</span><span class="p">):</span>
+                <span class="c1"># Validated non-None on the previous iteration.</span>
+                <span class="n">produced</span> <span class="o">=</span> <span class="n">prev</span><span class="o">.</span><span class="n">outputs</span> <span class="ow">or</span> <span class="nb">frozenset</span><span class="p">()</span>
+                <span class="n">missing</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">consumes</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">produced</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Pipeline stage </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> consumes fields &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span><span class="si">}</span><span class="s2"> that the upstream stage does not &quot;</span>
+                        <span class="s2">&quot;produce (outputs=&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">produced</span><span class="p">)</span><span class="si">}</span><span class="s2">). Fix the &quot;</span>
+                        <span class="s2">&quot;declarations or insert a stage that writes them.&quot;</span>
+                    <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+<div class="viewcode-block" id="GenerationPipeline.model_post_init">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.GenerationPipeline.html#nvalchemi.gen.GenerationPipeline.model_post_init">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">model_post_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">__context</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize session state.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span><span class="p">:</span> <span class="n">ExitStack</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="GenerationPipeline.compile">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.GenerationPipeline.html#nvalchemi.gen.GenerationPipeline.compile">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GenerationPipeline</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compile every AtomisticGenerator stage&#39;s generating function.</span>
+
+<span class="sd">        Per-stage compilation (see :meth:`AtomisticGenerator.compile`); non-AtomisticGenerator</span>
+<span class="sd">        stages are skipped. There is no whole-fold compile: the</span>
+<span class="sd">        Batch plumbing and hook dispatch between stages would graph-break for</span>
+<span class="sd">        no real capture. (Cross-stage tensor fusion is a separate research</span>
+<span class="sd">        item.)</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to each stage&#39;s :meth:`AtomisticGenerator.compile`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        GenerationPipeline</span>
+<span class="sd">            This instance, for fluent chaining.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="n">AtomisticGenerator</span><span class="p">):</span>
+                <span class="n">stage</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;stages&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_deserialize_stages</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild serialized stage payloads to live stages.</span>
+
+<span class="sd">        A dict with a ``cls_path`` key is a captured callable payload</span>
+<span class="sd">        (dotted-path or factory capture) and deserializes through the</span>
+<span class="sd">        training spec machinery; any other dict is a serialized</span>
+<span class="sd">        :class:`~nvalchemi.gen.generator.AtomisticGenerator` and revalidates as</span>
+<span class="sd">        one. Live stages pass through unchanged.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        v</span>
+<span class="sd">            The raw ``stages`` input.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Any</span>
+<span class="sd">            The stages list with payloads rebuilt, or ``v`` unchanged when</span>
+<span class="sd">            not a list.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">v</span>
+        <span class="n">out</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">v</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="k">if</span> <span class="s2">&quot;cls_path&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="p">:</span>
+                    <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">create_model_spec_from_json</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">())</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">AtomisticGenerator</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">item</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="nd">@field_serializer</span><span class="p">(</span><span class="s2">&quot;stages&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_serialize_stages</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stages</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Capture each stage as a JSON-safe nested payload.</span>
+
+<span class="sd">        :class:`~nvalchemi.gen.generator.AtomisticGenerator` stages serialize via</span>
+<span class="sd">        their own dump; any other stage (a plain ``Batch -&gt; Batch``</span>
+<span class="sd">        callable) is captured by dotted import path through the</span>
+<span class="sd">        :func:`~nvalchemi._serialization._return_importable` identity</span>
+<span class="sd">        factory, or via the object&#39;s own ``to_spec()`` when it provides one.</span>
+<span class="sd">        Callable *instances* (e.g. dynamics engines) carry no import path</span>
+<span class="sd">        and are rejected. Fires for both ``model_dump()`` and</span>
+<span class="sd">        ``model_dump_json()``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        stages</span>
+<span class="sd">            The live stages list.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[dict[str, Any]]</span>
+<span class="sd">            One payload per stage: a nested AtomisticGenerator dump, or a</span>
+<span class="sd">            :class:`~nvalchemi.training.BaseSpec` payload carrying</span>
+<span class="sd">            ``cls_path``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If a stage&#39;s ``to_spec()`` does not return a</span>
+<span class="sd">            :class:`~nvalchemi.training.BaseSpec`, or the stage has no</span>
+<span class="sd">            importable dotted path.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">payloads</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">stages</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="n">AtomisticGenerator</span><span class="p">):</span>
+                <span class="n">payloads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">stage</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">))</span>
+                <span class="k">continue</span>
+            <span class="n">spec</span> <span class="o">=</span> <span class="n">capture_callable_spec</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="n">field_name</span><span class="o">=</span><span class="s2">&quot;stage&quot;</span><span class="p">)</span>
+            <span class="n">payloads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">payloads</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_infer_device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read the bound device from the first AtomisticGenerator stage.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.device | None</span>
+<span class="sd">            The construction-bound device, or ``None`` when the first</span>
+<span class="sd">            AtomisticGenerator stage is unmanaged or no such stage exists.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="n">AtomisticGenerator</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">stage</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GenerationPipeline</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enter a pipeline session: one CUDA stream shared across stages.</span>
+
+<span class="sd">        Creates one dedicated CUDA stream (when the first AtomisticGenerator</span>
+<span class="sd">        stage&#39;s resolved device is CUDA) and waits it on the caller&#39;s current</span>
+<span class="sd">        stream, shares it with every stage that follows the ``_stream``</span>
+<span class="sd">        convention -- AtomisticGenerator stages with ``dedicated_stream`` set</span>
+<span class="sd">        whose resolved device matches, and any other stage accepting a pre-set</span>
+<span class="sd">        stream (dynamics engines and fused stages honor it) -- then enters each</span>
+<span class="sd">        stage&#39;s own session. The pipeline never enters</span>
+<span class="sd">        :func:`torch.inference_mode` itself; generator stages manage their own.</span>
+<span class="sd">        Stages that provide a ``run`` method can require autograd. If the</span>
+<span class="sd">        caller wraps the pipeline in ``torch.no_grad``, the pipeline will not</span>
+<span class="sd">        disable that context.</span>
+<span class="sd">        Exiting does not synchronize the session stream: enqueue a</span>
+<span class="sd">        ``wait_stream`` or ``synchronize`` before consuming results from a</span>
+<span class="sd">        different stream.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        GenerationPipeline</span>
+<span class="sd">            This instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;GenerationPipeline sessions do not nest: this instance is &quot;</span>
+                <span class="s2">&quot;already in a session. Exit the active session first.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">stack</span> <span class="o">=</span> <span class="n">ExitStack</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_infer_device</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+                <span class="c1"># order the session stream after the caller&#39;s in-flight work</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(</span><span class="n">device</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
+                <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span><span class="p">)</span>
+            <span class="n">entered</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">id</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span> <span class="ow">in</span> <span class="n">entered</span><span class="p">:</span>
+                    <span class="c1"># the fold may call one stage object twice; its session</span>
+                    <span class="c1"># lifecycle enters and exits once</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="n">AtomisticGenerator</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">stage</span><span class="o">.</span><span class="n">dedicated_stream</span> <span class="ow">and</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="kc">None</span>
+                        <span class="ow">or</span> <span class="n">stage</span><span class="o">.</span><span class="n">device</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                    <span class="p">):</span>
+                        <span class="n">stage</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span>
+                    <span class="n">stage</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
+                    <span class="c1"># stages unwind with (None, None, None): the lifecycle</span>
+                    <span class="c1"># convention matches dynamics (no exception triple)</span>
+                    <span class="n">stack</span><span class="o">.</span><span class="n">callback</span><span class="p">(</span><span class="n">stage</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="n">entered</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">stage</span><span class="p">))</span>
+                <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="s2">&quot;__enter__&quot;</span><span class="p">):</span>
+                    <span class="c1"># Offer the shared stream to any stage that follows the</span>
+                    <span class="c1"># ``_stream`` convention (dynamics engines, fused stages),</span>
+                    <span class="c1"># but only when the stage lives on the stream&#39;s device.</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="s2">&quot;_stream&quot;</span><span class="p">):</span>
+                        <span class="n">stage_device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">stage_device</span> <span class="ow">in</span> <span class="p">(</span>
+                            <span class="kc">None</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                        <span class="p">):</span>
+                            <span class="n">stage</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span>
+                    <span class="n">stage</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
+                    <span class="n">stack</span><span class="o">.</span><span class="n">callback</span><span class="p">(</span><span class="n">stage</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="n">entered</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">stage</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">stack</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">raise</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">pop_all</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exit the session: exit each AtomisticGenerator stage, then the stream.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        exc_type, exc_val, exc_tb</span>
+<span class="sd">            The active exception, if any.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">stage_kwargs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fold ``inputs`` through the stages.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        inputs</span>
+<span class="sd">            Input for the first stage (a</span>
+<span class="sd">            :class:`~nvalchemi.data.Batch`, another tensor container, or</span>
+<span class="sd">            ``None``).</span>
+<span class="sd">        stage_kwargs</span>
+<span class="sd">            Per-call keyword arguments addressed to stages: a single mapping</span>
+<span class="sd">            stretches across every stage (for homogeneous pipelines), or a</span>
+<span class="sd">            sequence of one mapping (or ``None``) per stage -- its length</span>
+<span class="sd">            must match the number of stages. Generator stages accept their</span>
+<span class="sd">            usual call options (``num_samples``, ``rng``, generating-function</span>
+<span class="sd">            options); a stage with a ``run`` method is driven with</span>
+<span class="sd">            ``stage.run(batch, **kwargs)`` (e.g. ``{&quot;n_steps&quot;: 200}``).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Any</span>
+<span class="sd">            The final stage&#39;s output -- a :class:`~nvalchemi.data.Batch`,</span>
+<span class="sd">            unless the terminal stage is a mapping-less generator (raw</span>
+<span class="sd">            sample). If a stage yields a zero-graph Batch, remaining stages</span>
+<span class="sd">            are skipped and it is returned as-is.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``stage_kwargs`` is a sequence whose length differs from the</span>
+<span class="sd">            number of stages.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">stage_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">per_stage</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stage_kwargs</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="c1"># Copy per stage: stages may pop keys from their kwargs.</span>
+            <span class="n">per_stage</span> <span class="o">=</span> <span class="p">[</span><span class="nb">dict</span><span class="p">(</span><span class="n">stage_kwargs</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">stage_kwargs</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;stage_kwargs must have one entry per stage &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">)</span><span class="si">}</span><span class="s2">), got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">stage_kwargs</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">per_stage</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">if</span> <span class="n">kw</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">kw</span><span class="p">)</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">stage_kwargs</span><span class="p">]</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">BaseDynamics</span><span class="p">,</span>  <span class="c1"># lazy: keeps gen&#39;s import light</span>
+        <span class="p">)</span>
+
+        <span class="n">result</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">inputs</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">,</span> <span class="n">per_stage</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">Batch</span><span class="p">)</span> <span class="ow">and</span> <span class="n">result</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="n">run</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">params</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span>
+                        <span class="n">run</span> <span class="k">if</span> <span class="n">run</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">stage</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+                <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+                    <span class="n">pass_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>  <span class="c1"># unsignatureable: pass through, loudly</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">is</span> <span class="n">inspect</span><span class="o">.</span><span class="n">Parameter</span><span class="o">.</span><span class="n">VAR_KEYWORD</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">params</span><span class="p">):</span>
+                        <span class="n">pass_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">accepted</span> <span class="o">=</span> <span class="p">{</span><span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">params</span><span class="p">}</span>
+                        <span class="n">pass_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">accepted</span><span class="p">}</span>
+                        <span class="n">dropped</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">-</span> <span class="n">accepted</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">dropped</span><span class="p">:</span>
+                            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;Pipeline stage </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">) &quot;</span>
+                                <span class="sa">f</span><span class="s2">&quot;ignores unsupported stage_kwargs </span><span class="si">{</span><span class="n">dropped</span><span class="si">}</span><span class="s2">: they &quot;</span>
+                                <span class="s2">&quot;match no parameter.&quot;</span><span class="p">,</span>
+                                <span class="ne">UserWarning</span><span class="p">,</span>
+                                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                            <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">pass_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
+            <span class="k">if</span> <span class="n">run</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">stage</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="o">**</span><span class="n">pass_kwargs</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">Batch</span><span class="p">):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">is_compiling</span><span class="p">()</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span>
+                    <span class="n">stage</span><span class="p">,</span> <span class="n">BaseDynamics</span>
+                <span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Pipeline stage </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">) runs dynamics &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;and requires a Batch input, but the previous stage produced &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">. A generating function feeding &quot;</span>
+                        <span class="s2">&quot;dynamics must return a Batch (the documented output &quot;</span>
+                        <span class="s2">&quot;contract); adjust the previous stage to return one.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="o">**</span><span class="n">pass_kwargs</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="c1"># The clone gives the next stage fresh tensors.</span>
+            <span class="c1"># A clone created under ``torch.inference_mode`` is still an</span>
+            <span class="c1"># inference tensor that blocks autograd. The code disables</span>
+            <span class="c1"># inference mode first so autograd can track the new tensors.</span>
+            <span class="c1"># The clone does not remove existing gradient history.</span>
+            <span class="c1"># A generator stage that feeds dynamics must produce tensors</span>
+            <span class="c1"># without gradient tracking.</span>
+            <span class="k">with</span> <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">inference_mode</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_inference_mode_enabled</span><span class="p">()</span>
+                <span class="k">else</span> <span class="n">nullcontext</span><span class="p">()</span>
+            <span class="p">):</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="o">**</span><span class="n">pass_kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+<div class="viewcode-block" id="GenerationPipeline.stream">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.GenerationPipeline.html#nvalchemi.gen.GenerationPipeline.stream">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">max_batches</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stage_kwargs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stream pipeline outputs, mirroring :meth:`AtomisticGenerator.stream`.</span>
+
+<span class="sd">        One fold per input item; ``inputs`` is the data source.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        inputs</span>
+<span class="sd">            Iterable of inputs, or ``None`` for repeated unconditional draws.</span>
+<span class="sd">        max_batches</span>
+<span class="sd">            Cap on batches yielded (``None`` means unbounded).</span>
+<span class="sd">        stage_kwargs</span>
+<span class="sd">            Per-call options addressed to stages, forwarded to</span>
+<span class="sd">            :meth:`__call__` on every fold.</span>
+
+<span class="sd">        Yields</span>
+<span class="sd">        ------</span>
+<span class="sd">        Any</span>
+<span class="sd">            One output per fold, exactly as produced.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">inputs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">inputs</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">inputs</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">max_batches</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="n">max_batches</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="k">yield</span> <span class="bp">self</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">stage_kwargs</span><span class="o">=</span><span class="n">stage_kwargs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__or__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GenerationPipeline</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Append a stage, returning a new pipeline.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        other</span>
+<span class="sd">            A stage to append (AtomisticGenerator, dynamics engine, or callable).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        GenerationPipeline</span>
+<span class="sd">            A pipeline of ``self.stages`` followed by ``other``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">GenerationPipeline</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">GenerationPipeline</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="p">[</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">,</span> <span class="o">*</span><span class="n">other</span><span class="o">.</span><span class="n">stages</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">GenerationPipeline</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="p">[</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">,</span> <span class="n">other</span><span class="p">])</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

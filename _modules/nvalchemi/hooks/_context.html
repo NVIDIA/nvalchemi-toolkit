@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.hooks._context &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.hooks._context &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/hooks/_context';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -427,20 +427,23 @@ document.write(`
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Bool</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModuleDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim.lr_scheduler</span><span class="w"> </span><span class="kn">import</span> <span class="n">LRScheduler</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span>
 
 
 <div class="viewcode-block" id="HookContext">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext">[docs]</a>
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.gen.HookContext">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">HookContext</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Common context object passed to hooks.</span>
@@ -471,7 +474,7 @@ document.write(`
 
 
 <div class="viewcode-block" id="DynamicsContext">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.DynamicsContext.html#nvalchemi.hooks.DynamicsContext">[docs]</a>
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.DynamicsContext.html#nvalchemi.gen.DynamicsContext">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">DynamicsContext</span><span class="p">(</span><span class="n">HookContext</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Context object passed to dynamics hooks.</span>
@@ -480,18 +483,46 @@ document.write(`
 <span class="sd">    ----------</span>
 <span class="sd">    step_count : int</span>
 <span class="sd">        Current dynamics step number.</span>
-<span class="sd">    converged_mask : torch.Tensor | None</span>
+<span class="sd">    converged_mask : Bool[torch.Tensor, &quot;B&quot;] | None</span>
 <span class="sd">        Boolean mask of samples that converged at the current hook stage.</span>
 <span class="sd">        ``None`` when convergence has not fired for this dispatch.</span>
+<span class="sd">    active_graph_mask : Bool[torch.Tensor, &quot;B&quot;] | None</span>
+<span class="sd">        Boolean mask of shape ``(batch.num_graphs,)`` selecting graphs active in</span>
+<span class="sd">        the current dynamics dispatch. ``None`` when the dispatch has no status-based</span>
+<span class="sd">        filtering (typically standalone ``BaseDynamics``). In a ``FusedStage``</span>
+<span class="sd">        substage, it selects graphs whose status matches that substage.</span>
+<span class="sd">    graduated_mask : Bool[torch.Tensor, &quot;B&quot;] | None</span>
+<span class="sd">        Boolean mask of shape ``(batch.num_graphs,)`` selecting the graphs</span>
+<span class="sd">        that graduated during the current step, meaning their status reached</span>
+<span class="sd">        the engine&#39;s ``exit_status``. Set only for ``ON_GRADUATE`` dispatches,</span>
+<span class="sd">        where it may be all ``False``; ``None`` at every other stage.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">converged_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+    <span class="n">converged_mask</span><span class="p">:</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># noqa: F722, F821</span>
+    <span class="n">active_graph_mask</span><span class="p">:</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># noqa: F722, F821</span>
+    <span class="n">graduated_mask</span><span class="p">:</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># noqa: F722, F821</span></div>
 
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BiasContext</span><span class="p">(</span><span class="n">DynamicsContext</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Context object passed to an enhanced-sampling bias&#39;s ``update``.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    contribution : ModelOutputs</span>
+<span class="sd">        What this bias returned during the force evaluation that preceded the</span>
+<span class="sd">        capture — the detached mapping, not a recomputation. A metadynamics</span>
+<span class="sd">        bias sizing its next hill from the bias energy it just applied needs</span>
+<span class="sd">        the real value. Empty when the bias has not been evaluated yet.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">contribution</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">OrderedDict</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="TrainContext">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.TrainContext.html#nvalchemi.hooks.TrainContext">[docs]</a>
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.TrainContext.html#nvalchemi.gen.TrainContext">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TrainContext</span><span class="p">(</span><span class="n">HookContext</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Context object passed to training hooks.</span>
@@ -556,6 +587,72 @@ document.write(`
     <span class="n">gradients</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">grad_scaler</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">amp</span><span class="o">.</span><span class="n">GradScaler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">validation</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="GenerationContext">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.GenerationContext.html#nvalchemi.gen.GenerationContext">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">GenerationContext</span><span class="p">(</span><span class="n">HookContext</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Context object passed to generation hooks.</span>
+
+<span class="sd">    One context instance spans a single</span>
+<span class="sd">    :meth:`~nvalchemi.gen.generator.AtomisticGenerator.sample` call: the same</span>
+<span class="sd">    object is dispatched at every</span>
+<span class="sd">    :class:`~nvalchemi.gen.stages.GenerationStage` and the</span>
+<span class="sd">    :class:`~nvalchemi.gen.generator.AtomisticGenerator` re-reads it after each</span>
+<span class="sd">    dispatch, so hooks mutate generation state by *replacing* context fields</span>
+<span class="sd">    (``ctx.batch = ctx.batch[keep]``), not by editing in place.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    batch : Batch | None</span>
+<span class="sd">        The generated batch on the contract path: set when the generating</span>
+<span class="sd">        function returns a :class:`~nvalchemi.data.Batch` (``AFTER_GENERATE``</span>
+<span class="sd">        hooks see it here), ``None`` on the raw path. At call start it holds</span>
+<span class="sd">        ``inputs`` when they are a :class:`~nvalchemi.data.Batch` (``None``</span>
+<span class="sd">        otherwise). The raw sample in whatever container the generating</span>
+<span class="sd">        function produced lives on :attr:`sample`, not here.</span>
+<span class="sd">    inputs : Any</span>
+<span class="sd">        The input for the current call: at call start, exactly what was</span>
+<span class="sd">        passed to :meth:`~nvalchemi.gen.generator.AtomisticGenerator.sample`: a</span>
+<span class="sd">        tensor container (``Batch``, ``TensorDict``, ...) with text or other</span>
+<span class="sd">        raw modalities already encoded, or ``None`` for unconditional</span>
+<span class="sd">        generation. When a condition step is provided for the call, the</span>
+<span class="sd">        driver runs it between the ``BEFORE_CONDITION`` and</span>
+<span class="sd">        ``AFTER_CONDITION`` dispatches and stores the conditioned value back</span>
+<span class="sd">        here, so from ``AFTER_CONDITION`` on this is what the generating</span>
+<span class="sd">        function is called with; with no condition step it stays the raw</span>
+<span class="sd">        call input.</span>
+<span class="sd">    intermediates : dict[str, Any]</span>
+<span class="sd">        Scratch space for hook-to-hook state within one call (e.g. an</span>
+<span class="sd">        embedding computed at ``AFTER_CONDITION`` and consumed at</span>
+<span class="sd">        ``AFTER_GENERATE``).</span>
+<span class="sd">    step_count : int</span>
+<span class="sd">        Which generation call this is within a stream; ``0`` for a one-shot</span>
+<span class="sd">        call. Drives hook frequency gating.</span>
+<span class="sd">    sample : Any</span>
+<span class="sd">        The raw sample for this call, set when the generating function</span>
+<span class="sd">        returns. The driver returns it through the ``Batch`` path when it is</span>
+<span class="sd">        a :class:`~nvalchemi.data.Batch` (and ``AFTER_GENERATE`` hooks see it</span>
+<span class="sd">        as ``ctx.batch`` there), as-is otherwise. This is the hot path: the</span>
+<span class="sd">        sample should be GPU tensors; it may be any structure the function</span>
+<span class="sd">        emits.</span>
+<span class="sd">    accepted_mask : torch.Tensor | None</span>
+<span class="sd">        Boolean acceptance mask written by a hook. The writing hook defines</span>
+<span class="sd">        which rows it refers to; there is no universal alignment with the</span>
+<span class="sd">        original call&#39;s candidates. ``DeduplicateHook`` aligns its mask with</span>
+<span class="sd">        the Batch entering that hook and replaces any earlier mask. The</span>
+<span class="sd">        generation driver does not use this field to filter, stop, or</span>
+<span class="sd">        resample. ``None`` until a hook records a mask.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">intermediates</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">sample</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">accepted_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 </pre></div>
 

@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.models.base &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.models.base &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/models/base';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -429,15 +429,28 @@ document.write(`
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">model_validator</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomsLike</span><span class="p">,</span> <span class="n">ModelOutputs</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._derivatives</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DerivativeNotSupported</span><span class="p">,</span>
+    <span class="n">HessianOperator</span><span class="p">,</span>
+    <span class="n">_attach_hessian_blocks</span><span class="p">,</span>
+    <span class="n">_dense_hessian_blocks</span><span class="p">,</span>
+    <span class="n">_DerivativeRequest</span><span class="p">,</span>
+    <span class="n">_position_gradient</span><span class="p">,</span>
+    <span class="n">_prepare_derivative_graph</span><span class="p">,</span>
+    <span class="n">_validate_hessian_vector</span><span class="p">,</span>
+    <span class="n">_ValidatedDenseHessianRequest</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrategyKind</span>
@@ -766,6 +779,10 @@ document.write(`
 <span class="sd">      collect input dict.</span>
 <span class="sd">    - ``adapt_output()`` — map raw model output to :class:`ModelOutputs`</span>
 <span class="sd">      ordered dict.</span>
+<span class="sd">    - ``narrowed_outputs()`` — narrow ``active_outputs`` for the duration</span>
+<span class="sd">      of a block and restore it afterwards.</span>
+<span class="sd">    - ``requires_autograd`` — whether the active outputs include one the</span>
+<span class="sd">      model differentiates for, so its forward needs autograd enabled.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="c1"># model_config must be set as an instance attribute in each subclass __init__:</span>
@@ -925,6 +942,262 @@ document.write(`
         <span class="k">return</span> <span class="nb">set</span><span class="p">()</span></div>
 
 
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Derivative graph preparation</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_copy_derivative_runtime_data</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">source</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">working</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Copy wrapper-owned runtime inputs into a derivative snapshot.</span>
+
+<span class="sd">        The structured contents of *source* have already been cloned into</span>
+<span class="sd">        *working*. Wrappers that consume derivative-relevant runtime attributes</span>
+<span class="sd">        outside normal :class:`Batch` storage may override this hook to copy</span>
+<span class="sd">        only those attributes. Implementations must not mutate *source*, replace</span>
+<span class="sd">        the prepared position leaf, execute the model, or rebuild neighbors.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        source : Batch</span>
+<span class="sd">            Caller-owned batch being snapshotted.</span>
+<span class="sd">        working : Batch</span>
+<span class="sd">            Independent derivative batch to receive runtime inputs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_derivative_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">_DerivativeRequest</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject second-order derivatives until a wrapper supports them.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        request : _DerivativeRequest</span>
+<span class="sd">            Contextual derivative request to validate.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        DerivativeNotSupported</span>
+<span class="sd">            Always, unless a wrapper that supports derivatives overrides it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="n">DerivativeNotSupported</span><span class="p">(</span>
+            <span class="n">model_name</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+            <span class="n">operation</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">operation</span><span class="p">,</span>
+            <span class="n">execution</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">execution</span><span class="p">,</span>
+            <span class="n">strategy</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span>
+            <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;the wrapper does not support second-order derivatives&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_derivative_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the ordinary wrapper path and return connected system energies.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : Batch</span>
+<span class="sd">            Independent working batch configured for position gradients.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Per-system energy tensor. Graph validation is handled by the shared</span>
+<span class="sd">            derivative preparation boundary.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If the ordinary wrapper output does not contain an energy value.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># type: ignore[operator]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="ow">or</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> derivative evaluation did not return energy&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+
+<div class="viewcode-block" id="BaseModelMixin.prepare_hessian">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.prepare_hessian">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prepare_hessian</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HessianOperator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare an immediately active matrix-free Hessian.</span>
+
+<span class="sd">        The operator represents the second derivative of total energy with</span>
+<span class="sd">        respect to Cartesian positions, ``d^2 E / dR^2``, at the supplied</span>
+<span class="sd">        geometry. It copies the batch inputs and retains a derivative graph</span>
+<span class="sd">        evaluated with the current model. Keep model parameters, buffers,</span>
+<span class="sd">        execution mode, and pipeline wiring unchanged while using it. Close the</span>
+<span class="sd">        operator explicitly or use it as a context manager.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            Caller-owned batch to snapshot for repeated Hessian-vector products.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        HessianOperator</span>
+<span class="sd">            Operator retaining one private derivative graph. Close it explicitly</span>
+<span class="sd">            or use it as a context manager.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``batch`` is not a :class:`Batch`.</span>
+<span class="sd">        DerivativeNotSupported</span>
+<span class="sd">            If this wrapper or execution context does not support HVPs.</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If energy does not satisfy the connected derivative contract.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="n">_DerivativeRequest</span><span class="p">(</span>
+            <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;hvp&quot;</span><span class="p">,</span>
+            <span class="n">execution</span><span class="o">=</span><span class="s2">&quot;distributed&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_ctx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;local&quot;</span><span class="p">,</span>
+            <span class="n">strategy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="n">_prepare_derivative_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">HessianOperator</span><span class="p">(</span><span class="n">context</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseModelMixin.compute_hessian">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.compute_hessian">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_hessian</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;vmap&quot;</span><span class="p">,</span> <span class="s2">&quot;loop&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;vmap&quot;</span><span class="p">,</span>
+        <span class="n">row_chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Materialize the dense Hessian on a batch in place.</span>
+
+<span class="sd">        The model evaluates an independent snapshot, then attaches or replaces</span>
+<span class="sd">        ``batch[&quot;hessian&quot;]`` on the ``atoms x atoms`` product level. To keep a</span>
+<span class="sd">        simulation batch unchanged, supply a separate analysis batch with its</span>
+<span class="sd">        required neighbor data already prepared. For system ``i``, the logical</span>
+<span class="sd">        field shape is ``[N_i, N_i, 3, 3]`` with axes</span>
+<span class="sd">        ``[atom_out, atom_in, xyz_out, xyz_in]``; the packed batch shape is</span>
+<span class="sd">        ``[sum(N_i**2), 3, 3]``. The detached result is ``d^2 E / dR^2``, so</span>
+<span class="sd">        the directional force Jacobian is ``-H @ v``.</span>
+
+<span class="sd">        Neighbor membership is held fixed at the topology supplied by</span>
+<span class="sd">        ``batch``. The method does not run neighbor-list hooks or differentiate</span>
+<span class="sd">        the discrete neighbor-selection operation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            Caller-owned batch to update after successful materialization.</span>
+<span class="sd">        strategy : {&quot;vmap&quot;, &quot;loop&quot;}, optional</span>
+<span class="sd">            Whether each row chunk uses batched vector-Jacobian products or</span>
+<span class="sd">            evaluates one row at a time. Defaults to ``&quot;vmap&quot;``.</span>
+<span class="sd">        row_chunk_size : int, optional</span>
+<span class="sd">            Maximum number of flattened Cartesian rows per chunk, within each</span>
+<span class="sd">            system. ``None`` uses one chunk per system. ``&quot;vmap&quot;`` evaluates</span>
+<span class="sd">            the chunk together; ``&quot;loop&quot;`` evaluates its rows individually.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Batch</span>
+<span class="sd">            The same object supplied as *batch*, with a detached canonical</span>
+<span class="sd">            ``hessian`` field.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If *batch* or an argument has the wrong type.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If tensor layout, storage declarations, strategy, or chunk size is</span>
+<span class="sd">            incompatible with dense Hessian materialization.</span>
+<span class="sd">        DerivativeNotSupported</span>
+<span class="sd">            If this wrapper or execution context does not support the requested</span>
+<span class="sd">            dense strategy.</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If energy does not satisfy the connected derivative contract.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="n">_ValidatedDenseHessianRequest</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+            <span class="n">batch</span><span class="p">,</span>
+            <span class="n">strategy</span><span class="p">,</span>
+            <span class="n">row_chunk_size</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">derivative_request</span> <span class="o">=</span> <span class="n">_DerivativeRequest</span><span class="p">(</span>
+            <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;dense_hessian&quot;</span><span class="p">,</span>
+            <span class="n">execution</span><span class="o">=</span><span class="s2">&quot;distributed&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist_ctx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;local&quot;</span><span class="p">,</span>
+            <span class="n">strategy</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">_prepare_derivative_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">derivative_request</span><span class="p">)</span> <span class="k">as</span> <span class="n">graph</span><span class="p">:</span>
+            <span class="n">gradient</span> <span class="o">=</span> <span class="n">_position_gradient</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
+            <span class="n">blocks</span> <span class="o">=</span> <span class="n">_dense_hessian_blocks</span><span class="p">(</span>
+                <span class="n">graph</span><span class="p">,</span>
+                <span class="n">gradient</span><span class="p">,</span>
+                <span class="n">request</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span>
+                <span class="n">strategy</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span>
+                <span class="n">row_chunk_size</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">row_chunk_size</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">inference_mode</span><span class="p">(</span><span class="kc">False</span><span class="p">):</span>
+            <span class="n">_attach_hessian_blocks</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">blocks</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">batch</span></div>
+
+
+<div class="viewcode-block" id="BaseModelMixin.hessian_vector_product">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.hessian_vector_product">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hessian_vector_product</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">vectors</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">create_graph</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute a Hessian-vector product from one energy-only forward.</span>
+
+<span class="sd">        This evaluates ``(d^2 E / dR^2) @ vectors`` for the supplied, fixed</span>
+<span class="sd">        neighbor topology. It does not rebuild neighbors or differentiate</span>
+<span class="sd">        neighbor membership. The force directional derivative has the</span>
+<span class="sd">        opposite sign.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            Caller-owned batch to evaluate without mutation.</span>
+<span class="sd">        vectors : torch.Tensor</span>
+<span class="sd">            One vector with the same shape, dtype, and device as</span>
+<span class="sd">            ``batch.positions``.</span>
+<span class="sd">        create_graph : bool, optional</span>
+<span class="sd">            Keep the product attached to the graph of the forward this method</span>
+<span class="sd">            runs, so a loss can backpropagate through it to the model</span>
+<span class="sd">            parameters. Default ``False`` returns a detached product.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Hessian-vector product aligned with ``batch.positions``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``batch`` is not a :class:`Batch` or ``vectors`` is not a</span>
+<span class="sd">            floating-point tensor.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If vector shape, dtype, or device does not match positions.</span>
+<span class="sd">        DerivativeNotSupported</span>
+<span class="sd">            If this wrapper or execution context does not support HVPs.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        The forward pass runs on this wrapper directly, so a DDP wrapper</span>
+<span class="sd">        around it does not see it and gradients from an attached product are</span>
+<span class="sd">        not reduced across ranks. For that case, take the energy from the</span>
+<span class="sd">        training forward and use</span>
+<span class="sd">        :meth:`HessianOperator.from_energy &lt;nvalchemi.models.HessianOperator.from_energy&gt;`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">Batch</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;batch must be a Batch, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Hessian-vector products require tensor positions&quot;</span><span class="p">)</span>
+        <span class="n">_validate_hessian_vector</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">positions</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">prepare_hessian</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="k">as</span> <span class="n">operator</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">operator</span><span class="o">.</span><span class="n">matvec</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="n">create_graph</span><span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="BaseModelMixin.set_config">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.set_config">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">set_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -955,6 +1228,73 @@ document.write(`
         <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div>
 
 
+<div class="viewcode-block" id="BaseModelMixin.narrowed_outputs">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.narrowed_outputs">[docs]</a>
+    <span class="nd">@contextmanager</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">narrowed_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute only *outputs* for the duration of a block.</span>
+
+<span class="sd">        ``active_outputs`` is set to *outputs* on entry and restored on exit,</span>
+<span class="sd">        whether the block returns or raises. A caller that needs one output</span>
+<span class="sd">        of a model configured for several, such as an energy to differentiate</span>
+<span class="sd">        twice while the forces stay off, narrows the pass this way and hands</span>
+<span class="sd">        the model back as it found it.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        outputs : Iterable[str]</span>
+<span class="sd">            Output keys to leave active inside the block.</span>
+
+<span class="sd">        Yields</span>
+<span class="sd">        ------</span>
+<span class="sd">        None</span>
+<span class="sd">            Control while the narrowed ``active_outputs`` is in force.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; with model.narrowed_outputs({&quot;energy&quot;}):  # doctest: +SKIP</span>
+<span class="sd">        ...     energy = model(batch)[&quot;energy&quot;]</span>
+<span class="sd">        &gt;&gt;&gt; &quot;forces&quot; in model.model_config.active_outputs  # doctest: +SKIP</span>
+<span class="sd">        True</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">previous</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_config</span><span class="p">(</span><span class="s2">&quot;active_outputs&quot;</span><span class="p">,</span> <span class="nb">set</span><span class="p">(</span><span class="n">outputs</span><span class="p">))</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_config</span><span class="p">(</span><span class="s2">&quot;active_outputs&quot;</span><span class="p">,</span> <span class="n">previous</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">requires_autograd</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the model&#39;s forward pass needs autograd enabled around it.</span>
+
+<span class="sd">        ``True`` when at least one of ``model_config.active_outputs`` is in</span>
+<span class="sd">        ``model_config.autograd_outputs``, meaning the model produces it by</span>
+<span class="sd">        differentiating its forward. :meth:`adapt_input` marks the</span>
+<span class="sd">        ``autograd_inputs`` ``requires_grad`` under the same condition, so a</span>
+<span class="sd">        caller that runs the model under :func:`torch.no_grad` reads this</span>
+<span class="sd">        first. A model that only publishes direct outputs reports ``False``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            Whether an active output is computed by autograd.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; from nvalchemi.models.demo import DemoModel, DemoModelWrapper</span>
+<span class="sd">        &gt;&gt;&gt; model = DemoModelWrapper(DemoModel())</span>
+<span class="sd">        &gt;&gt;&gt; model.requires_autograd</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; with model.narrowed_outputs({&quot;energy&quot;}):</span>
+<span class="sd">        ...     model.requires_autograd</span>
+<span class="sd">        False</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">autograd_outputs</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+        <span class="p">)</span>
+
 <div class="viewcode-block" id="BaseModelMixin.adapt_input">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.adapt_input">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">adapt_input</span><span class="p">(</span>
@@ -981,8 +1321,7 @@ document.write(`
 <span class="sd">            Input in the format expected by the external model.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">effective_grad_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">gradient_keys</span><span class="p">)</span>
-        <span class="c1"># Enable grad on autograd_inputs if any autograd output is active</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">autograd_outputs</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">requires_autograd</span><span class="p">:</span>
             <span class="n">effective_grad_keys</span> <span class="o">|=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">autograd_inputs</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">effective_grad_keys</span><span class="p">:</span>
             <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>

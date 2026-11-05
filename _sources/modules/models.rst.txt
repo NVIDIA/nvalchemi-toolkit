@@ -27,6 +27,32 @@ Core classes
    NeighborConfig
    BaseModelMixin
 
+Hessian operator
+----------------
+
+:meth:`~nvalchemi.models.base.BaseModelMixin.prepare_hessian` returns a
+:class:`~nvalchemi.models.HessianOperator` for repeated Hessian-vector
+products at one geometry. It runs its own energy-only forward on a private
+snapshot of the batch.
+:meth:`~nvalchemi.models.HessianOperator.from_energy` builds the same operator
+from an energy the caller already computed, with ``requires_grad`` enabled on
+the positions it was computed from, so it serves any model exposed through
+:class:`~nvalchemi.models.base.BaseModelMixin` and any forward the caller
+controls, such as one taken through a DDP wrapper. Either way,
+:meth:`~nvalchemi.models.HessianOperator.matvec` returns a detached product by
+default and keeps it attached to the energy graph when ``create_graph`` is
+set, so a loss can backpropagate through the product. A student loss and a
+teacher label can therefore share one estimator.
+
+.. currentmodule:: nvalchemi.models
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   HessianOperator
+
 Demo utilities
 --------------
 
@@ -116,10 +142,10 @@ reflects what it supports.
 :meth:`~nvalchemi.models.uma.UMAWrapper.from_checkpoint` accepts registered
 names (``"uma-s-1p1"``, ``"uma-s-1p2"``, ``"uma-m-1p1"``) or a local ``.pt``.
 
-The ``uma`` (fairchem) stack conflicts with the CUDA/MACE dependencies, so
-install it in a dedicated environment if you plan on using other MLIPs like MACE::
+The ``uma`` (fairchem) stack has standalone CUDA variants and conflicts with
+MACE and the default build group. Install it in a CUDA-aligned environment::
 
-    UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
+    UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 uv sync --extra uma-cu12 --extra ase --no-group build
 
 .. currentmodule:: nvalchemi.models.uma
 

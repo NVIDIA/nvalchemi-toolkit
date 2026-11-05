@@ -1,0 +1,1213 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.enhanced_sampling.biases.abf &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/enhanced_sampling/biases/abf';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.en...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.enhanced_sampling.biases.abf</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Adaptive biasing force over a pair-distance collective variable.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">nn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">KB_EV</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._adaptive</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdaptivePotentialMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling.cv.pair_distance</span><span class="w"> </span><span class="kn">import</span> <span class="n">pair_displacement</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">DIAGNOSTIC_PREFIX</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span><span class="p">,</span> <span class="n">ModelConfig</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling._adaptive</span><span class="w"> </span><span class="kn">import</span> <span class="n">BiasContext</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;AdaptiveBiasingForce&quot;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="AdaptiveBiasingForce">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html#nvalchemi.enhanced_sampling.AdaptiveBiasingForce">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AdaptiveBiasingForce</span><span class="p">(</span><span class="n">AdaptivePotentialMixin</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Estimate and cancel the mean force along a pair distance.</span>
+
+<span class="sd">    Metadynamics fills a basin with hills; ABF instead measures the mean</span>
+<span class="sd">    force :math:`\partial A/\partial \xi` in each bin of the collective</span>
+<span class="sd">    variable and applies its negative, so the residual force along the CV</span>
+<span class="sd">    averages to zero and the walker diffuses freely.  The estimate *is* the</span>
+<span class="sd">    free-energy gradient, so no reweighting is needed at the end —</span>
+<span class="sd">    :meth:`free_energy` integrates it directly.</span>
+
+<span class="sd">    For the pair distance :math:`r = |\mathbf{r}_j - \mathbf{r}_i|` the</span>
+<span class="sd">    estimator is</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \frac{\partial A}{\partial r} = \left\langle</span>
+<span class="sd">            -\frac{(\mathbf{F}_j - \mathbf{F}_i)\cdot\hat{\mathbf{u}}}{2}</span>
+<span class="sd">            \;-\; \frac{2 k_B T}{r} \right\rangle_r</span>
+
+<span class="sd">    with :math:`\hat{\mathbf{u}} = (\mathbf{r}_j - \mathbf{r}_i)/r`.  The</span>
+<span class="sd">    second term is the **metric correction**, and it is not optional: see</span>
+<span class="sd">    Notes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    atom_indices:</span>
+<span class="sd">        The pair ``(i, j)``, shape ``[2]`` for the same pair in every graph</span>
+<span class="sd">        or ``[B, 2]`` for one per graph.  Indices are local to each graph.</span>
+<span class="sd">    temperature:</span>
+<span class="sd">        Simulation temperature in Kelvin.  Enters the metric correction, so</span>
+<span class="sd">        it must match the thermostat; a mismatch biases the estimate.</span>
+<span class="sd">    cv_range:</span>
+<span class="sd">        ``(r_min, r_max)`` in angstrom, the binned interval.  Outside it no</span>
+<span class="sd">        force is applied and no sample is recorded.</span>
+<span class="sd">    name:</span>
+<span class="sd">        Unique bias identifier.</span>
+<span class="sd">    n_bins:</span>
+<span class="sd">        Number of uniform bins across ``cv_range``.</span>
+<span class="sd">    min_samples:</span>
+<span class="sd">        Samples a bin needs before *any* bias force is applied from it.  An</span>
+<span class="sd">        estimate from a handful of samples is noise, and applying it would</span>
+<span class="sd">        drive the walker on the strength of that noise.</span>
+<span class="sd">    full_samples:</span>
+<span class="sd">        Samples at which the applied fraction reaches 1.  Defaults to</span>
+<span class="sd">        ``2 * min_samples``.  Between the two the force ramps linearly;</span>
+<span class="sd">        equal to ``min_samples`` it is a step, applying nothing until the</span>
+<span class="sd">        threshold and full force at it.</span>
+<span class="sd">    max_force:</span>
+<span class="sd">        Optional cap on ``|dA/dr|`` in eV/A.  A bin that has been visited</span>
+<span class="sd">        once at a bad geometry can hold a large estimate; the cap bounds</span>
+<span class="sd">        what that can do to the trajectory.</span>
+<span class="sd">    frequency:</span>
+<span class="sd">        Steps between :meth:`update` calls.  ``1`` (every step) is the usual</span>
+<span class="sd">        choice — ABF wants every uncorrelated sample it can get.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        For a malformed ``atom_indices``, a non-positive temperature, an</span>
+<span class="sd">        empty or inverted ``cv_range``, fewer than one bin, a negative</span>
+<span class="sd">        ``min_samples``, ``full_samples &lt; min_samples``, or a non-positive</span>
+<span class="sd">        ``max_force``.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The metric correction is not optional</span>
+<span class="sd">        Projecting Cartesian forces onto :math:`\nabla\xi` and averaging</span>
+<span class="sd">        gives the mean force in the *constrained* ensemble, not the gradient</span>
+<span class="sd">        of the free energy of the unconstrained one.  The two differ by the</span>
+<span class="sd">        Jacobian of the coordinate change — for a distance in three</span>
+<span class="sd">        dimensions the shell volume grows as :math:`r^2`, contributing</span>
+<span class="sd">        :math:`-2k_B T/r`.</span>
+
+<span class="sd">        Omitting it does not produce noise, it produces a smoothly wrong</span>
+<span class="sd">        answer: two non-interacting particles would be reported as having a</span>
+<span class="sd">        flat PMF when the true one is :math:`-2k_B T\ln r`.  That is why</span>
+<span class="sd">        this class takes an atom **pair** rather than a general ``cv``</span>
+<span class="sd">        callable — the correction is specific to this coordinate, and</span>
+<span class="sd">        accepting an arbitrary CV would mean applying a distance-shaped</span>
+<span class="sd">        correction to something that is not a distance.</span>
+
+<span class="sd">    Force-only, and therefore excluded from replica exchange</span>
+<span class="sd">        :meth:`forward` returns ``forces`` and no ``energy``.  There is no</span>
+<span class="sd">        potential to report: the applied force is not the gradient of any</span>
+<span class="sd">        function the bias holds, which is exactly what makes ABF</span>
+<span class="sd">        non-conservative.  ``supplies_exchange_energy`` is ``False``, and</span>
+<span class="sd">        :class:`~nvalchemi.enhanced_sampling.ReplicaExchange` refuses such a</span>
+<span class="sd">        bias rather than evaluating an acceptance rule that needs a</span>
+<span class="sd">        cross-state bias energy.</span>
+
+<span class="sd">    Observation ordering</span>
+<span class="sd">        :attr:`~nvalchemi.enhanced_sampling.AdaptivePotentialMixin.stage` is</span>
+<span class="sd">        ``AFTER_COMPUTE``, where ``batch.forces``</span>
+<span class="sd">        still holds the **unbiased** physical force.  Observing after the</span>
+<span class="sd">        bias is applied would feed the estimator its own output, and it</span>
+<span class="sd">        would converge to whatever it had already decided.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import torch</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.enhanced_sampling import AdaptiveBiasingForce</span>
+<span class="sd">    &gt;&gt;&gt; abf = AdaptiveBiasingForce(</span>
+<span class="sd">    ...     atom_indices=torch.tensor([0, 1]),</span>
+<span class="sd">    ...     temperature=300.0,</span>
+<span class="sd">    ...     cv_range=(2.0, 6.0),</span>
+<span class="sd">    ...     n_bins=40,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; int(abf.bin_counts.sum())</span>
+<span class="sd">    0</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1">#: The acceptance rule needs a cross-state bias energy; this has none.</span>
+    <span class="n">supplies_exchange_energy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">atom_indices</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">cv_range</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;abf&quot;</span><span class="p">,</span>
+        <span class="n">n_bins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">min_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
+        <span class="n">full_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">atom_indices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: atom_indices must name exactly two &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;atoms, got </span><span class="si">{</span><span class="n">indices</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">indices</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">indices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: atom_indices must have shape [2] or &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;[B, 2], got </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">indices</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">((</span><span class="n">indices</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: atom_indices must be non-negative &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;per-graph indices, got </span><span class="si">{</span><span class="n">indices</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">((</span><span class="n">indices</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">indices</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: atom_indices names the same atom twice &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">indices</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">); the distance would be identically zero.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">temperature</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: temperature must be positive, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">temperature</span><span class="si">}</span><span class="s2">. It scales the metric correction, so it must &quot;</span>
+                <span class="s2">&quot;match the thermostat.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">cv_range</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">high</span> <span class="o">&gt;</span> <span class="n">low</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: cv_range must be increasing, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">low</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">high</span><span class="si">}</span><span class="s2">).&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">low</span> <span class="o">&lt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: cv_range lower bound must be &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;non-negative for a distance, got </span><span class="si">{</span><span class="n">low</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_bins</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: n_bins must be at least 1, got </span><span class="si">{</span><span class="n">n_bins</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">min_samples</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: min_samples must be non-negative, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">min_samples</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">ramp_end</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="nb">int</span><span class="p">(</span><span class="n">min_samples</span><span class="p">)</span> <span class="k">if</span> <span class="n">full_samples</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">full_samples</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ramp_end</span> <span class="o">&lt;</span> <span class="nb">int</span><span class="p">(</span><span class="n">min_samples</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: full_samples (</span><span class="si">{</span><span class="n">ramp_end</span><span class="si">}</span><span class="s2">) must be at &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;least min_samples (</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">min_samples</span><span class="p">)</span><span class="si">}</span><span class="s2">) — the force ramps up &quot;</span>
+                <span class="s2">&quot;between the two.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">max_force</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">max_force</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: max_force must be positive, got </span><span class="si">{</span><span class="n">max_force</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce: frequency must be at least 1, got </span><span class="si">{</span><span class="n">frequency</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">temperature</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cv_range</span> <span class="o">=</span> <span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_bins</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_samples</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">min_samples</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_samples</span> <span class="o">=</span> <span class="n">ramp_end</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">max_force</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_force</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">autograd_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(),</span>
+            <span class="n">supports_pbc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">needs_pbc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">active_outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;forces&quot;</span><span class="p">},</span>
+        <span class="p">)</span>
+
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;atom_indices&quot;</span><span class="p">,</span> <span class="n">indices</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;bin_counts&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;force_sum&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">))</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Geometry and binning</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bin_width</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the width of one CV bin, in angstrom.&quot;&quot;&quot;</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_range</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">high</span> <span class="o">-</span> <span class="n">low</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bin_centers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the CV value at the middle of each bin, shape ``[n_bins]``.&quot;&quot;&quot;</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_range</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">low</span> <span class="o">+</span> <span class="p">(</span><span class="n">offsets</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_width</span>
+
+<div class="viewcode-block" id="AdaptiveBiasingForce.bin_index">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html#nvalchemi.enhanced_sampling.AdaptiveBiasingForce.bin_index">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bin_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the bin each CV value falls in, shape ``[...]``.</span>
+
+<span class="sd">        Values outside ``cv_range`` are reported as ``-1``; they contribute</span>
+<span class="sd">        no sample and receive no force, so they belong to no bin.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values:</span>
+<span class="sd">            CV values in angstrom.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Integer bin indices, or ``-1`` for out-of-range values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">index</span><span class="p">,</span> <span class="n">in_range</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bin_of</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">values</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">in_range</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_align_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Move this bias&#39;s buffers to *reference*&#39;s device if they differ.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        reference:</span>
+<span class="sd">            Any tensor from the live batch; its device is the target.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">reference</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_geometry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``(distance, unit_vector, global_i, global_j)``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        current:</span>
+<span class="sd">            The live batch.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[Tensor, Tensor, Tensor, Tensor]</span>
+<span class="sd">            Distances ``[B]``, unit displacements ``[B, 3]``, and the two</span>
+<span class="sd">            global row indices ``[B]`` the bias force is written to.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># pair_displacement validates atom_indices and applies the minimum</span>
+        <span class="c1"># image convention, so the resolution repeated below is known good.</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">pair_displacement</span><span class="p">(</span><span class="n">current</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="p">)</span>  <span class="c1"># [B, 3]</span>
+        <span class="n">distance</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">vector_norm</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [B]</span>
+        <span class="n">unit</span> <span class="o">=</span> <span class="n">delta</span> <span class="o">/</span> <span class="n">distance</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">delta</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">tiny</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">batch_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># [B]</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">offsets</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="n">indices</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">offsets</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">distance</span><span class="p">,</span> <span class="n">unit</span><span class="p">,</span> <span class="n">offsets</span> <span class="o">+</span> <span class="n">indices</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">offsets</span> <span class="o">+</span> <span class="n">indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_bin_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">distance</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``(bin_index, in_range)`` for CV values *distance*.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        distance:</span>
+<span class="sd">            CV values, shape ``[B]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[Tensor, Tensor]</span>
+<span class="sd">            Bin indices clamped into range, and a boolean mask marking which</span>
+<span class="sd">            samples actually fell inside ``cv_range``.</span>
+
+<span class="sd">            The clamp makes the index always safe to gather with, but it</span>
+<span class="sd">            also means an out-of-range value silently names the nearest edge</span>
+<span class="sd">            bin.  Every caller must therefore mask what it gathers with the</span>
+<span class="sd">            second return value, not just the quantities that reach the</span>
+<span class="sd">            force.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_range</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="p">((</span><span class="n">distance</span> <span class="o">-</span> <span class="n">low</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_width</span><span class="p">)</span><span class="o">.</span><span class="n">floor</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="n">in_range</span> <span class="o">=</span> <span class="p">(</span><span class="n">distance</span> <span class="o">&gt;=</span> <span class="n">low</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">distance</span> <span class="o">&lt;</span> <span class="n">high</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">raw</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="n">in_range</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Estimate</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="AdaptiveBiasingForce.mean_force">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html#nvalchemi.enhanced_sampling.AdaptiveBiasingForce.mean_force">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mean_force</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the per-bin mean-force estimate, shape ``[n_bins]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            ``dA/dr`` in eV/A per bin.  Unvisited bins are ``nan`` rather</span>
+<span class="sd">            than zero: a bin with no samples has no estimate, and zero is a</span>
+<span class="sd">            perfectly plausible mean force that would hide that.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">estimate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span> <span class="o">/</span> <span class="n">counts</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">estimate</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_applied_gradient</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the ramped, capped ``dA/dr`` actually applied, ``[n_bins]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Zero wherever no force should be applied yet, so this is safe to</span>
+<span class="sd">            index with any bin.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">estimate</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span> <span class="o">/</span> <span class="n">counts</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mf">1.0</span><span class="p">),</span> <span class="mf">0.0</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">estimate</span> <span class="o">=</span> <span class="n">estimate</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">max_force</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span><span class="p">)</span>
+        <span class="c1"># Reuses ramp_fraction rather than repeating it: two copies of the</span>
+        <span class="c1"># same schedule are two places for the endpoint to disagree.</span>
+        <span class="k">return</span> <span class="n">estimate</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_fraction</span><span class="p">()</span>
+
+<div class="viewcode-block" id="AdaptiveBiasingForce.ramp_fraction">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html#nvalchemi.enhanced_sampling.AdaptiveBiasingForce.ramp_fraction">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ramp_fraction</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the applied fraction per bin, shape ``[n_bins]``.</span>
+
+<span class="sd">        Zero at or below ``min_samples``, one at or above ``full_samples``,</span>
+<span class="sd">        linear between.  Ramping rather than switching on at the threshold</span>
+<span class="sd">        avoids a force discontinuity of exactly the size the threshold exists</span>
+<span class="sd">        to prevent.</span>
+
+<span class="sd">        ``full_samples == min_samples`` is a step: nothing until the</span>
+<span class="sd">        threshold, full force at it.  That is a legitimate choice — it is the</span>
+<span class="sd">        classic hard-threshold form, and it is what ``min_samples=0`` gives</span>
+<span class="sd">        by default — so it is handled rather than rejected.  It needs its own</span>
+<span class="sd">        branch because the linear form would divide by a zero span, and</span>
+<span class="sd">        clamping that span to 1 would delay full force by one sample.</span>
+
+<span class="sd">        A bin with no samples has no estimate, so it reports zero whatever</span>
+<span class="sd">        the thresholds are.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Fractions in ``[0, 1]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">span</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_samples</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_samples</span>
+        <span class="k">if</span> <span class="n">span</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">fraction</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_samples</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">fraction</span> <span class="o">=</span> <span class="p">((</span><span class="n">counts</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_samples</span><span class="p">)</span> <span class="o">/</span> <span class="n">span</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">fraction</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">fraction</span><span class="p">))</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># BaseModelMixin required surface</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">embedding_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;No embeddings: ABF applies a tabulated force, not a network.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+<div class="viewcode-block" id="AdaptiveBiasingForce.compute_embeddings">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html#nvalchemi.enhanced_sampling.AdaptiveBiasingForce.compute_embeddings">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_embeddings</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not implemented — ABF produces no embeddings.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data:</span>
+<span class="sd">            The input system.</span>
+<span class="sd">        **kwargs:</span>
+<span class="sd">            Unused; accepted for interface compatibility.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        AtomicData | Batch</span>
+<span class="sd">            Never returns.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            Always.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> does not produce embeddings.&quot;</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Contribution</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="AdaptiveBiasingForce.forward">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html#nvalchemi.enhanced_sampling.AdaptiveBiasingForce.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the bias force, with no energy.</span>
+
+<span class="sd">        Read-only with respect to the estimator: the current estimate is</span>
+<span class="sd">        applied but never updated here, so it is safe to call repeatedly on</span>
+<span class="sd">        the same batch.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        **kwargs:</span>
+<span class="sd">            Unused; accepted for interface compatibility with model wrappers.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ModelOutputs</span>
+<span class="sd">            ``forces``, this bias&#39;s ``state_version``, and per-walker</span>
+<span class="sd">            ``diagnostics/*``: the CV value, its ``bin`` (``-1`` outside</span>
+<span class="sd">            ``cv_range``, matching :meth:`bin_index`), the</span>
+<span class="sd">            ``applied_gradient`` actually used (ramped and capped, so not the</span>
+<span class="sd">            same as :meth:`mean_force`), the bin&#39;s sample count, its ramp</span>
+<span class="sd">            fraction, and ``in_range``.  Every per-bin quantity reads zero for</span>
+<span class="sd">            a walker outside the range, so the diagnostics agree with the</span>
+<span class="sd">            force rather than reporting the nearest edge bin&#39;s statistics.</span>
+<span class="sd">            There is no ``energy``: the applied force is not the gradient of</span>
+<span class="sd">            any function this bias holds.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">current</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_align_device</span><span class="p">(</span><span class="n">current</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">distance</span><span class="p">,</span> <span class="n">unit</span><span class="p">,</span> <span class="n">global_i</span><span class="p">,</span> <span class="n">global_j</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_geometry</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+            <span class="n">bins</span><span class="p">,</span> <span class="n">in_range</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bin_of</span><span class="p">(</span><span class="n">distance</span><span class="p">)</span>
+
+            <span class="n">gradient</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_applied_gradient</span><span class="p">()[</span><span class="n">bins</span><span class="p">]</span>  <span class="c1"># [B]</span>
+            <span class="n">gradient</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">in_range</span><span class="p">,</span> <span class="n">gradient</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">gradient</span><span class="p">))</span>
+
+            <span class="c1"># V_bias = -A, so F_bias = +grad A = (dA/dr) grad r, and</span>
+            <span class="c1"># grad_i r = -u while grad_j r = +u.</span>
+            <span class="n">contribution</span> <span class="o">=</span> <span class="n">gradient</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">unit</span>  <span class="c1"># [B, 3]</span>
+            <span class="n">forces</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">current</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+            <span class="n">forces</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">global_j</span><span class="p">,</span> <span class="n">contribution</span><span class="p">)</span>
+            <span class="n">forces</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">global_i</span><span class="p">,</span> <span class="o">-</span><span class="n">contribution</span><span class="p">)</span>
+
+            <span class="c1"># Every per-bin diagnostic is masked the same way the gradient is.</span>
+            <span class="c1"># _bin_of clamps the index so it is always safe to gather with,</span>
+            <span class="c1"># which means an out-of-range walker would otherwise read the</span>
+            <span class="c1"># nearest edge bin&#39;s statistics and report them as its own — a</span>
+            <span class="c1"># converged-looking sample count and ramp next to in_range == 0.</span>
+            <span class="n">zero_long</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="p">[</span><span class="n">bins</span><span class="p">])</span>
+            <span class="n">ramp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_fraction</span><span class="p">()[</span><span class="n">bins</span><span class="p">]</span>
+
+            <span class="c1"># Named applied_gradient, not mean_force: this is the ramped and</span>
+            <span class="c1"># capped value actually used, which is not what mean_force()</span>
+            <span class="c1"># returns. Reusing that name would invite reading a</span>
+            <span class="c1"># threshold-suppressed zero as a measured zero mean force.</span>
+            <span class="n">diagnostics</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;cv&quot;</span><span class="p">:</span> <span class="n">distance</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+                <span class="s2">&quot;bin&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">in_range</span><span class="p">,</span> <span class="n">bins</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">bins</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span>
+                    <span class="o">-</span><span class="mi">1</span>
+                <span class="p">),</span>
+                <span class="s2">&quot;applied_gradient&quot;</span><span class="p">:</span> <span class="n">gradient</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+                <span class="s2">&quot;samples&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                    <span class="n">in_range</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="p">[</span><span class="n">bins</span><span class="p">],</span> <span class="n">zero_long</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+                <span class="s2">&quot;ramp&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">in_range</span><span class="p">,</span> <span class="n">ramp</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">ramp</span><span class="p">))</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span>
+                    <span class="o">-</span><span class="mi">1</span>
+                <span class="p">),</span>
+                <span class="s2">&quot;in_range&quot;</span><span class="p">:</span> <span class="n">in_range</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">forces</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="p">}</span>
+
+        <span class="n">outputs</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">forces</span><span class="o">=</span><span class="n">forces</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">diagnostics</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">outputs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">DIAGNOSTIC_PREFIX</span><span class="si">}{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stamp_state_version</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">current</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AdaptiveBiasingForce.update">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html#nvalchemi.enhanced_sampling.AdaptiveBiasingForce.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">BiasContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Accumulate one mean-force sample per walker.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx:</span>
+<span class="sd">            The ``AFTER_COMPUTE`` capture, whose ``ctx.batch.forces`` are the</span>
+<span class="sd">            unbiased physical forces.  ``ctx.contribution`` is this bias&#39;s own</span>
+<span class="sd">            preceding output and is deliberately unused: an estimator fed its</span>
+<span class="sd">            own output converges to whatever it had already decided.</span>
+<span class="sd">        stage:</span>
+<span class="sd">            The stage being dispatched, always :attr:`stage`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the captured frame carries no forces to project.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">frames</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
+        <span class="n">physical</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">frames</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">physical</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: the observed frame has no &quot;</span>
+                <span class="s2">&quot;forces, so there is no mean force to sample. This bias &quot;</span>
+                <span class="s2">&quot;observes at AFTER_COMPUTE, where the batch must already carry &quot;</span>
+                <span class="s2">&quot;the physical forces from the model.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_align_device</span><span class="p">(</span><span class="n">physical</span><span class="p">)</span>
+            <span class="n">distance</span><span class="p">,</span> <span class="n">unit</span><span class="p">,</span> <span class="n">global_i</span><span class="p">,</span> <span class="n">global_j</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_geometry</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+            <span class="n">bins</span><span class="p">,</span> <span class="n">in_range</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bin_of</span><span class="p">(</span><span class="n">distance</span><span class="p">)</span>
+
+            <span class="c1"># Projected force along the CV, then the Jacobian term. See the</span>
+            <span class="c1"># class Notes for why the second is not optional.</span>
+            <span class="n">projected</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="o">-</span><span class="p">((</span><span class="n">physical</span><span class="p">[</span><span class="n">global_j</span><span class="p">]</span> <span class="o">-</span> <span class="n">physical</span><span class="p">[</span><span class="n">global_i</span><span class="p">])</span> <span class="o">*</span> <span class="n">unit</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.0</span>
+            <span class="p">)</span>
+            <span class="n">metric</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">KB_EV</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">/</span> <span class="n">distance</span>
+            <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="n">projected</span> <span class="o">-</span> <span class="n">metric</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+            <span class="n">keep</span> <span class="o">=</span> <span class="n">in_range</span> <span class="o">&amp;</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">keep</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+                <span class="k">return</span>
+
+            <span class="n">bins</span> <span class="o">=</span> <span class="n">bins</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">bins</span><span class="p">,</span> <span class="n">sample</span><span class="p">[</span><span class="n">keep</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">bins</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">bins</span><span class="p">))</span>
+
+            <span class="c1"># Only bump when the applied force actually changed. A bin still</span>
+            <span class="c1"># below its threshold contributes nothing, so re-priming forces</span>
+            <span class="c1"># over it would be pure cost — this is the case</span>
+            <span class="c1"># AdaptivePotentialMixin.bump_state_version documents. Asking</span>
+            <span class="c1"># ramp_fraction rather than re-deriving the threshold keeps the</span>
+            <span class="c1"># two from disagreeing at the endpoint.</span>
+            <span class="n">changed</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">ramp_fraction</span><span class="p">()[</span><span class="n">bins</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">())</span>
+
+        <span class="k">if</span> <span class="n">changed</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bump_state_version</span><span class="p">()</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Analysis</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="AdaptiveBiasingForce.config_fingerprint">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html#nvalchemi.enhanced_sampling.AdaptiveBiasingForce.config_fingerprint">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">config_fingerprint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the settings the accumulated histogram is only valid under.</span>
+
+<span class="sd">        ``cv_range`` and ``n_bins`` decide what each bin *means*; restoring a</span>
+<span class="sd">        histogram under a different pair silently relabels every bin.</span>
+<span class="sd">        ``temperature`` scales the metric correction already folded into</span>
+<span class="sd">        ``force_sum``, so samples taken at 300 K cannot be extended at 900 K.</span>
+<span class="sd">        ``atom_indices`` names the coordinate itself.  ``min_samples`` /</span>
+<span class="sd">        ``full_samples`` / ``max_force`` change what the same counts apply.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            The checked configuration.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;atom_indices&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_indices</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">&quot;cv_range&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cv_range</span><span class="p">),</span>
+            <span class="s2">&quot;n_bins&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span>
+            <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
+            <span class="s2">&quot;min_samples&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_samples</span><span class="p">,</span>
+            <span class="s2">&quot;full_samples&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_samples</span><span class="p">,</span>
+            <span class="s2">&quot;max_force&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="AdaptiveBiasingForce.free_energy">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.enhanced_sampling.AdaptiveBiasingForce.html#nvalchemi.enhanced_sampling.AdaptiveBiasingForce.free_energy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">free_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the PMF at each bin center, shape ``[n_bins]``.</span>
+
+<span class="sd">        Integrates the mean-force estimate by the trapezoid rule, shifted so</span>
+<span class="sd">        the minimum over sampled bins is zero.  This is the payoff of the</span>
+<span class="sd">        method: unlike metadynamics there is nothing to deconvolve, because</span>
+<span class="sd">        the accumulated quantity already *is* the free-energy gradient.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Tensor</span>
+<span class="sd">            Free energy in eV.  Bins never visited are ``nan``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If no bin has been sampled, or if an unvisited bin sits between</span>
+<span class="sd">            two visited ones.  Integration carries the profile across the</span>
+<span class="sd">            gap, so a hole in the middle would silently contaminate every</span>
+<span class="sd">            value beyond it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">visited</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">visited</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: no bin has been sampled, &quot;</span>
+                <span class="s2">&quot;so there is no free energy to report. Check that cv_range &quot;</span>
+                <span class="s2">&quot;covers the CV values the run actually visits.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">visited</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">as_tuple</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">first</span><span class="p">,</span> <span class="n">last</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">indices</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">indices</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">visited</span><span class="p">[</span><span class="n">first</span> <span class="p">:</span> <span class="n">last</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">all</span><span class="p">()):</span>
+            <span class="n">missing</span> <span class="o">=</span> <span class="p">(</span><span class="o">~</span><span class="n">visited</span><span class="p">[</span><span class="n">first</span> <span class="p">:</span> <span class="n">last</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">as_tuple</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span>
+                <span class="o">-</span><span class="mi">1</span>
+            <span class="p">)</span> <span class="o">+</span> <span class="n">first</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;AdaptiveBiasingForce </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: bin(s) &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">missing</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2"> were never visited but lie between bins &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">first</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">last</span><span class="si">}</span><span class="s2"> that were. Integrating the mean force &quot;</span>
+                <span class="s2">&quot;carries the profile across the gap, so every value beyond it &quot;</span>
+                <span class="s2">&quot;would be wrong by an unknown constant. Run longer, widen the &quot;</span>
+                <span class="s2">&quot;bins, or narrow cv_range.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">gradient</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="p">[</span><span class="n">first</span> <span class="p">:</span> <span class="n">last</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="p">[</span>
+            <span class="n">first</span> <span class="p">:</span> <span class="n">last</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="n">profile</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">force_sum</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">gradient</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">profile</span><span class="p">[</span><span class="n">first</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">return</span> <span class="n">profile</span>
+
+        <span class="n">midpoints</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">gradient</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">gradient</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_width</span>
+        <span class="n">integrated</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">gradient</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">gradient</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">midpoints</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+        <span class="n">profile</span><span class="p">[</span><span class="n">first</span> <span class="p">:</span> <span class="n">last</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">integrated</span> <span class="o">-</span> <span class="n">integrated</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">profile</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a concise description of the bias.&quot;&quot;&quot;</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cv_range</span>
+        <span class="n">sampled</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(name=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;cv_range=(</span><span class="si">{</span><span class="n">low</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">high</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2">), n_bins=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;sampled_bins=</span><span class="si">{</span><span class="n">sampled</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;samples=</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

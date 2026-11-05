@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/distributed/01_distributed_pipeline';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling" href="02_distributed_monitoring.html" />
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Distributed Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -473,33 +484,31 @@ document.write(`
 <p><a class="reference internal" href="#sphx-glr-download-examples-distributed-01-distributed-pipeline-py"><span class="std std-ref">Go to the end</span></a>
 to download the full example code.</p>
 </div>
-<section class="sphx-glr-example-title" id="distributed-multi-gpu-pipeline-parallel-fire-langevin">
-<span id="sphx-glr-examples-distributed-01-distributed-pipeline-py"></span><h1>Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin<a class="headerlink" href="#distributed-multi-gpu-pipeline-parallel-fire-langevin" title="Link to this heading">#</a></h1>
-<p>This example orchestrates two independent FIRE → NVTLangevin pipelines
+<section class="sphx-glr-example-title" id="distributed-multi-gpu-pipeline-parallel-fire2-langevin">
+<span id="sphx-glr-examples-distributed-01-distributed-pipeline-py"></span><h1>Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin<a class="headerlink" href="#distributed-multi-gpu-pipeline-parallel-fire2-langevin" title="Link to this heading">#</a></h1>
+<p>This example orchestrates two independent FIRE2 → NVTLangevin pipelines
 running in parallel across 4 GPUs using
 <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a>.</p>
 <p class="rubric">Topology</p>
 <figure class="align-default" id="id1">
-<div class="graphviz"><object data="../../_images/graphviz-8b330a5dbf5002519aa851218bfea6c21bb4249b.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">digraph topology {
+digraph topology {
     rankdir=LR
     fontname=&quot;Helvetica&quot;
     node [fontname=&quot;Helvetica&quot; fontsize=11 shape=box style=&quot;rounded,filled&quot; fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;]
     edge [fontname=&quot;Helvetica&quot; fontsize=10]
 
-    r0 [label=&quot;Rank 0\nFIRE + sampler_a&quot;]
+    r0 [label=&quot;Rank 0\nFIRE2 + sampler_a&quot;]
     r1 [label=&quot;Rank 1\nNVTLangevin + sink_a&quot; fillcolor=&quot;#f9e2ae&quot; fontcolor=&quot;#111111&quot;]
-    r2 [label=&quot;Rank 2\nFIRE + sampler_b&quot;]
+    r2 [label=&quot;Rank 2\nFIRE2 + sampler_b&quot;]
     r3 [label=&quot;Rank 3\nNVTLangevin + sink_b&quot; fillcolor=&quot;#f9e2ae&quot; fontcolor=&quot;#111111&quot;]
 
     r0 -&gt; r1 [style=bold color=&quot;#c0392b&quot; penwidth=2]
     r2 -&gt; r3 [style=bold color=&quot;#c0392b&quot; penwidth=2]
-}</p></object></div>
-<figcaption>
-<p><span class="caption-text">Two independent FIRE → Langevin pipelines across 4 GPUs.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+}<figcaption>
+<p><span class="caption-text">Two independent FIRE2 → Langevin pipelines across 4 GPUs.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
-<p>Each FIRE rank draws molecules from a dataset, optimises them until
+<p>Each FIRE2 rank draws molecules from a dataset, optimises them until
 convergence or a 50-step limit, and sends them to the paired Langevin rank
 for 20 steps of short MD production. A
 <a class="reference internal" href="../../modules/dynamics/generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a> on the Langevin ranks writes
@@ -525,7 +534,7 @@ the trajectories to a
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">FIRE</span><span class="p">,</span>
+    <span class="n">FIRE2</span><span class="p">,</span>
     <span class="n">ConvergenceHook</span><span class="p">,</span>
     <span class="n">DistributedPipeline</span><span class="p">,</span>
     <span class="n">FusedStage</span><span class="p">,</span>
@@ -603,7 +612,7 @@ process (launched by <code class="docutils literal notranslate"><span class="pre
 only the corresponding stage.  Inter-rank communication is handled
 transparently via NCCL <code class="docutils literal notranslate"><span class="pre">isend</span></code>/<code class="docutils literal notranslate"><span class="pre">irecv</span></code> calls.</p>
 <p>Here we create two independent sub-pipelines: ranks 0→1 and 2→3.
-Each sub-pipeline is a FIRE optimiser feeding into a Langevin MD stage.
+Each sub-pipeline is a FIRE2 optimiser feeding into a Langevin MD stage.
 The <code class="docutils literal notranslate"><span class="pre">stages</span></code> dict is built on every rank but only the local stage is
 ever executed; constructing all stages on every rank keeps the code
 identical across processes, which simplifies debugging.</p>
@@ -615,7 +624,7 @@ dataset and packs them into variable-size batches that fit within atom
 and edge count budgets.  In a distributed setting, each upstream rank
 owns its own sampler and dataset partition so that work is distributed
 evenly.  Downstream ranks (the Langevin stages) do not need a sampler —
-they receive systems directly from the paired FIRE rank via NCCL.</p>
+they receive systems directly from the paired FIRE2 rank via NCCL.</p>
 </section>
 <section id="bufferconfig-fixed-size-communication">
 <h2>BufferConfig: fixed-size communication<a class="headerlink" href="#bufferconfig-fixed-size-communication" title="Link to this heading">#</a></h2>
@@ -635,10 +644,10 @@ a downstream stage has <code class="docutils literal notranslate"><span class="p
 The <code class="docutils literal notranslate"><span class="pre">buffer_config</span></code> must be identical for all stages that communicate
 with each other.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">make_fire</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FusedStage</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a convergence- or step-limited FIRE optimiser stage.&quot;&quot;&quot;</span>
-    <span class="n">dynamics</span> <span class="o">=</span> <span class="n">FIRE</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a convergence- or step-limited FIRE2 optimiser stage.&quot;&quot;&quot;</span>
+    <span class="n">dynamics</span> <span class="o">=</span> <span class="n">FIRE2</span><span class="p">(</span>
         <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-        <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
         <span class="n">n_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
         <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="p">(</span>
             <span class="n">criteria</span><span class="o">=</span><span class="p">[</span>
@@ -683,7 +692,7 @@ On <code class="docutils literal notranslate"><span class="pre">__exit__</span><
 ranks finish when their sampler is exhausted. Downstream ranks finish after
 the upstream rank is done and all fixed-duration MD work has drained.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Launch two parallel FIRE -&gt; Langevin pipelines on 4 GPUs.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Launch two parallel FIRE2 -&gt; Langevin pipelines on 4 GPUs.&quot;&quot;&quot;</span>
     <span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModelWrapper</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">DemoModel</span></a><span class="p">())</span>
 
     <span class="c1"># Sinks (only used by ranks 1 and 3, but created on all for simplicity)</span>
@@ -787,7 +796,12 @@ the upstream rank is done and all fixed-duration MD work has drained.</p>
     <span class="n">main</span><span class="p">()</span>
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.005 seconds)</p>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/ase/atoms.py:427: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.
+As an alternative, you can create a new view using np.reshape (with copy=False if needed).
+  a.shape = (-1,) + shape
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.004 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-distributed-01-distributed-pipeline-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/2d123145e2beb04e776ab55e81ecd3ef/01_distributed_pipeline.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">01_distributed_pipeline.ipynb</span></code></a></p>

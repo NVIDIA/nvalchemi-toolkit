@@ -1,0 +1,1226 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.distillation.replay &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/distillation/replay';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.distillation.replay</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Replay buffer of generated frames and the reference/replay mixing loader.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">math</span><span class="w"> </span><span class="kn">import</span> <span class="n">ceil</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">TypeAlias</span><span class="p">,</span> <span class="n">runtime_checkable</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Bool</span><span class="p">,</span> <span class="n">Integer</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataloader</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataset_device</span><span class="p">,</span> <span class="n">same_device</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.in_memory_dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">InMemoryDataset</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.multidataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiDataset</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.samplers</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiDatasetBatchSampler</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchDatasetProtocol</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;FIFO&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AdmissionPolicy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;EvictionPolicy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ReplayBuffer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ReplayEviction&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;build_mixed_loader&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">ReplayEviction</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;fifo&quot;</span><span class="p">]</span>
+<span class="sd">&quot;&quot;&quot;Eviction policy a recipe names by string; ``&quot;fifo&quot;`` builds :class:`FIFO`.&quot;&quot;&quot;</span>
+
+<span class="n">_AdmissionMask</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">]</span>
+<span class="n">_DropIndices</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;K&quot;</span><span class="p">]</span>
+
+<span class="n">_GROUP_LEVELS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;atoms&quot;</span><span class="p">:</span> <span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edges&quot;</span><span class="p">:</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span> <span class="s2">&quot;system&quot;</span><span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Batch level each storage group holds, used to report a schema mismatch.&quot;&quot;&quot;</span>
+
+<span class="n">_SCHEMA_REMEDY</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;Label the reference dataset with label_dataset, requesting the signals the &quot;</span>
+    <span class="s2">&quot;propagator&#39;s scorer produces, and store it in the shape a replay frame &quot;</span>
+    <span class="s2">&quot;has: the structure, whatever propagator state travels with it, and the &quot;</span>
+    <span class="s2">&quot;teacher_* labels, with none of the energy, forces, or stress the labeling &quot;</span>
+    <span class="s2">&quot;hook strips.&quot;</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Remedy naming the replay-frame contract both mixture sources have to meet.&quot;&quot;&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_frame_schema</span><span class="p">(</span><span class="n">frames</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the ``level.field`` names :meth:`Batch.append` intersects over.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">frozenset</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_GROUP_LEVELS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">)</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">fields</span> <span class="ow">in</span> <span class="n">frames</span><span class="o">.</span><span class="n">level_keys</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">fields</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_frame_dtypes</span><span class="p">(</span><span class="n">frames</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the dtype every ``level.field`` of *frames* is stored at.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_GROUP_LEVELS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">)</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">frames</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">fields</span> <span class="ow">in</span> <span class="n">frames</span><span class="o">.</span><span class="n">level_keys</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">fields</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_schema_levels</span><span class="p">(</span><span class="n">schema</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the batch levels at which *schema* holds at least one field.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">name</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">schema</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_mixture_sources</span><span class="p">(</span>
+    <span class="n">reference_dataset</span><span class="p">:</span> <span class="n">BatchDatasetProtocol</span><span class="p">,</span> <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reject two sources that cannot be collated into one training batch.</span>
+
+<span class="sd">    The reference schema is read from a one-sample probe rather than from</span>
+<span class="sd">    ``field_names``, because a Zarr-backed dataset and an in-memory dataset</span>
+<span class="sd">    report ``field_names`` differently. Fields are compared by dtype as well</span>
+<span class="sd">    as by name. Collation casts the second part of a mixed batch to the dtype</span>
+<span class="sd">    of the first, and either source may lead a chunk.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If one source holds a batch level the other lacks, if they carry</span>
+<span class="sd">        different fields, if they carry a field at different dtypes, or if they</span>
+<span class="sd">        emit their batches on different devices.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">probe</span> <span class="o">=</span> <span class="n">reference_dataset</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([[</span><span class="mi">0</span><span class="p">]])[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">reference_schema</span> <span class="o">=</span> <span class="n">_frame_schema</span><span class="p">(</span><span class="n">probe</span><span class="p">)</span>
+    <span class="n">replay_schema</span> <span class="o">=</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">schema</span>
+    <span class="n">reference_levels</span> <span class="o">=</span> <span class="n">_schema_levels</span><span class="p">(</span><span class="n">reference_schema</span><span class="p">)</span>
+    <span class="n">replay_levels</span> <span class="o">=</span> <span class="n">_schema_levels</span><span class="p">(</span><span class="n">replay_schema</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">reference_levels</span> <span class="o">!=</span> <span class="n">replay_levels</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Both mixture sources must hold the same batch levels, because &quot;</span>
+            <span class="s2">&quot;collation zero-fills a level only one of them carries instead of &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;dropping it; got </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">reference_levels</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> on the reference &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;dataset and </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">replay_levels</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> on the replay buffer, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;differing in </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">reference_levels</span><span class="w"> </span><span class="o">^</span><span class="w"> </span><span class="n">replay_levels</span><span class="p">)</span><span class="si">!r}</span><span class="s2">. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_SCHEMA_REMEDY</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">reference_schema</span> <span class="o">!=</span> <span class="n">replay_schema</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Both mixture sources must carry the same fields, because collation &quot;</span>
+            <span class="s2">&quot;keeps only the fields both hold and drops the rest out of every &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;mixed batch; got </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">reference_schema</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">replay_schema</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> on &quot;</span>
+            <span class="s2">&quot;the reference dataset alone and &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">replay_schema</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">reference_schema</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> on the replay buffer &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;alone. </span><span class="si">{</span><span class="n">_SCHEMA_REMEDY</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="n">reference_dtypes</span> <span class="o">=</span> <span class="n">_frame_dtypes</span><span class="p">(</span><span class="n">probe</span><span class="p">)</span>
+    <span class="n">replay_dtypes</span> <span class="o">=</span> <span class="n">_frame_dtypes</span><span class="p">(</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">in_memory_batch</span><span class="p">)</span>
+    <span class="n">mismatched</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+        <span class="n">name</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">reference_dtypes</span>
+        <span class="k">if</span> <span class="n">reference_dtypes</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">!=</span> <span class="n">replay_dtypes</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">mismatched</span><span class="p">:</span>
+        <span class="n">detail</span> <span class="o">=</span> <span class="s2">&quot;; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> at </span><span class="si">{</span><span class="n">reference_dtypes</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">!s}</span><span class="s2"> on the reference dataset &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;and </span><span class="si">{</span><span class="n">replay_dtypes</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">!s}</span><span class="s2"> on the replay buffer&quot;</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">mismatched</span>
+        <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Both mixture sources must carry each field at one dtype, because &quot;</span>
+            <span class="s2">&quot;collation casts the second part of a mixed batch to the dtype of &quot;</span>
+            <span class="s2">&quot;the first and the two sources take turns leading a chunk; got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2">. Label the reference dataset with the dtype the &quot;</span>
+            <span class="s2">&quot;on-policy scorer uses — the student&#39;s parameter dtype — or cast &quot;</span>
+            <span class="s2">&quot;it in a batch transform.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">reference_device</span> <span class="o">=</span> <span class="n">dataset_device</span><span class="p">(</span><span class="n">reference_dataset</span><span class="p">,</span> <span class="n">probe</span><span class="p">)</span>
+    <span class="n">replay_device</span> <span class="o">=</span> <span class="n">dataset_device</span><span class="p">(</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">same_device</span><span class="p">(</span><span class="n">reference_device</span><span class="p">,</span> <span class="n">replay_device</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Both mixture sources must emit batches on one device, because &quot;</span>
+            <span class="s2">&quot;collation concatenates their tensors; got reference on &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">reference_device</span><span class="si">!s}</span><span class="s2"> and replay on </span><span class="si">{</span><span class="n">replay_device</span><span class="si">!s}</span><span class="s2">. Pass &quot;</span>
+            <span class="s2">&quot;ReplayBuffer(device=...) — OnPolicyConfig.replay_device from a &quot;</span>
+            <span class="s2">&quot;segment loop — to stage generated frames where the reference &quot;</span>
+            <span class="s2">&quot;dataset lives.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_batch_allocation</span><span class="p">(</span><span class="n">replay_ratio</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the ``(reference, replay)`` sample counts of one mixed batch.&quot;&quot;&quot;</span>
+    <span class="n">replay</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">replay_ratio</span> <span class="o">*</span> <span class="n">batch_size</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">batch_size</span> <span class="o">-</span> <span class="n">replay</span><span class="p">,</span> <span class="n">replay</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_minimum_batch_size</span><span class="p">(</span><span class="n">replay_ratio</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the smallest batch size that gives both mixture sources a sample.</span>
+
+<span class="sd">    The ratio arithmetic alone is not enough. :func:`_batch_allocation` rounds</span>
+<span class="sd">    a half sample up into the replay share, so at a size where the reference</span>
+<span class="sd">    share lands exactly on that boundary, the reference source still gets no</span>
+<span class="sd">    sample. The size is therefore incremented until the allocator itself gives</span>
+<span class="sd">    both sources a sample, which takes at most one step.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="n">ceil</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">/</span> <span class="nb">min</span><span class="p">(</span><span class="n">replay_ratio</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">replay_ratio</span><span class="p">))</span>
+    <span class="k">while</span> <span class="nb">min</span><span class="p">(</span><span class="n">_batch_allocation</span><span class="p">(</span><span class="n">replay_ratio</span><span class="p">,</span> <span class="n">size</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">size</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">size</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_batch_size_remedy</span><span class="p">(</span><span class="n">replay_ratio</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the remedy clause naming a batch size the allocator does accept.&quot;&quot;&quot;</span>
+    <span class="n">remedy</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;raise batch_size to at least </span><span class="si">{</span><span class="n">_minimum_batch_size</span><span class="p">(</span><span class="n">replay_ratio</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">if</span> <span class="n">replay_ratio</span> <span class="o">==</span> <span class="mf">0.5</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">remedy</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">remedy</span><span class="si">}</span><span class="s2">, or move replay_ratio toward 0.5&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_single_source_loader</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">:</span> <span class="n">BatchDatasetProtocol</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">num_batches</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataLoader</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a loader over one source, sized to *num_batches* when given.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">num_batches</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">)</span>
+    <span class="n">single</span> <span class="o">=</span> <span class="n">MultiDataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span>
+        <span class="n">single</span><span class="p">,</span>
+        <span class="n">batch_sampler</span><span class="o">=</span><span class="n">MultiDatasetBatchSampler</span><span class="p">(</span>
+            <span class="n">single</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">samples_per_dataset</span><span class="o">=</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,),</span>
+            <span class="n">num_batches</span><span class="o">=</span><span class="n">num_batches</span><span class="p">,</span>
+            <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
+            <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="AdmissionPolicy">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.AdmissionPolicy.html#nvalchemi.training.distillation.AdmissionPolicy">[docs]</a>
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AdmissionPolicy</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decide which incoming frames enter a :class:`ReplayBuffer`.</span>
+
+<span class="sd">    :meth:`ReplayBuffer.extend` calls the policy on the frames a segment</span>
+<span class="sd">    delivers, before the schema check. A frame the mask leaves out therefore</span>
+<span class="sd">    never freezes or violates the schema. A policy is a predicate over the</span>
+<span class="sd">    batch and may read any field the frames carry. For example, it can reject</span>
+<span class="sd">    the NaN-labeled frames of a diverged trajectory, or filter frames on size</span>
+<span class="sd">    or diversity.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import torch</span>
+<span class="sd">    &gt;&gt;&gt; def finite_labels(frames):</span>
+<span class="sd">    ...     return torch.isfinite(frames.teacher_energy.view(-1))</span>
+<span class="sd">    &gt;&gt;&gt; ReplayBuffer(admission=finite_labels)  # doctest: +SKIP</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_AdmissionMask</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return one flag per graph of *frames*, ``True`` where it is admitted.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+
+<div class="viewcode-block" id="EvictionPolicy">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.EvictionPolicy.html#nvalchemi.training.distillation.EvictionPolicy">[docs]</a>
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">EvictionPolicy</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Choose which frames leave a :class:`ReplayBuffer` that is over capacity.</span>
+
+<span class="sd">    :meth:`ReplayBuffer.extend` calls the policy after appending the admitted</span>
+<span class="sd">    frames. The policy receives the whole resident batch, the admitted frames</span>
+<span class="sd">    on their own, and the capacity. The resident batch is ordered oldest</span>
+<span class="sd">    first, with the frames just admitted last. Both batches are read-only. The</span>
+<span class="sd">    policy returns integer indices into the resident batch to drop, at least</span>
+<span class="sd">    as many as the number of frames over capacity. :class:`FIFO` is the</span>
+<span class="sd">    reference implementation. A recency-based, quality-ranked, or prioritized</span>
+<span class="sd">    policy reads whatever field it ranks on.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="EvictionPolicy.select">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.EvictionPolicy.html#nvalchemi.training.distillation.EvictionPolicy.select">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">select</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">incoming</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">capacity</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_DropIndices</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the indices into *buffer* to drop so that it fits *capacity*.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="FIFO">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.FIFO.html#nvalchemi.training.distillation.FIFO">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FIFO</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Eviction policy that drops the oldest frames first.</span>
+
+<span class="sd">    A recipe names this policy as ``&quot;fifo&quot;``. It is the buffer&#39;s default.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import FIFO, ReplayBuffer</span>
+<span class="sd">    &gt;&gt;&gt; buffer = ReplayBuffer(capacity=4096, eviction=FIFO())</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="FIFO.select">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.FIFO.html#nvalchemi.training.distillation.FIFO.select">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">select</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">buffer</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">incoming</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>  <span class="c1"># noqa: ARG002</span>
+        <span class="n">capacity</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_DropIndices</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the indices of the oldest frames, as many as exceed *capacity*.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">-</span> <span class="n">capacity</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="n">buffer</span><span class="o">.</span><span class="n">device</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_eviction</span><span class="p">(</span><span class="n">eviction</span><span class="p">:</span> <span class="n">ReplayEviction</span> <span class="o">|</span> <span class="n">EvictionPolicy</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EvictionPolicy</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the policy object *eviction* names or already is.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">eviction</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">eviction</span> <span class="o">==</span> <span class="s2">&quot;fifo&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">FIFO</span><span class="p">()</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;eviction must be &#39;fifo&#39; or an EvictionPolicy; got </span><span class="si">{</span><span class="n">eviction</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">eviction</span><span class="p">,</span> <span class="n">EvictionPolicy</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">eviction</span>
+    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+        <span class="s2">&quot;eviction must be &#39;fifo&#39; or an object with select(buffer, incoming, &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;capacity); got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">eviction</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="ReplayBuffer">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.ReplayBuffer.html#nvalchemi.training.distillation.ReplayBuffer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReplayBuffer</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hold generated frames for replay under one frozen key schema.</span>
+
+<span class="sd">    The buffer wraps an</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset` that</span>
+<span class="sd">    grows one segment at a time, so a loader or a</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` consumes it</span>
+<span class="sd">    like any dataset. The first :meth:`extend` freezes the incoming schema,</span>
+<span class="sd">    including levels and dtypes, and every later call must match it exactly.</span>
+<span class="sd">    :meth:`~nvalchemi.data.Batch.append` keeps only the keys both sides hold</span>
+<span class="sd">    and casts what it keeps to the resident dtypes. Without the frozen schema,</span>
+<span class="sd">    one unlabeled frame would strip ``teacher_*`` from every frame already</span>
+<span class="sd">    stored, and one arriving in a wider dtype would have its labels rounded to</span>
+<span class="sd">    the resident dtype unreported.</span>
+
+<span class="sd">    A stored frame is a training sample rather than a propagator state. It</span>
+<span class="sd">    holds the structure and its ``teacher_*`` labels, and none of the</span>
+<span class="sd">    predictions the propagator wrote.</span>
+<span class="sd">    :class:`~nvalchemi.training.distillation.TeacherLabelHook` delivers frames</span>
+<span class="sd">    in this shape, and :func:`build_mixed_loader` requires the reference</span>
+<span class="sd">    dataset to match it. Two decisions are left to policy: what enters the</span>
+<span class="sd">    buffer and what leaves it. An :class:`AdmissionPolicy` masks the incoming</span>
+<span class="sd">    frames before the schema check. When the buffer is over capacity, an</span>
+<span class="sd">    :class:`EvictionPolicy` names the frames to drop. The default is</span>
+<span class="sd">    :class:`FIFO`, which drops the oldest frames first.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    capacity : int | None, optional</span>
+<span class="sd">        Maximum number of frames kept. Bound it on long runs. Also bound it on</span>
+<span class="sd">        any run whose objective reads a batch as a sample of the current</span>
+<span class="sd">        policy, because a draw over a buffer that never retires frames is a</span>
+<span class="sd">        draw over every policy the run has had. Default ``None`` (unbounded).</span>
+<span class="sd">    eviction : {&quot;fifo&quot;} | EvictionPolicy, optional</span>
+<span class="sd">        Policy deciding which frames leave a full buffer. Default ``&quot;fifo&quot;``,</span>
+<span class="sd">        which builds :class:`FIFO`.</span>
+<span class="sd">    admission : AdmissionPolicy | None, optional</span>
+<span class="sd">        Predicate that selects which frames each :meth:`extend` admits.</span>
+<span class="sd">        Default ``None`` admits every frame.</span>
+<span class="sd">    device : torch.device | str | None, optional</span>
+<span class="sd">        Device the buffer keeps frames on and emits them from. A segment loop</span>
+<span class="sd">        sets it from ``OnPolicyConfig.replay_device``. Default ``None`` adopts</span>
+<span class="sd">        the device of the first frames passed to :meth:`extend` and moves every</span>
+<span class="sd">        later frame to that device, so two capture routes on two devices can</span>
+<span class="sd">        fill one buffer.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *capacity* is not positive, or if *eviction* is a string other than</span>
+<span class="sd">        ``&quot;fifo&quot;``.</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If *eviction* is neither that string nor an object with ``select``, or</span>
+<span class="sd">        if *admission* is not callable.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import ReplayBuffer</span>
+<span class="sd">    &gt;&gt;&gt; buffer = ReplayBuffer(capacity=4096)</span>
+<span class="sd">    &gt;&gt;&gt; buffer.extend(labeled_frames)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; len(buffer)  # doctest: +SKIP</span>
+<span class="sd">    128</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Frames are owned, not aliased. The buffer copies the batch that first</span>
+<span class="sd">    fills it and concatenates later batches into fresh tensors. A propagator</span>
+<span class="sd">    may therefore keep integrating the batch it handed over.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">capacity</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">eviction</span><span class="p">:</span> <span class="n">ReplayEviction</span> <span class="o">|</span> <span class="n">EvictionPolicy</span> <span class="o">=</span> <span class="s2">&quot;fifo&quot;</span><span class="p">,</span>
+        <span class="n">admission</span><span class="p">:</span> <span class="n">AdmissionPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate the capacity and policies of an empty buffer.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">capacity</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">capacity</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;capacity must be positive or None; got </span><span class="si">{</span><span class="n">capacity</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">admission</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">admission</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;admission must be callable on a Batch, returning one boolean per &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;graph; got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">admission</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span> <span class="o">=</span> <span class="n">capacity</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eviction</span><span class="p">:</span> <span class="n">EvictionPolicy</span> <span class="o">=</span> <span class="n">_resolve_eviction</span><span class="p">(</span><span class="n">eviction</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">admission</span> <span class="o">=</span> <span class="n">admission</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">:</span> <span class="n">InMemoryDataset</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dtypes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of frames currently held.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mi">0</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">InMemoryDataset</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dataset view of the stored frames, for a loader to draw from.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;ReplayBuffer holds no frames yet; call extend() before reading &quot;</span>
+                <span class="s2">&quot;its dataset.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">schema</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Frozen ``level.field`` schema every frame must match; empty until filled.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span>
+
+<div class="viewcode-block" id="ReplayBuffer.extend">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.ReplayBuffer.html#nvalchemi.training.distillation.ReplayBuffer.extend">[docs]</a>
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Admit *frames* into the buffer and evict down to capacity.</span>
+
+<span class="sd">        Runs without autograd, so a stored frame is always detached: a frame</span>
+<span class="sd">        handed over with ``requires_grad`` set, or still attached to the graph</span>
+<span class="sd">        that produced it, never links the resident frames to a graph that a</span>
+<span class="sd">        training backward would free.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        frames : Batch</span>
+<span class="sd">            Frames to store, one graph each. The admission policy filters them</span>
+<span class="sd">            first. The first call that admits frames freezes the buffer&#39;s key</span>
+<span class="sd">            schema, and later calls must match it. When no device was given</span>
+<span class="sd">            at construction, that call also fixes the buffer&#39;s device.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the key schema or the field dtypes of the admitted frames differ</span>
+<span class="sd">            from the buffer&#39;s, if the admission policy returns anything but one</span>
+<span class="sd">            boolean per graph, or if the eviction policy returns non-integer</span>
+<span class="sd">            indices, an index outside the resident frames, or fewer frames</span>
+<span class="sd">            than the buffer&#39;s excess over capacity. A refused eviction leaves</span>
+<span class="sd">            the buffer as it was before the call.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">frames</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">admission</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">admitted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_admit</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">admitted</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="n">frames</span> <span class="o">=</span> <span class="n">admitted</span>
+        <span class="n">given_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">frames</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">frames</span> <span class="o">=</span> <span class="n">frames</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">incoming</span> <span class="o">=</span> <span class="n">_frame_schema</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="o">=</span> <span class="n">incoming</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dtypes</span> <span class="o">=</span> <span class="n">_frame_dtypes</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="o">=</span> <span class="n">InMemoryDataset</span><span class="p">(</span>
+                <span class="n">in_memory_batch</span><span class="o">=</span><span class="n">frames</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_evict</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dtypes</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">given_device</span>
+                <span class="k">raise</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_schema</span><span class="p">(</span><span class="n">incoming</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_dtypes</span><span class="p">(</span><span class="n">_frame_dtypes</span><span class="p">(</span><span class="n">frames</span><span class="p">))</span>
+        <span class="n">resident_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">in_memory_batch</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_evict</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="c1"># Appending is in place, so a refused selection is rolled back here.</span>
+            <span class="n">resident</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">in_memory_batch</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">in_memory_batch</span> <span class="o">=</span> <span class="n">resident</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">resident_count</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">resident</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">raise</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_admit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the admitted frames, or ``None`` if the policy admits none.&quot;&quot;&quot;</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">admission</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+        <span class="n">expected</span> <span class="o">=</span> <span class="p">(</span><span class="n">frames</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="n">mask</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
+            <span class="ow">or</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="n">expected</span>
+        <span class="p">):</span>
+            <span class="n">got</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;a </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+                <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;shape </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> of </span><span class="si">{</span><span class="n">mask</span><span class="o">.</span><span class="n">dtype</span><span class="si">!s}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;An admission policy returns one boolean per graph, a bool tensor &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;of shape </span><span class="si">{</span><span class="n">expected</span><span class="si">!r}</span><span class="s2">; got </span><span class="si">{</span><span class="n">got</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">all</span><span class="p">()):</span>
+            <span class="k">return</span> <span class="n">frames</span>
+        <span class="n">kept</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">frames</span><span class="o">.</span><span class="n">device</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">kept</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">frames</span><span class="o">.</span><span class="n">batch_ptr</span>
+        <span class="k">return</span> <span class="n">frames</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">kept</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">incoming</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject frames whose keys or levels differ from the frozen schema.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">incoming</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Replay frames must carry the buffer&#39;s key schema, because appending &quot;</span>
+            <span class="s2">&quot;keeps only the keys both sides hold; got extra &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">incoming</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> and missing &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">incoming</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_dtypes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">incoming</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject frames whose field dtypes differ from those of the resident frames.&quot;&quot;&quot;</span>
+        <span class="n">changed</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> at </span><span class="si">{</span><span class="n">incoming</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">!s}</span><span class="s2"> rather than </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_dtypes</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">!s}</span><span class="s2">&quot;</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dtypes</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">incoming</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtypes</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">changed</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Replay frames must carry the buffer&#39;s field dtypes, because appending &quot;</span>
+            <span class="s2">&quot;casts incoming tensors to the resident dtype and would round a wider &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;label away unreported; got </span><span class="si">{</span><span class="n">changed</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_evict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">incoming</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Drop the frames the eviction policy selects until the buffer fits.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">resident</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">in_memory_batch</span>
+        <span class="n">excess</span> <span class="o">=</span> <span class="n">resident</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span>
+        <span class="k">if</span> <span class="n">excess</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">drop</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">eviction</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">resident</span><span class="p">,</span> <span class="n">incoming</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">),</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">resident</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">drop</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">bool</span> <span class="ow">or</span> <span class="n">drop</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">()</span> <span class="ow">or</span> <span class="n">drop</span><span class="o">.</span><span class="n">is_complex</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eviction</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.select must return integer indices &quot;</span>
+                <span class="s2">&quot;into the resident frames, since a fractional one would silently &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;truncate onto a frame the policy did not name; got </span><span class="si">{</span><span class="n">drop</span><span class="o">.</span><span class="n">dtype</span><span class="si">!s}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">drop</span> <span class="o">=</span> <span class="n">drop</span><span class="o">.</span><span class="n">long</span><span class="p">()</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+        <span class="n">in_range</span> <span class="o">=</span> <span class="n">drop</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">bool</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">drop</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">drop</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">resident</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">drop</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">excess</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">in_range</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eviction</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.select must return at least &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">excess</span><span class="si">!r}</span><span class="s2"> distinct indices into the </span><span class="si">{</span><span class="n">resident</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;resident frames, because the buffer holds </span><span class="si">{</span><span class="n">excess</span><span class="si">!r}</span><span class="s2"> more than &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;its capacity of </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="si">!r}</span><span class="s2">; got </span><span class="si">{</span><span class="n">drop</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">!r}</span><span class="s2"> indices&quot;</span>
+                <span class="o">+</span> <span class="p">(</span>
+                    <span class="s2">&quot;&quot;</span>
+                    <span class="k">if</span> <span class="n">in_range</span>
+                    <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot; spanning </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">drop</span><span class="o">.</span><span class="n">min</span><span class="p">())</span><span class="si">!r}</span><span class="s2"> to </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">drop</span><span class="o">.</span><span class="n">max</span><span class="p">())</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="o">+</span> <span class="s2">&quot;. Return that many distinct in-range indices.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">keep</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">resident</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">resident</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">keep</span><span class="p">[</span><span class="n">drop</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">in_memory_batch</span> <span class="o">=</span> <span class="n">resident</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">keep</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="build_mixed_loader">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.build_mixed_loader.html#nvalchemi.training.distillation.build_mixed_loader">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_mixed_loader</span><span class="p">(</span>
+    <span class="n">reference_dataset</span><span class="p">:</span> <span class="n">BatchDatasetProtocol</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">replay_ratio</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">num_batches</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataLoader</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a loader that draws a fixed reference/replay mixture in every batch.</span>
+
+<span class="sd">    The two sources are composed into a</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` and drawn by a</span>
+<span class="sd">    :class:`~nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler`. The</span>
+<span class="sd">    ratio is resolved to whole samples of *batch_size*, so every batch has</span>
+<span class="sd">    exactly the same composition, at a granularity of ``1 / batch_size``. For</span>
+<span class="sd">    example, ``replay_ratio=0.25`` and ``batch_size=8`` give six reference and</span>
+<span class="sd">    two replay samples every step. Rebuild the loader after every segment.</span>
+<span class="sd">    The sampler reads the child dataset lengths once, at construction, so it</span>
+<span class="sd">    never samples frames added later.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    reference_dataset : BatchDatasetProtocol | None</span>
+<span class="sd">        Reference dataset, typically a teacher-labeled store. ``None`` trains on</span>
+<span class="sd">        generated data only and requires ``replay_ratio=1.0``.</span>
+<span class="sd">    replay_buffer : ReplayBuffer</span>
+<span class="sd">        Buffer of generated frames. When it is empty, the loader draws from</span>
+<span class="sd">        the reference dataset only.</span>
+<span class="sd">    replay_ratio : float</span>
+<span class="sd">        Fraction of every batch drawn from *replay_buffer*, in ``[0, 1]``.</span>
+<span class="sd">    batch_size : int</span>
+<span class="sd">        Samples per batch across both sources.</span>
+<span class="sd">    num_batches : int | None, optional</span>
+<span class="sd">        Batches per epoch, honored on every path, including the single-source</span>
+<span class="sd">        ones. Default ``None`` uses the sampler&#39;s ``&quot;dataset_size&quot;`` policy,</span>
+<span class="sd">        or one pass over a single source.</span>
+<span class="sd">    shuffle : bool, optional</span>
+<span class="sd">        Randomize sample order within each child and each batch. Default</span>
+<span class="sd">        ``True``.</span>
+<span class="sd">    generator : torch.Generator | None, optional</span>
+<span class="sd">        Generator for reproducible mixing. A single-source loader without</span>
+<span class="sd">        *num_batches* draws from the global RNG instead. Default ``None``.</span>
+<span class="sd">    seed : int, optional</span>
+<span class="sd">        Base seed of the batch sampler when it owns its generator. The sampler</span>
+<span class="sd">        combines it with the epoch set on it. Default ``0``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    DataLoader</span>
+<span class="sd">        Loader yielding :class:`~nvalchemi.data.Batch` objects of the requested</span>
+<span class="sd">        composition.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *replay_ratio* is outside ``[0, 1]``, if both sources are empty, if</span>
+<span class="sd">        *reference_dataset* is ``None`` while ``replay_ratio &lt; 1``, if the two</span>
+<span class="sd">        sources differ in batch levels, fields, a field&#39;s dtype, or emission</span>
+<span class="sd">        device, or if the ratio allocates no samples to one of them.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import build_mixed_loader</span>
+<span class="sd">    &gt;&gt;&gt; loader = build_mixed_loader(  # doctest: +SKIP</span>
+<span class="sd">    ...     reference_dataset,</span>
+<span class="sd">    ...     buffer,</span>
+<span class="sd">    ...     replay_ratio=0.25,</span>
+<span class="sd">    ...     batch_size=8,</span>
+<span class="sd">    ...     num_batches=64,</span>
+<span class="sd">    ... )</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Collation is not a merge. :meth:`~nvalchemi.data.Batch.append` drops a</span>
+<span class="sd">    field that only one side holds, and zero-fills a whole level that only one</span>
+<span class="sd">    side holds. Both sources must therefore carry the same schema, which is</span>
+<span class="sd">    compared on a probe batch from each. That schema is the replay-frame</span>
+<span class="sd">    contract: the structure, the propagator state that travels with it, and</span>
+<span class="sd">    the ``teacher_*`` labels. It has none of the ``energy``, ``forces``, or</span>
+<span class="sd">    ``stress`` fields the labeling hook strips. A reference dataset that</span>
+<span class="sd">    carries plain reference labels is therefore rejected. Label it with</span>
+<span class="sd">    :func:`~nvalchemi.training.distillation.label_dataset`, requesting the</span>
+<span class="sd">    signals the propagator&#39;s scorer produces. The sampler draws with</span>
+<span class="sd">    replacement, so a buffer holding fewer frames than its allocation is</span>
+<span class="sd">    oversampled.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">replay_ratio</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;replay_ratio must lie in [0, 1]; got </span><span class="si">{</span><span class="n">replay_ratio</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">replay_buffer</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">reference_dataset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;build_mixed_loader needs something to draw from; got an empty &quot;</span>
+                <span class="s2">&quot;replay buffer and reference_dataset=None.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_single_source_loader</span><span class="p">(</span>
+            <span class="n">reference_dataset</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">num_batches</span><span class="o">=</span><span class="n">num_batches</span><span class="p">,</span>
+            <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
+            <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">reference_dataset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">replay_ratio</span> <span class="o">!=</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;A replay_ratio below 1 mixes in reference data, so a reference &quot;</span>
+                <span class="s2">&quot;dataset is required; got reference_dataset=None and &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;replay_ratio=</span><span class="si">{</span><span class="n">replay_ratio</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_single_source_loader</span><span class="p">(</span>
+            <span class="n">replay_buffer</span><span class="o">.</span><span class="n">dataset</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">num_batches</span><span class="o">=</span><span class="n">num_batches</span><span class="p">,</span>
+            <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
+            <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">_check_mixture_sources</span><span class="p">(</span><span class="n">reference_dataset</span><span class="p">,</span> <span class="n">replay_buffer</span><span class="p">)</span>
+    <span class="n">reference_samples</span><span class="p">,</span> <span class="n">replay_samples</span> <span class="o">=</span> <span class="n">_batch_allocation</span><span class="p">(</span><span class="n">replay_ratio</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">)</span>
+    <span class="k">if</span> <span class="mf">0.0</span> <span class="o">&lt;</span> <span class="n">replay_ratio</span> <span class="o">&lt;</span> <span class="mf">1.0</span> <span class="ow">and</span> <span class="nb">min</span><span class="p">(</span><span class="n">reference_samples</span><span class="p">,</span> <span class="n">replay_samples</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;replay_ratio=</span><span class="si">{</span><span class="n">replay_ratio</span><span class="si">!r}</span><span class="s2"> allocates </span><span class="si">{</span><span class="n">reference_samples</span><span class="si">}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;reference and </span><span class="si">{</span><span class="n">replay_samples</span><span class="si">}</span><span class="s2"> replay samples of &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;batch_size=</span><span class="si">{</span><span class="n">batch_size</span><span class="si">!r}</span><span class="s2">, so one source never reaches an &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;optimizer step; </span><span class="si">{</span><span class="n">_batch_size_remedy</span><span class="p">(</span><span class="n">replay_ratio</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">mixed</span> <span class="o">=</span> <span class="n">MultiDataset</span><span class="p">(</span><span class="n">reference_dataset</span><span class="p">,</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">dataset</span><span class="p">,</span> <span class="n">output_strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span>
+        <span class="n">mixed</span><span class="p">,</span>
+        <span class="n">batch_sampler</span><span class="o">=</span><span class="n">MultiDatasetBatchSampler</span><span class="p">(</span>
+            <span class="n">mixed</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">samples_per_dataset</span><span class="o">=</span><span class="p">(</span><span class="n">reference_samples</span><span class="p">,</span> <span class="n">replay_samples</span><span class="p">),</span>
+            <span class="n">num_batches</span><span class="o">=</span><span class="n">num_batches</span><span class="p">,</span>
+            <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
+            <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

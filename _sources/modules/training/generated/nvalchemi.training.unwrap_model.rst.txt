@@ -1,0 +1,6 @@
+﻿nvalchemi.training.unwrap\_model
+================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: unwrap_model

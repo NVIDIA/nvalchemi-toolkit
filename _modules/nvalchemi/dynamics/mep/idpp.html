@@ -1,0 +1,891 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.dynamics.mep.idpp &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/mep/idpp';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.dy...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.dynamics.mep.idpp</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Image-dependent pair-potential inputs and model.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">nn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.level_storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">SegmentedLevelStorage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep._geometry</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">PreparedMIC</span><span class="p">,</span>
+    <span class="n">minimum_image_displacement</span><span class="p">,</span>
+    <span class="n">prepare_batch_mic</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep.validate</span><span class="w"> </span><span class="kn">import</span> <span class="n">validate_paths</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span><span class="p">,</span> <span class="n">ModelConfig</span>
+
+<span class="n">_TARGET_DISTANCE_KEY</span> <span class="o">=</span> <span class="s2">&quot;idpp_target_distances&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_pair_displacements</span><span class="p">(</span>
+    <span class="n">positions</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">pair_indices</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">pair_path</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">prepared_mic</span><span class="p">:</span> <span class="n">PreparedMIC</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return pair displacements with batched minimum-image wrapping.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    positions : Tensor</span>
+<span class="sd">        Cartesian atom positions with shape ``(N, 3)``.</span>
+<span class="sd">    pair_indices : Tensor</span>
+<span class="sd">        Global atom indices for each pair with shape ``(E, 2)``. Each row</span>
+<span class="sd">        contains the source and destination indices ``(i, j)``.</span>
+<span class="sd">    pair_path : Tensor</span>
+<span class="sd">        Path index for each pair with shape ``(E,)``.</span>
+<span class="sd">    prepared_mic : PreparedMIC</span>
+<span class="sd">        Reusable path-level cell-dependent geometry.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Tensor</span>
+<span class="sd">        Minimum-image Cartesian displacements from atom ``i`` to atom ``j`` with</span>
+<span class="sd">        shape ``(E, 3)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">displacements</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">pair_indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]]</span> <span class="o">-</span> <span class="n">positions</span><span class="p">[</span><span class="n">pair_indices</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]]</span>
+    <span class="k">return</span> <span class="n">minimum_image_displacement</span><span class="p">(</span><span class="n">displacements</span><span class="p">,</span> <span class="n">pair_path</span><span class="p">,</span> <span class="n">prepared</span><span class="o">=</span><span class="n">prepared_mic</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="prepare_idpp_targets">
+<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.mep.prepare_idpp_targets.html#nvalchemi.dynamics.mep.prepare_idpp_targets">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">prepare_idpp_targets</span><span class="p">(</span><span class="n">paths</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build full pairwise IDPP target distances for a batch of reaction paths.</span>
+
+<span class="sd">    IDPP (image dependent pair potential) initialization needs a target</span>
+<span class="sd">    interatomic distance for every atom pair in every image. This function</span>
+<span class="sd">    replaces whatever edge/neighbor list ``paths`` currently has with a complete</span>
+<span class="sd">    upper-triangle pair list per image, and assigns each pair a target distance</span>
+<span class="sd">    linearly interpolated between that pair&#39;s distance in the path&#39;s first image</span>
+<span class="sd">    and its distance in the path&#39;s last image.</span>
+
+<span class="sd">    ``paths`` is a :class:`Batch` of one or more reaction paths, where each</span>
+<span class="sd">    path is a group of images (``group_layout``) and each image is one</span>
+<span class="sd">    graph in that group. All images within a path must share the same</span>
+<span class="sd">    atoms and ordering (enforced by :func:`validate_paths`) so that pair</span>
+<span class="sd">    ``(i, j)`` refers to the same atoms across every image of the path.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    paths : Batch</span>
+<span class="sd">        Grouped reaction paths, where each group is a path and each graph</span>
+<span class="sd">        within a group is one image along that path, with corresponding</span>
+<span class="sd">        atoms in every image.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Batch</span>
+<span class="sd">        ``paths``, mutated in place: its edge storage now holds the full</span>
+<span class="sd">        pair ``neighbor_list`` and the interpolated ``idpp_target_distances``</span>
+<span class="sd">        for every image.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">validate_paths</span><span class="p">(</span><span class="n">paths</span><span class="p">)</span>
+
+    <span class="n">layout</span> <span class="o">=</span> <span class="n">paths</span><span class="o">.</span><span class="n">group_layout</span>
+    <span class="n">first_image_idx</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">group_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">if</span> <span class="s2">&quot;cell&quot;</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+        <span class="n">path_cell</span> <span class="o">=</span> <span class="n">paths</span><span class="o">.</span><span class="n">cell</span><span class="p">[</span><span class="n">first_image_idx</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">paths</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">path_cell</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">paths</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">paths</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">layout</span><span class="o">.</span><span class="n">num_groups</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="s2">&quot;pbc&quot;</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+        <span class="n">path_pbc</span> <span class="o">=</span> <span class="n">paths</span><span class="o">.</span><span class="n">pbc</span><span class="p">[</span><span class="n">first_image_idx</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">path_pbc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+            <span class="n">layout</span><span class="o">.</span><span class="n">num_groups</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">paths</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+    <span class="c1"># Prepare MIC using the cell and PBC settings from the first image of each path.</span>
+    <span class="n">prepare_batch_mic</span><span class="p">(</span><span class="n">paths</span><span class="p">,</span> <span class="n">path_cell</span><span class="p">,</span> <span class="n">path_pbc</span><span class="p">)</span>
+
+    <span class="n">node_ptr</span> <span class="o">=</span> <span class="n">paths</span><span class="o">.</span><span class="n">batch_ptr</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>  <span class="c1"># [B + 1]</span>
+    <span class="n">node_image</span> <span class="o">=</span> <span class="n">paths</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>  <span class="c1"># [N]</span>
+    <span class="n">num_atoms</span> <span class="o">=</span> <span class="n">paths</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>  <span class="c1"># [B]</span>
+    <span class="n">nodes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">paths</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">paths</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>  <span class="c1"># [N]</span>
+    <span class="n">node_rank</span> <span class="o">=</span> <span class="n">nodes</span> <span class="o">-</span> <span class="n">node_ptr</span><span class="p">[</span><span class="n">node_image</span><span class="p">]</span>  <span class="c1"># [N]</span>
+
+    <span class="c1"># Enumerate each image&#39;s complete upper-triangle pair list.</span>
+    <span class="c1"># For one three-atom image with global nodes [0, 1, 2]:</span>
+    <span class="c1">#   repeats     = [2, 1, 0]  -&gt; pair_i      = [0, 0, 1]</span>
+    <span class="c1">#   pair_offset = [0, 1, 0]  -&gt; pair_j      = [1, 2, 2]</span>
+    <span class="c1">#   pair_indices = [[0, 1], [0, 2], [1, 2]]</span>
+    <span class="c1"># Later images produce the same local pairs shifted to their global node indices.</span>
+    <span class="n">repeats</span> <span class="o">=</span> <span class="n">num_atoms</span><span class="p">[</span><span class="n">node_image</span><span class="p">]</span> <span class="o">-</span> <span class="n">node_rank</span> <span class="o">-</span> <span class="mi">1</span>  <span class="c1"># [N]</span>
+    <span class="n">pair_i</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">repeats</span><span class="p">)</span>  <span class="c1"># [E]</span>
+    <span class="n">pair_i_starts</span> <span class="o">=</span> <span class="n">repeats</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">repeats</span>  <span class="c1"># [N]</span>
+    <span class="n">pair_offset</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">pair_i</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="n">paths</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span><span class="n">pair_i_starts</span><span class="p">,</span> <span class="n">repeats</span><span class="p">)</span>
+    <span class="p">)</span>  <span class="c1"># [E]</span>
+    <span class="n">pair_j</span> <span class="o">=</span> <span class="n">pair_i</span> <span class="o">+</span> <span class="n">pair_offset</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># [E]</span>
+    <span class="n">pair_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">((</span><span class="n">pair_i</span><span class="p">,</span> <span class="n">pair_j</span><span class="p">),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [E, 2]</span>
+
+    <span class="c1"># Prepare quantities needed to locate each pair&#39;s path and image, and each path&#39;s</span>
+    <span class="c1"># last-image rank - used below to select the two endpoint images</span>
+    <span class="n">pair_counts</span> <span class="o">=</span> <span class="n">num_atoms</span> <span class="o">*</span> <span class="p">(</span><span class="n">num_atoms</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>  <span class="c1"># [B]</span>
+    <span class="n">pair_ptr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">pair_counts</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">pair_counts</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">)))</span>  <span class="c1"># [B + 1]</span>
+    <span class="n">pair_image</span> <span class="o">=</span> <span class="n">node_image</span><span class="p">[</span><span class="n">pair_i</span><span class="p">]</span>  <span class="c1"># [E]</span>
+    <span class="n">pair_rank</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">pair_i</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="n">paths</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">-</span> <span class="n">pair_ptr</span><span class="p">[</span><span class="n">pair_image</span><span class="p">]</span>
+    <span class="p">)</span>  <span class="c1"># [E]</span>
+    <span class="n">pair_path</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">group_idx</span><span class="p">[</span><span class="n">pair_image</span><span class="p">]</span>  <span class="c1"># [E]</span>
+    <span class="n">image_rank</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">graph_rank</span><span class="p">[</span><span class="n">pair_image</span><span class="p">]</span>  <span class="c1"># [E]</span>
+    <span class="n">last_image_rank</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">num_graphs_per_group</span><span class="p">[</span><span class="n">pair_path</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>  <span class="c1"># [E]</span>
+
+    <span class="c1"># Measure pair distances in the initial and final path images.</span>
+    <span class="c1"># E_init = E_final = number of edges in the initial or the final image.</span>
+    <span class="n">initial_pair_mask</span> <span class="o">=</span> <span class="n">image_rank</span> <span class="o">==</span> <span class="mi">0</span>  <span class="c1"># [E]</span>
+    <span class="n">initial_endpoint_pairs</span> <span class="o">=</span> <span class="n">pair_indices</span><span class="p">[</span><span class="n">initial_pair_mask</span><span class="p">]</span>  <span class="c1"># [E_init, 2]</span>
+    <span class="n">initial_endpoint_displacements</span> <span class="o">=</span> <span class="n">_pair_displacements</span><span class="p">(</span>
+        <span class="n">paths</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span>
+        <span class="n">initial_endpoint_pairs</span><span class="p">,</span>
+        <span class="n">pair_path</span><span class="p">[</span><span class="n">initial_pair_mask</span><span class="p">],</span>
+        <span class="n">paths</span><span class="o">.</span><span class="n">_mic_data</span><span class="p">,</span>
+    <span class="p">)</span>  <span class="c1"># [E_init, 3]</span>
+    <span class="n">initial_endpoint_distances</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">vector_norm</span><span class="p">(</span>
+        <span class="n">initial_endpoint_displacements</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span>
+    <span class="p">)</span>  <span class="c1"># [E_init]</span>
+
+    <span class="n">final_pair_mask</span> <span class="o">=</span> <span class="n">image_rank</span> <span class="o">==</span> <span class="n">last_image_rank</span>  <span class="c1"># [E]</span>
+    <span class="n">final_endpoint_pairs</span> <span class="o">=</span> <span class="n">pair_indices</span><span class="p">[</span><span class="n">final_pair_mask</span><span class="p">]</span>  <span class="c1"># [E_final, 2]</span>
+    <span class="n">final_endpoint_displacements</span> <span class="o">=</span> <span class="n">_pair_displacements</span><span class="p">(</span>
+        <span class="n">paths</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span>
+        <span class="n">final_endpoint_pairs</span><span class="p">,</span>
+        <span class="n">pair_path</span><span class="p">[</span><span class="n">final_pair_mask</span><span class="p">],</span>
+        <span class="n">paths</span><span class="o">.</span><span class="n">_mic_data</span><span class="p">,</span>
+    <span class="p">)</span>  <span class="c1"># [E_final, 3]</span>
+    <span class="n">final_endpoint_distances</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">vector_norm</span><span class="p">(</span>
+        <span class="n">final_endpoint_displacements</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span>
+    <span class="p">)</span>  <span class="c1"># [E_final]</span>
+
+    <span class="c1"># Map each per-image atom pair to the corresponding atom pair at both endpoints.</span>
+    <span class="n">pairs_per_path</span> <span class="o">=</span> <span class="n">pair_counts</span><span class="p">[</span><span class="n">layout</span><span class="o">.</span><span class="n">group_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>  <span class="c1"># [P]</span>
+    <span class="n">path_pair_ptr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">pairs_per_path</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">pairs_per_path</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+    <span class="p">)</span>  <span class="c1"># [P + 1]</span>
+    <span class="n">pair_endpoint_index</span> <span class="o">=</span> <span class="n">path_pair_ptr</span><span class="p">[</span><span class="n">pair_path</span><span class="p">]</span> <span class="o">+</span> <span class="n">pair_rank</span>  <span class="c1"># [E]</span>
+    <span class="n">initial_distances</span> <span class="o">=</span> <span class="n">initial_endpoint_distances</span><span class="p">[</span><span class="n">pair_endpoint_index</span><span class="p">]</span>  <span class="c1"># [E]</span>
+    <span class="n">final_distances</span> <span class="o">=</span> <span class="n">final_endpoint_distances</span><span class="p">[</span><span class="n">pair_endpoint_index</span><span class="p">]</span>  <span class="c1"># [E]</span>
+
+    <span class="c1"># Linearly interpolate each target according to the image&#39;s position in its path.</span>
+    <span class="n">fractions</span> <span class="o">=</span> <span class="n">image_rank</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">paths</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">/</span> <span class="n">last_image_rank</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+        <span class="n">paths</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span>
+    <span class="p">)</span>
+    <span class="n">target_distances</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">lerp</span><span class="p">(</span><span class="n">initial_distances</span><span class="p">,</span> <span class="n">final_distances</span><span class="p">,</span> <span class="n">fractions</span><span class="p">)</span>
+
+    <span class="n">segment_lengths</span> <span class="o">=</span> <span class="n">pair_counts</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+    <span class="n">paths</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="s2">&quot;edges&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SegmentedLevelStorage</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;neighbor_list&quot;</span><span class="p">:</span> <span class="n">pair_indices</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">_TARGET_DISTANCE_KEY</span><span class="p">:</span> <span class="n">target_distances</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">paths</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">segment_lengths</span><span class="o">=</span><span class="n">segment_lengths</span><span class="p">,</span>
+        <span class="n">validate</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">paths</span><span class="o">.</span><span class="n">keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">paths</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="s2">&quot;edge&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">,</span> <span class="n">_TARGET_DISTANCE_KEY</span><span class="p">}</span>
+    <span class="c1"># Full pair edges do not use a neighbor-list cutoff.</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">paths</span><span class="p">,</span> <span class="s2">&quot;_neighbor_list_cutoff&quot;</span><span class="p">):</span>
+        <span class="nb">object</span><span class="o">.</span><span class="fm">__delattr__</span><span class="p">(</span><span class="n">paths</span><span class="p">,</span> <span class="s2">&quot;_neighbor_list_cutoff&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">paths</span></div>
+
+
+
+<div class="viewcode-block" id="IDPPModel">
+<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.mep.IDPPModel.html#nvalchemi.dynamics.mep.IDPPModel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">IDPPModel</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Evaluate the image-dependent pair potential for reaction-path images.</span>
+
+<span class="sd">    Linear Cartesian interpolation can place atoms unnaturally close together</span>
+<span class="sd">    or produce uneven changes in interatomic distances. IDPP provides a better</span>
+<span class="sd">    initial guess for reaction-path calculations, such as NEB, by relaxing the</span>
+<span class="sd">    interior images toward smoothly varying pair distances before evaluating</span>
+<span class="sd">    them with a physical potential [1]_.</span>
+
+<span class="sd">    For image fraction :math:`s \in [0, 1]`, the target distance for atoms</span>
+<span class="sd">    :math:`i` and :math:`j` is interpolated between the endpoint distances:</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        d_{ij}^{\mathrm{target}}(s)</span>
+<span class="sd">        = (1-s)d_{ij}^{(0)} + s d_{ij}^{(1)}.</span>
+
+<span class="sd">    The artificial IDPP energy for an image is</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        E_{\mathrm{IDPP}}</span>
+<span class="sd">        = \sum_{i&lt;j}</span>
+<span class="sd">          \frac{\left(d_{ij} - d_{ij}^{\mathrm{target}}\right)^2}{d_{ij}^4},</span>
+
+<span class="sd">    which weights close atom pairs more strongly. Forces are the negative</span>
+<span class="sd">    coordinate gradient, :math:`\mathbf{F}_i = -\partial E_{\mathrm{IDPP}} /</span>
+<span class="sd">    \partial \mathbf{r}_i`.</span>
+
+<span class="sd">    Call :func:`prepare_idpp_targets` on each grouped path batch before</span>
+<span class="sd">    evaluation. Pair displacements use minimum-image wrapping for periodic images.</span>
+<span class="sd">    IDPP energies are optimization objectives, not physical potential energies.</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    .. [1] S. Smidstrup, A. Pedersen, K. Stokbro, and H. Jónsson,</span>
+<span class="sd">       &quot;Improved initial guess for minimum energy path calculations,&quot;</span>
+<span class="sd">       *The Journal of Chemical Physics*, 140, 214106 (2014).</span>
+<span class="sd">       `doi:10.1063/1.4878664 &lt;https://doi.org/10.1063/1.4878664&gt;`_.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">autograd_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(),</span>
+            <span class="n">autograd_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">}),</span>
+            <span class="n">required_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">,</span> <span class="n">_TARGET_DISTANCE_KEY</span><span class="p">}),</span>
+            <span class="n">optional_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="s2">&quot;pbc&quot;</span><span class="p">}),</span>
+            <span class="n">supports_pbc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">needs_pbc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">neighbor_config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">embedding_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return no embedding shapes because IDPP has no learned features.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+<div class="viewcode-block" id="IDPPModel.compute_embeddings">
+<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.mep.IDPPModel.html#nvalchemi.dynamics.mep.IDPPModel.compute_embeddings">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_embeddings</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise because the analytic IDPP model has no embeddings.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;IDPPModel does not provide embeddings&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="IDPPModel.direct_derivative_keys">
+<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.mep.IDPPModel.html#nvalchemi.dynamics.mep.IDPPModel.direct_derivative_keys">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">direct_derivative_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return outputs computed analytically by the IDPP model.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set[str]</span>
+<span class="sd">            The analytic force output.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;forces&quot;</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="IDPPModel.forward">
+<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.mep.IDPPModel.html#nvalchemi.dynamics.mep.IDPPModel.forward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute active IDPP outputs for every image.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : Batch</span>
+<span class="sd">            Complete grouped paths prepared by :func:`prepare_idpp_targets`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ModelOutputs</span>
+<span class="sd">            Active per-image energies and per-atom forces.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``data`` is not a :class:`Batch`.</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If ``data`` has not been prepared with IDPP target distances.</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If any distinct atom pair is coincident within machine precision.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">_TARGET_DISTANCE_KEY</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;IDPPModel requires paths prepared by prepare_idpp_targets&quot;</span><span class="p">)</span>
+
+        <span class="n">inputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_input</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">pair_indices</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">target_distances</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="n">_TARGET_DISTANCE_KEY</span><span class="p">]</span>
+
+        <span class="n">positions</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span>
+        <span class="n">num_graphs</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="n">pair_batch</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">pair_indices</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">cell</span> <span class="o">=</span> <span class="n">inputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cell&quot;</span><span class="p">)</span>
+        <span class="n">pbc</span> <span class="o">=</span> <span class="n">inputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pbc&quot;</span><span class="p">)</span>
+        <span class="n">prepared_mic</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">&quot;_mic_data&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pbc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">prepared_mic</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Periodic IDPP data requires explicit MIC preparation; &quot;</span>
+                <span class="s2">&quot;call prepare_idpp_targets after moving the batch&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">prepared_mic</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">prepared_mic</span><span class="o">.</span><span class="n">periodic_basis</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Prepared MIC data is on the wrong device&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">prepared_mic</span><span class="o">.</span><span class="n">periodic_basis</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Prepared MIC data has the wrong dtype&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">prepared_mic</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">displacements</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">positions</span><span class="p">[</span><span class="n">pair_indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]]</span> <span class="o">-</span> <span class="n">positions</span><span class="p">[</span><span class="n">pair_indices</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]]</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">pair_path</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">group_layout</span><span class="o">.</span><span class="n">group_idx</span><span class="p">[</span><span class="n">pair_batch</span><span class="p">]</span>
+                <span class="n">displacements</span> <span class="o">=</span> <span class="n">_pair_displacements</span><span class="p">(</span>
+                    <span class="n">positions</span><span class="p">,</span>
+                    <span class="n">pair_indices</span><span class="p">,</span>
+                    <span class="n">pair_path</span><span class="p">,</span>
+                    <span class="n">prepared_mic</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="n">distances</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">vector_norm</span><span class="p">(</span><span class="n">displacements</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">minimum_distance</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span>
+            <span class="c1"># This guards against overlaps introduced unexpectedly during optimization</span>
+            <span class="c1"># without synchronizing every evaluation.</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">_assert_async</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">distances</span> <span class="o">&gt;</span> <span class="n">minimum_distance</span><span class="p">),</span>
+                <span class="s2">&quot;IDPP cannot evaluate coincident atom pairs; perturb overlapping &quot;</span>
+                <span class="s2">&quot;atoms before optimization&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">safe_distances</span> <span class="o">=</span> <span class="n">distances</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="n">minimum_distance</span><span class="p">)</span>
+            <span class="n">distance_errors</span> <span class="o">=</span> <span class="n">distances</span> <span class="o">-</span> <span class="n">target_distances</span>
+            <span class="n">inverse_distances</span> <span class="o">=</span> <span class="n">safe_distances</span><span class="o">.</span><span class="n">reciprocal</span><span class="p">()</span>
+            <span class="n">model_output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+            <span class="k">if</span> <span class="s2">&quot;energy&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
+                <span class="n">pair_energies</span> <span class="o">=</span> <span class="n">distance_errors</span><span class="o">.</span><span class="n">square</span><span class="p">()</span> <span class="o">*</span> <span class="n">inverse_distances</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+                <span class="n">accumulation_dtype</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">float64</span>
+                    <span class="k">if</span> <span class="n">pair_energies</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span>
+                    <span class="k">else</span> <span class="n">pair_energies</span><span class="o">.</span><span class="n">dtype</span>
+                <span class="p">)</span>
+                <span class="n">energy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="n">num_graphs</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">accumulation_dtype</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">energy</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">pair_batch</span><span class="p">,</span> <span class="n">pair_energies</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">accumulation_dtype</span><span class="p">))</span>
+                <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">energy</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
+                <span class="n">pair_force_scale</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="mi">2</span>
+                    <span class="o">*</span> <span class="n">distance_errors</span>
+                    <span class="o">*</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">target_distances</span> <span class="o">-</span> <span class="n">distances</span><span class="p">)</span>
+                    <span class="o">*</span> <span class="n">inverse_distances</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">pair_forces</span> <span class="o">=</span> <span class="n">pair_force_scale</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">displacements</span>
+                <span class="n">forces</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+                <span class="n">forces</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">pair_indices</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">pair_forces</span><span class="p">)</span>
+                <span class="n">forces</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">pair_indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="o">-</span><span class="n">pair_forces</span><span class="p">)</span>
+                <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">forces</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">model_output</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;IDPPModel&quot;</span><span class="p">,</span> <span class="s2">&quot;prepare_idpp_targets&quot;</span><span class="p">]</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

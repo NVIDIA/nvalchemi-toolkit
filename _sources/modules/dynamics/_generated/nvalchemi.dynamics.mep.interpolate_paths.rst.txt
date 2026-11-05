@@ -1,0 +1,6 @@
+﻿nvalchemi.dynamics.mep.interpolate\_paths
+=========================================
+
+.. currentmodule:: nvalchemi.dynamics.mep
+
+.. autofunction:: interpolate_paths

@@ -1,0 +1,775 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.data.transforms.compose &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/transforms/compose';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.da...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.data.transforms.compose</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Left-to-right composition helper for user-supplied data transforms.</span>
+
+<span class="sd">A single :class:`Compose` class handles either per-sample transforms</span>
+<span class="sd">(:data:`~nvalchemi._typing.SampleTransform`, taking and returning</span>
+<span class="sd">``(AtomicData, metadata)``) or per-batch transforms</span>
+<span class="sd">(:data:`~nvalchemi._typing.BatchTransform`, taking and returning</span>
+<span class="sd">:class:`~nvalchemi.data.Batch`). The composition kind is fixed at</span>
+<span class="sd">construction by inspecting each callable&#39;s type annotations; mixing</span>
+<span class="sd">sample and batch transforms in the same :class:`Compose` is rejected.</span>
+
+<span class="sd">Transforms must *return* their (possibly mutated) output; in-place</span>
+<span class="sd">mutation without returning is not supported.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">get_type_hints</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">plum</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span><span class="p">,</span> <span class="n">overload</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchTransform</span><span class="p">,</span> <span class="n">SampleTransform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.atomic_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+
+<span class="n">TransformKind</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;sample&quot;</span><span class="p">,</span> <span class="s2">&quot;batch&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_gate_transforms</span><span class="p">(</span>
+    <span class="n">transforms</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SampleTransform</span> <span class="o">|</span> <span class="n">BatchTransform</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransformKind</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate ``transforms`` and determine the composition kind.</span>
+
+<span class="sd">    For each callable, if type hints are available the first positional</span>
+<span class="sd">    parameter&#39;s annotation is inspected: :class:`AtomicData` marks a</span>
+<span class="sd">    sample transform, :class:`Batch` marks a batch transform, anything</span>
+<span class="sd">    else raises :class:`TypeError`. Untyped callables are skipped (no</span>
+<span class="sd">    classification contribution). After all callables are processed,</span>
+<span class="sd">    the typed ones must agree on a single kind, or :class:`TypeError`</span>
+<span class="sd">    is raised.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    transforms : Sequence[SampleTransform | BatchTransform]</span>
+<span class="sd">        Callables to validate.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    {&quot;sample&quot;, &quot;batch&quot;} or None</span>
+<span class="sd">        The composition kind, or ``None`` if no callable carried</span>
+<span class="sd">        classifiable annotations (empty input or every entry untyped).</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If a callable is not callable, carries a typed first parameter</span>
+<span class="sd">        that is neither :class:`AtomicData` nor :class:`Batch`, or if</span>
+<span class="sd">        typed callables disagree on the composition kind.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">kind</span><span class="p">:</span> <span class="n">TransformKind</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">classifying_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">fn</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">transforms</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Compose: transform at index </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> is not callable: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Resolve annotations. For non-function callables (e.g., class</span>
+        <span class="c1"># instances with __call__), descend into __call__.</span>
+        <span class="n">hint_source</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">fn</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="ow">or</span> <span class="n">inspect</span><span class="o">.</span><span class="n">ismethod</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="ow">or</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isbuiltin</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="n">call</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">fn</span><span class="p">),</span> <span class="s2">&quot;__call__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">call</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">hint_source</span> <span class="o">=</span> <span class="n">call</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">hints</span> <span class="o">=</span> <span class="n">get_type_hints</span><span class="p">(</span><span class="n">hint_source</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">hints</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+            <span class="k">continue</span>
+
+        <span class="n">positional</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">p</span>
+            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span>
+            <span class="ow">in</span> <span class="p">(</span>
+                <span class="n">inspect</span><span class="o">.</span><span class="n">Parameter</span><span class="o">.</span><span class="n">POSITIONAL_ONLY</span><span class="p">,</span>
+                <span class="n">inspect</span><span class="o">.</span><span class="n">Parameter</span><span class="o">.</span><span class="n">POSITIONAL_OR_KEYWORD</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">positional</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="n">first_name</span> <span class="o">=</span> <span class="n">positional</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span>
+        <span class="k">if</span> <span class="n">first_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">hints</span><span class="p">:</span>
+            <span class="c1"># Untyped first parameter: skip this callable entirely.</span>
+            <span class="k">continue</span>
+
+        <span class="n">first_ann</span> <span class="o">=</span> <span class="n">hints</span><span class="p">[</span><span class="n">first_name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">first_ann</span> <span class="ow">is</span> <span class="n">AtomicData</span><span class="p">:</span>
+            <span class="n">this_kind</span><span class="p">:</span> <span class="n">TransformKind</span> <span class="o">=</span> <span class="s2">&quot;sample&quot;</span>
+        <span class="k">elif</span> <span class="n">first_ann</span> <span class="ow">is</span> <span class="n">Batch</span><span class="p">:</span>
+            <span class="n">this_kind</span> <span class="o">=</span> <span class="s2">&quot;batch&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Compose: transform at index </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">fn</span><span class="si">!r}</span><span class="s2">) has typed first &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;parameter </span><span class="si">{</span><span class="n">first_ann</span><span class="si">!r}</span><span class="s2">; expected AtomicData (sample &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;transform) or Batch (batch transform)&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">kind</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kind</span> <span class="o">=</span> <span class="n">this_kind</span>
+            <span class="n">classifying_index</span> <span class="o">=</span> <span class="n">i</span>
+        <span class="k">elif</span> <span class="n">kind</span> <span class="o">!=</span> <span class="n">this_kind</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Compose: cannot mix sample and batch transforms; &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;transform at index </span><span class="si">{</span><span class="n">classifying_index</span><span class="si">}</span><span class="s2"> is </span><span class="si">{</span><span class="n">kind</span><span class="si">!r}</span><span class="s2"> but &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;transform at index </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> is </span><span class="si">{</span><span class="n">this_kind</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">kind</span>
+
+
+<div class="viewcode-block" id="Compose">
+<a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.transforms.Compose.html#nvalchemi.data.transforms.Compose">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Compose</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compose a sequence of transforms into a single callable.</span>
+
+<span class="sd">    Transforms are applied left-to-right: the output of transform</span>
+<span class="sd">    ``i`` becomes the input to transform ``i + 1``. An empty sequence</span>
+<span class="sd">    acts as the identity.</span>
+
+<span class="sd">    A :class:`Compose` is either a *sample* composition or a *batch*</span>
+<span class="sd">    composition, inferred at construction from the type annotations of</span>
+<span class="sd">    the supplied callables. Each typed callable must declare its first</span>
+<span class="sd">    positional parameter as :class:`~nvalchemi.data.AtomicData` (sample</span>
+<span class="sd">    transform) or :class:`~nvalchemi.data.Batch` (batch transform);</span>
+<span class="sd">    untyped callables are accepted and take on the kind established by</span>
+<span class="sd">    the typed ones. Mixing sample and batch transforms in the same</span>
+<span class="sd">    :class:`Compose` raises :class:`TypeError`. A composition with no</span>
+<span class="sd">    typed callables defaults to sample semantics.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    transforms : Sequence[SampleTransform | BatchTransform]</span>
+<span class="sd">        Transforms to compose in application order. Any iterable is</span>
+<span class="sd">        accepted and eagerly materialized into an immutable</span>
+<span class="sd">        :class:`tuple`. Each entry must be callable.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    transforms : tuple[SampleTransform, ...] | tuple[BatchTransform, ...]</span>
+<span class="sd">        The composed transforms, stored in application order.</span>
+<span class="sd">    is_batch : bool</span>
+<span class="sd">        ``True`` if this is a batch composition, ``False`` if it is a</span>
+<span class="sd">        sample composition. ``False`` for an empty / all-untyped</span>
+<span class="sd">        composition (defaults to sample semantics).</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If any entry is not callable, if a typed first parameter is</span>
+<span class="sd">        neither :class:`AtomicData` nor :class:`Batch`, or if typed</span>
+<span class="sd">        callables disagree on the composition kind.</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        (At call time) If any transform raises; the original exception</span>
+<span class="sd">        is wrapped in a :class:`RuntimeError` identifying the failing</span>
+<span class="sd">        index, with the original exception attached via ``__cause__``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Per-sample composition:</span>
+
+<span class="sd">    &gt;&gt;&gt; def shift_positions(data, metadata):  # doctest: +SKIP</span>
+<span class="sd">    ...     new_data = data.model_copy(update={&quot;positions&quot;: data.positions + 1.0})</span>
+<span class="sd">    ...     return new_data, metadata</span>
+<span class="sd">    &gt;&gt;&gt; def tag_origin(data, metadata):  # doctest: +SKIP</span>
+<span class="sd">    ...     metadata[&quot;origin&quot;] = &quot;shifted&quot;</span>
+<span class="sd">    ...     return data, metadata</span>
+<span class="sd">    &gt;&gt;&gt; compose = Compose([shift_positions, tag_origin])  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; new_data, new_meta = compose(data, {})  # doctest: +SKIP</span>
+
+<span class="sd">    Per-batch composition:</span>
+
+<span class="sd">    &gt;&gt;&gt; def scale_positions(batch):  # doctest: +SKIP</span>
+<span class="sd">    ...     batch.positions = batch.positions * 2.0</span>
+<span class="sd">    ...     return batch</span>
+<span class="sd">    &gt;&gt;&gt; compose = Compose([scale_positions])  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; new_batch = compose(batch)  # doctest: +SKIP</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;transforms&quot;</span><span class="p">,</span> <span class="s2">&quot;is_batch&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">transforms</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SampleTransform</span> <span class="o">|</span> <span class="n">BatchTransform</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">SampleTransform</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">BatchTransform</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">tuple</span><span class="p">(</span><span class="n">transforms</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">kind</span> <span class="o">=</span> <span class="n">_gate_transforms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_batch</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;batch&quot;</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply a batch composition to a :class:`Batch`.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">transform</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Compose: transform[</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">] (</span><span class="si">{</span><span class="n">transform</span><span class="si">!r}</span><span class="s2">) raised </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply a sample composition to an ``(AtomicData, metadata)`` pair.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">transform</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Compose: transform[</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">] (</span><span class="si">{</span><span class="n">transform</span><span class="si">!r}</span><span class="s2">) raised </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span>
+
+    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>  <span class="c1"># noqa: F811</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply the composed transforms left-to-right.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : AtomicData or Batch</span>
+<span class="sd">            For a sample composition, the :class:`AtomicData` sample.</span>
+<span class="sd">            For a batch composition, the :class:`Batch`.</span>
+<span class="sd">        metadata : dict[str, Any], optional</span>
+<span class="sd">            Per-sample metadata dict. Required for sample compositions</span>
+<span class="sd">            and must be omitted for batch compositions.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[AtomicData, dict[str, Any]] or Batch</span>
+<span class="sd">            The output of the final transform. For a sample composition,</span>
+<span class="sd">            the ``(data, metadata)`` tuple. For a batch composition, the</span>
+<span class="sd">            :class:`Batch`. An empty composition returns its input</span>
+<span class="sd">            unchanged (identity).</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If any transform raises; the message identifies the failing</span>
+<span class="sd">            index and the original exception is attached via</span>
+<span class="sd">            ``__cause__``. This includes the case where the call</span>
+<span class="sd">            argument types do not match the composition kind (e.g.,</span>
+<span class="sd">            passing a :class:`Batch` to a sample composition), in which</span>
+<span class="sd">            case the first transform will typically raise when invoked</span>
+<span class="sd">            on the wrong type.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a developer-readable representation listing the transforms.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Compose(</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">)</span><span class="si">!r}</span><span class="s2">)&quot;</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

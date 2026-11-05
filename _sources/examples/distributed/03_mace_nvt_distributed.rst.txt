@@ -60,7 +60,7 @@ box dimensions to minimise halo transfer.
 Output xyz file at ``./mace_nvt_trajectory.xyz`` (rank 0 only). Reads
 cleanly in OVITO and VMD.
 
-.. GENERATED FROM PYTHON SOURCE LINES 59-349
+.. GENERATED FROM PYTHON SOURCE LINES 59-354
 
 
 
@@ -95,13 +95,16 @@ cleanly in OVITO and VMD.
     _DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
 
     # Reuse the SiO2 supercell builder from the benchmark suite — one canonical
-    # periodic test system across the distributed examples. Sphinx-Gallery executes
-    # examples without defining ``__file__``; it also never launches this script.
-    if not _DOCS_BUILD:
-        sys.path.insert(
-            0, str(Path(__file__).resolve().parents[2] / "benchmark" / "distributed")
-        )
-        from _benchmark_common import build_sio2_supercell  # noqa: E402
+    # periodic test system across the distributed examples. The shared helper lives
+    # under ``benchmark/distributed`` (repo_root/benchmark/distributed), so add THAT
+    # to the path, not the example's own directory.
+    # Sphinx-Gallery does not define ``__file__``; it runs each example from the
+    # example's own directory, so fall back to the working directory there.
+    _EXAMPLE_DIR = (
+        Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+    )
+    sys.path.insert(0, str(_EXAMPLE_DIR.parents[1] / "benchmark" / "distributed"))
+    from _benchmark_common import build_sio2_supercell  # noqa: E402
 
     # ----------------------------------------------------------------------
     # System construction (rank 0 — DomainParallel scatters from there)
@@ -111,6 +114,7 @@ cleanly in OVITO and VMD.
     def build_initial_batch(
         repeats: tuple[int, int, int], dtype: torch.dtype, device: torch.device
     ) -> Batch:
+        """Build the SiO2 supercell batch on rank 0."""
         pos, numbers, masses, cell, velocities = build_sio2_supercell(
             repeats=repeats, dtype=dtype, seed=0
         )
@@ -167,6 +171,7 @@ cleanly in OVITO and VMD.
 
 
     def main() -> None:
+        """Run MACE NVT Langevin dynamics under DomainParallel."""
         parser = argparse.ArgumentParser(
             description="MACE NVT Langevin under DomainParallel."
         )
@@ -364,7 +369,7 @@ cleanly in OVITO and VMD.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.002 seconds)
+   **Total running time of the script:** (0 minutes 0.004 seconds)
 
 
 .. _sphx_glr_download_examples_distributed_03_mace_nvt_distributed.py:

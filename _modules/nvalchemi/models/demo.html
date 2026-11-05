@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.models.demo &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.models.demo &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/models/demo';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -667,10 +667,20 @@ document.write(`
             <span class="n">device</span><span class="o">=</span><span class="n">embedding</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="n">embedding</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">graph_embedding</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_indices</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">embedding</span><span class="p">)</span>
+        <span class="n">graph_embedding</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="n">batch_indices</span><span class="o">.</span><span class="n">long</span><span class="p">()</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">embedding</span><span class="p">),</span> <span class="n">embedding</span>
+        <span class="p">)</span>
         <span class="c1"># write embeddings to data structure</span>
         <span class="n">data</span><span class="o">.</span><span class="n">graph_embeddings</span> <span class="o">=</span> <span class="n">graph_embedding</span>
-        <span class="n">data</span><span class="o">.</span><span class="n">node_embeddings</span> <span class="o">=</span> <span class="n">embedding</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Batch</span><span class="p">):</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span>
+                <span class="s2">&quot;node_embeddings&quot;</span><span class="p">,</span>
+                <span class="nb">list</span><span class="p">(</span><span class="n">embedding</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">num_nodes_list</span><span class="p">)),</span>
+                <span class="n">level</span><span class="o">=</span><span class="s2">&quot;node&quot;</span><span class="p">,</span>
+                <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">node_embeddings</span> <span class="o">=</span> <span class="n">embedding</span>
         <span class="k">return</span> <span class="n">data</span></div>
 
 
@@ -737,7 +747,7 @@ document.write(`
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Load a demo model from a checkpoint.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">checkpoint_path</span><span class="p">)</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">checkpoint_path</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">model</span><span class="p">)</span></div>
 
 
@@ -759,7 +769,10 @@ document.write(`
 <span class="sd">            Whether to export the model as a state dictionary.</span>
 <span class="sd">            Defaults to False, which pickles the model entirely.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="n">path</span><span class="p">)</span></div>
+        <span class="k">if</span> <span class="n">as_state_dict</span><span class="p">:</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="n">path</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span></div>
 </div>
 
 </pre></div>

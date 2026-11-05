@@ -1,0 +1,1422 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.csp.generator &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/csp/generator';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.cs...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.csp.generator</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Generation driver for local and caller-coordinated CSP packing.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">secrets</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">nullcontext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numbers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Integral</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">PrivateAttr</span><span class="p">,</span> <span class="n">model_serializer</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessGroup</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._serialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">capture_callable_spec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp._packing_transport</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_assemble_result</span><span class="p">,</span>
+    <span class="n">_describe_native</span><span class="p">,</span>
+    <span class="n">_empty_batch</span><span class="p">,</span>
+    <span class="n">_gather_payloads</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp._validation</span><span class="w"> </span><span class="kn">import</span> <span class="n">positive_integer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.data</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MolecularPackingInput</span><span class="p">,</span>
+    <span class="n">RigidMoleculeASUBatch</span><span class="p">,</span>
+    <span class="n">_formula_inputs_equal</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.packer.protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">CrystalPacker</span><span class="p">,</span> <span class="n">PackingContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.packer.result</span><span class="w"> </span><span class="kn">import</span> <span class="n">PackingReport</span><span class="p">,</span> <span class="n">PackingResult</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessGroupContext</span><span class="p">,</span> <span class="n">collective_error_sync</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen._device</span><span class="w"> </span><span class="kn">import</span> <span class="n">normalize_device</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen.generator</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AtomisticGenerator</span><span class="p">,</span>
+    <span class="n">GeneratingFunction</span><span class="p">,</span>
+    <span class="n">_PreparedGeneration</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseSpec</span><span class="p">,</span> <span class="n">create_model_spec</span><span class="p">,</span> <span class="n">create_model_spec_from_json</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;CSPGenerator&quot;</span><span class="p">,</span> <span class="s2">&quot;CSP_OUTPUT_FIELDS&quot;</span><span class="p">]</span>
+
+<span class="n">CSP_OUTPUT_FIELDS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="s2">&quot;pbc&quot;</span><span class="p">,</span> <span class="s2">&quot;csp_source_structure_id&quot;</span><span class="p">}</span>
+<span class="p">)</span>
+
+<span class="n">_GENERATOR_OPTIONS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;condition_func&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;hooks&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;seed&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;num_samples&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dedicated_stream&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;enable_inference_mode&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;compile_generate&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="n">_CALL_ONLY_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;process_group&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;gather_to_rank&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;expand&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;on_result&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;generator_func&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;device&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;required_inputs&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;outputs&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;condition_func&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;hooks&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;seed&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dedicated_stream&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;enable_inference_mode&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;compile_generate&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;compile_kwargs&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;_csp_call_plan&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_CSPCallPlan</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validated immutable state passed to the packer for one generation call.&quot;&quot;&quot;</span>
+
+    <span class="n">inputs</span><span class="p">:</span> <span class="n">MolecularPackingInput</span>
+    <span class="n">global_target</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">local_target</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">run_id</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">PackingContext</span>
+    <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">pack_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="n">candidate_budget</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">has_budget_capability</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">group_context</span><span class="p">:</span> <span class="n">ProcessGroupContext</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">gather_to_rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">expand</span><span class="p">:</span> <span class="nb">bool</span>
+
+
+<div class="viewcode-block" id="CSPGenerator">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.CSPGenerator.html#nvalchemi.csp.CSPGenerator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CSPGenerator</span><span class="p">(</span><span class="n">AtomisticGenerator</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A Toolkit generation driver for running crystal packers</span>
+<span class="sd">    in local or distributed searches.</span>
+
+<span class="sd">    The packer determines the search algorithm and execution device. By default,</span>
+<span class="sd">    compact ASU structures are expanded into full-cell atomic Batches; packers</span>
+<span class="sd">    that already return Batches require no expansion. Search limits can leave</span>
+<span class="sd">    fewer accepted structures than requested.</span>
+
+<span class="sd">    Distributed generation shares the search across a process group. Each rank</span>
+<span class="sd">    supplies the same prepared molecular input. Results can remain on their</span>
+<span class="sd">    generating ranks or be gathered on one rank. With custom ``rank_targets``,</span>
+<span class="sd">    a finite candidate budget is divided proportionally unless explicit</span>
+<span class="sd">    ``rank_candidate_budgets`` are supplied.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    packer</span>
+<span class="sd">        CrystalPacker implementing device and pack(inputs, num_samples, rng,</span>
+<span class="sd">        context).</span>
+<span class="sd">    process_group</span>
+<span class="sd">        Optional initialized process group. The caller owns group lifetime and</span>
+<span class="sd">        rank launch.</span>
+<span class="sd">    gather_to_rank</span>
+<span class="sd">        Optional group-local destination for rank-major gathered output.</span>
+<span class="sd">        None leaves each rank&#39;s result local.</span>
+<span class="sd">    expand</span>
+<span class="sd">        Expand rigid ASU structures to a Toolkit Batch on the owning rank.</span>
+<span class="sd">        Existing Batch payloads pass through.</span>
+<span class="sd">    outputs</span>
+<span class="sd">        Optional complete declaration of fields guaranteed in expanded Batch</span>
+<span class="sd">        results. Defaults to :data:`CSP_OUTPUT_FIELDS`. Include additional</span>
+<span class="sd">        fields when the packer guarantees them; declarations are checked on</span>
+<span class="sd">        each nonempty result. Raw-result mode (``expand=False``) accepts only</span>
+<span class="sd">        an empty declaration.</span>
+<span class="sd">    on_result</span>
+<span class="sd">        Optional callable receiving the owning PackingResult after any</span>
+<span class="sd">        communication and before optional P1 expansion or generation hooks.</span>
+<span class="sd">    **generator_options</span>
+<span class="sd">        Supported AtomisticGenerator lifecycle options: conditioning, hooks,</span>
+<span class="sd">        seed, default num_samples, dedicated stream, inference mode, and</span>
+<span class="sd">        compile_generate. CSP packing is not torch.compile-compatible.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">generator_func</span><span class="p">:</span> <span class="n">GeneratingFunction</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_packer</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">()</span>
+    <span class="n">_process_group</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">_gather_to_rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">_expand</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">_on_result</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">packer</span><span class="p">:</span> <span class="n">CrystalPacker</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">process_group</span><span class="p">:</span> <span class="n">ProcessGroup</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">gather_to_rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">expand</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">outputs</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">on_result</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">PackingResult</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">generator_options</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate adapter options and initialize normal generator state.&quot;&quot;&quot;</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">generator_options</span><span class="p">)</span> <span class="o">-</span> <span class="n">_GENERATOR_OPTIONS</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;unsupported CSPGenerator constructor option(s): </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">generator_options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;compile_generate&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;CSPGenerator does not support compile_generate&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;num_samples&quot;</span> <span class="ow">in</span> <span class="n">generator_options</span><span class="p">:</span>
+            <span class="n">positive_integer</span><span class="p">(</span><span class="n">generator_options</span><span class="p">[</span><span class="s2">&quot;num_samples&quot;</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;num_samples&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">expand</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;expand must be a bool&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">on_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">on_result</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;on_result must be callable or None&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">packer</span><span class="p">,</span> <span class="s2">&quot;pack&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;packer must provide a callable pack method&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">packer_device</span> <span class="o">=</span> <span class="n">packer</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;packer must provide a device&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">packer_device</span><span class="p">,</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;packer.device must be a torch.device or device string&quot;</span><span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">normalize_device</span><span class="p">(</span><span class="n">packer_device</span><span class="p">)</span>
+        <span class="n">declared_outputs</span> <span class="o">=</span> <span class="n">outputs</span>
+        <span class="k">if</span> <span class="n">declared_outputs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">declared_outputs</span> <span class="o">=</span> <span class="n">CSP_OUTPUT_FIELDS</span> <span class="k">if</span> <span class="n">expand</span> <span class="k">else</span> <span class="nb">frozenset</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">generator_func</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pack_call</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">required_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(),</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="n">declared_outputs</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">generator_options</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">expand</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;raw-result mode (expand=False) accepts only an empty outputs declaration&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_packer</span> <span class="o">=</span> <span class="n">packer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_process_group</span> <span class="o">=</span> <span class="n">process_group</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_gather_to_rank</span> <span class="o">=</span> <span class="n">gather_to_rank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_expand</span> <span class="o">=</span> <span class="n">expand</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span> <span class="o">=</span> <span class="n">on_result</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_rank_vector</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate one nonnegative integer per process-group rank.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">))</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">!=</span> <span class="n">world_size</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must contain one value per group rank&quot;</span><span class="p">)</span>
+        <span class="n">result</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Integral</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> values must be nonnegative integers&quot;</span><span class="p">)</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> values must be nonnegative integers&quot;</span><span class="p">)</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CSPGenerator.compile">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.CSPGenerator.html#nvalchemi.csp.CSPGenerator.compile">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CSPGenerator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject driver-level compilation for the dynamic packing lifecycle.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;CSPGenerator does not support compile()&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CSPGenerator.to_spec">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.CSPGenerator.html#nvalchemi.csp.CSPGenerator.to_spec">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseSpec</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Capture the construction recipe for this local CSP generator.</span>
+
+<span class="sd">        The recipe retains constructor settings and rebuilds the packer,</span>
+<span class="sd">        callbacks, and hooks. Runtime session state and the active distributed</span>
+<span class="sd">        process group are not serializable.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        BaseSpec</span>
+<span class="sd">            A JSON-serializable construction recipe.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If a live process group is attached, or a packer or callback does</span>
+<span class="sd">            not provide an importable path or its own ``to_spec()`` method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;CSPGenerator with a live process_group cannot be serialized; &quot;</span>
+                <span class="s2">&quot;construct the generator with its caller-owned group after &quot;</span>
+                <span class="s2">&quot;loading the recipe.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">packer_spec</span> <span class="o">=</span> <span class="n">capture_callable_spec</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_packer</span><span class="p">,</span> <span class="n">field_name</span><span class="o">=</span><span class="s2">&quot;packer&quot;</span><span class="p">)</span>
+        <span class="n">condition_spec</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">capture_callable_spec</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">condition_func</span><span class="p">,</span> <span class="n">field_name</span><span class="o">=</span><span class="s2">&quot;condition_func&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">condition_func</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">callback_spec</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">capture_callable_spec</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span><span class="p">,</span> <span class="n">field_name</span><span class="o">=</span><span class="s2">&quot;on_result&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">hook_specs</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">create_model_spec_from_json</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">payload</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_serialize_hooks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="k">return</span> <span class="n">create_model_spec</span><span class="p">(</span>
+            <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+            <span class="n">packer</span><span class="o">=</span><span class="n">packer_spec</span><span class="p">,</span>
+            <span class="n">gather_to_rank</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_gather_to_rank</span><span class="p">,</span>
+            <span class="n">expand</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_expand</span><span class="p">,</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span>
+            <span class="n">on_result</span><span class="o">=</span><span class="n">callback_spec</span><span class="p">,</span>
+            <span class="n">condition_func</span><span class="o">=</span><span class="n">condition_spec</span><span class="p">,</span>
+            <span class="n">hooks</span><span class="o">=</span><span class="n">hook_specs</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
+            <span class="n">num_samples</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span>
+            <span class="n">dedicated_stream</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dedicated_stream</span><span class="p">,</span>
+            <span class="n">enable_inference_mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">enable_inference_mode</span><span class="p">,</span>
+            <span class="n">compile_generate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_generate</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="nd">@model_serializer</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;plain&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_serialize_recipe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize only the JSON-safe construction recipe.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_spec</span><span class="p">()</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;wrap&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_restore_recipe</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">handler</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild this class&#39;s recipe and delegate ordinary inputs.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;cls_path&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">handler</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">expected_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="n">value</span><span class="p">[</span><span class="s2">&quot;cls_path&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">expected_path</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;CSP generator recipe must target </span><span class="si">{</span><span class="n">expected_path</span><span class="si">!r}</span><span class="s2">, got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">value</span><span class="p">[</span><span class="s1">&#39;cls_path&#39;</span><span class="p">]</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">restored</span> <span class="o">=</span> <span class="n">create_model_spec_from_json</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">restored</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">cls</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;CSP generator recipe built </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">restored</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;expected </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">restored</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_startup_plan</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">prepared</span><span class="p">:</span> <span class="n">_PreparedGeneration</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate local startup state and return setup plus control metadata.&quot;&quot;&quot;</span>
+        <span class="n">requested</span> <span class="o">=</span> <span class="n">prepared</span><span class="o">.</span><span class="n">num_samples</span>
+        <span class="n">target</span> <span class="o">=</span> <span class="n">positive_integer</span><span class="p">(</span><span class="n">requested</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;num_samples&quot;</span><span class="p">)</span>
+        <span class="n">active_inputs</span> <span class="o">=</span> <span class="n">prepared</span><span class="o">.</span><span class="n">ctx</span><span class="o">.</span><span class="n">inputs</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">active_inputs</span><span class="p">,</span> <span class="n">MolecularPackingInput</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;inputs must be a MolecularPackingInput&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_input_device</span><span class="p">(</span><span class="n">active_inputs</span><span class="p">)</span>
+
+        <span class="n">source_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">prepared</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">prepared</span><span class="o">.</span><span class="n">rng</span>
+        <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rng</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;rng must be a torch.Generator or None&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_rng_device</span><span class="p">(</span><span class="n">rng</span><span class="p">)</span>
+
+        <span class="n">injected</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">source_kwargs</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">_CALL_ONLY_KEYS</span>
+        <span class="k">if</span> <span class="n">injected</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;CSPGenerator call-only options cannot be overridden per &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;call: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">injected</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">forbidden</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">source_kwargs</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">{</span><span class="s2">&quot;context&quot;</span><span class="p">,</span> <span class="s2">&quot;candidate_budget&quot;</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">forbidden</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;context and candidate_budget are assigned by CSPGenerator&quot;</span><span class="p">)</span>
+
+        <span class="n">run_id</span> <span class="o">=</span> <span class="n">source_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;run_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">run_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">run_id</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">run_id</span><span class="p">,</span> <span class="n">Integral</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;run_id must be an integer or None&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">run_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">run_id</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="o">**</span><span class="mi">63</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;run_id must satisfy 0 &lt;= run_id &lt; 2**63&quot;</span><span class="p">)</span>
+        <span class="n">rank_targets</span> <span class="o">=</span> <span class="n">source_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;rank_targets&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">rank_budgets</span> <span class="o">=</span> <span class="n">source_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;rank_candidate_budgets&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_group</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_gather_to_rank</span><span class="p">,</span> <span class="n">rank_targets</span><span class="p">,</span> <span class="n">rank_budgets</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;gather_to_rank, rank_targets, and rank_candidate_budgets &quot;</span>
+                <span class="s2">&quot;require process_group&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_packer_device</span>
+            <span class="k">if</span> <span class="s2">&quot;gloo&quot;</span> <span class="ow">in</span> <span class="n">backend</span> <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Gloo process groups require a CPU CSP packer&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;nccl&quot;</span> <span class="ow">in</span> <span class="n">backend</span> <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;NCCL process groups require a CUDA CSP packer&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;gloo&quot;</span><span class="p">,</span> <span class="s2">&quot;nccl&quot;</span><span class="p">}:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;CSPGenerator supports only Gloo and NCCL process groups&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gather_to_rank</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_gather_to_rank</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_gather_to_rank</span><span class="p">,</span> <span class="n">Integral</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;gather_to_rank must be a group-local integer or None&quot;</span><span class="p">)</span>
+            <span class="n">destination</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_gather_to_rank</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">destination</span> <span class="o">&lt;</span> <span class="n">world_size</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;gather_to_rank must be a valid group-local rank&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">destination</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">targets</span> <span class="o">=</span> <span class="p">(</span><span class="n">target</span><span class="p">,)</span>
+        <span class="k">elif</span> <span class="n">rank_targets</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">quotient</span><span class="p">,</span> <span class="n">remainder</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span>
+            <span class="n">targets</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                <span class="n">quotient</span> <span class="o">+</span> <span class="p">(</span><span class="n">group_rank</span> <span class="o">&lt;</span> <span class="n">remainder</span><span class="p">)</span> <span class="k">for</span> <span class="n">group_rank</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">targets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rank_vector</span><span class="p">(</span>
+                <span class="n">rank_targets</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;rank_targets&quot;</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">sum</span><span class="p">(</span><span class="n">targets</span><span class="p">)</span> <span class="o">!=</span> <span class="n">target</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;rank_targets must sum to num_samples&quot;</span><span class="p">)</span>
+        <span class="n">local_target</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[</span><span class="n">rank</span><span class="p">]</span>
+        <span class="n">maximum_id</span> <span class="o">=</span> <span class="n">rank</span> <span class="o">+</span> <span class="n">world_size</span> <span class="o">*</span> <span class="p">(</span><span class="n">local_target</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">local_target</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="k">if</span> <span class="n">maximum_id</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">63</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">OverflowError</span><span class="p">(</span><span class="s2">&quot;rank-strided structure IDs exceed int64 capacity&quot;</span><span class="p">)</span>
+
+        <span class="n">resolver</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_packer</span><span class="p">,</span> <span class="s2">&quot;resolve_candidate_budget&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">budget_capability</span> <span class="o">=</span> <span class="nb">callable</span><span class="p">(</span><span class="n">resolver</span><span class="p">)</span>
+        <span class="n">global_budget</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">resolver</span><span class="p">(</span><span class="n">num_samples</span><span class="o">=</span><span class="n">target</span><span class="p">,</span> <span class="o">**</span><span class="n">source_kwargs</span><span class="p">)</span> <span class="k">if</span> <span class="n">budget_capability</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">global_budget</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">global_budget</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">global_budget</span><span class="p">,</span> <span class="n">Integral</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;resolve_candidate_budget must return a nonnegative integer or None&quot;</span>
+                <span class="p">)</span>
+            <span class="n">global_budget</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">global_budget</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">global_budget</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;resolve_candidate_budget must return a nonnegative integer or None&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">budgets</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">global_budget</span><span class="p">,)</span>
+        <span class="k">elif</span> <span class="n">rank_budgets</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">explicit_budgets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rank_vector</span><span class="p">(</span>
+                <span class="n">rank_budgets</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;rank_candidate_budgets&quot;</span><span class="p">,</span>
+                <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">budget_capability</span> <span class="ow">or</span> <span class="n">global_budget</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;rank_candidate_budgets require a finite candidate budget capability&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">sum</span><span class="p">(</span><span class="n">explicit_budgets</span><span class="p">)</span> <span class="o">!=</span> <span class="n">global_budget</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;rank_candidate_budgets must sum to the global candidate budget&quot;</span>
+                <span class="p">)</span>
+            <span class="n">budgets</span> <span class="o">=</span> <span class="n">explicit_budgets</span>
+        <span class="k">elif</span> <span class="n">global_budget</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">budgets</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="kc">None</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">rank_targets</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">allocations</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                <span class="nb">divmod</span><span class="p">(</span><span class="n">global_budget</span> <span class="o">*</span> <span class="n">rank_target</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span> <span class="k">for</span> <span class="n">rank_target</span> <span class="ow">in</span> <span class="n">targets</span>
+            <span class="p">)</span>
+            <span class="n">budget_values</span> <span class="o">=</span> <span class="p">[</span><span class="n">base</span> <span class="k">for</span> <span class="n">base</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">allocations</span><span class="p">]</span>
+            <span class="n">remaining</span> <span class="o">=</span> <span class="n">global_budget</span> <span class="o">-</span> <span class="nb">sum</span><span class="p">(</span><span class="n">budget_values</span><span class="p">)</span>
+            <span class="n">remainder_order</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">),</span>
+                <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">group_rank</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="n">allocations</span><span class="p">[</span><span class="n">group_rank</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">group_rank</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">group_rank</span> <span class="ow">in</span> <span class="n">remainder_order</span><span class="p">[:</span><span class="n">remaining</span><span class="p">]:</span>
+                <span class="n">budget_values</span><span class="p">[</span><span class="n">group_rank</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">budgets</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">budget_values</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">quotient</span><span class="p">,</span> <span class="n">remainder</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">global_budget</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span>
+            <span class="n">budgets</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                <span class="n">quotient</span> <span class="o">+</span> <span class="p">(</span><span class="n">group_rank</span> <span class="o">&lt;</span> <span class="n">remainder</span><span class="p">)</span> <span class="k">for</span> <span class="n">group_rank</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="n">rank_allocations</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">targets</span><span class="p">)</span>
+        <span class="n">rank_budgets</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">budgets</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">digest</span> <span class="o">=</span> <span class="n">active_inputs</span><span class="o">.</span><span class="n">sha256</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;inputs&quot;</span><span class="p">:</span> <span class="n">active_inputs</span><span class="p">,</span>
+            <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="n">target</span><span class="p">,</span>
+            <span class="s2">&quot;local_target&quot;</span><span class="p">:</span> <span class="n">local_target</span><span class="p">,</span>
+            <span class="s2">&quot;targets&quot;</span><span class="p">:</span> <span class="n">rank_allocations</span><span class="p">,</span>
+            <span class="s2">&quot;budgets&quot;</span><span class="p">:</span> <span class="n">budgets</span><span class="p">,</span>
+            <span class="s2">&quot;rank_budgets&quot;</span><span class="p">:</span> <span class="n">rank_budgets</span><span class="p">,</span>
+            <span class="s2">&quot;global_budget&quot;</span><span class="p">:</span> <span class="n">global_budget</span><span class="p">,</span>
+            <span class="s2">&quot;budget_capability&quot;</span><span class="p">:</span> <span class="n">budget_capability</span><span class="p">,</span>
+            <span class="s2">&quot;run_id&quot;</span><span class="p">:</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">run_id</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">run_id</span><span class="p">),</span>
+            <span class="s2">&quot;rng&quot;</span><span class="p">:</span> <span class="n">rng</span><span class="p">,</span>
+            <span class="s2">&quot;pack_options&quot;</span><span class="p">:</span> <span class="n">source_kwargs</span><span class="p">,</span>
+            <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">destination</span><span class="p">,</span>
+            <span class="s2">&quot;digest&quot;</span><span class="p">:</span> <span class="n">digest</span><span class="p">,</span>
+            <span class="s2">&quot;expand&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expand</span><span class="p">,</span>
+            <span class="s2">&quot;shared_metadata&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;digest&quot;</span><span class="p">:</span> <span class="n">digest</span><span class="p">,</span>
+                <span class="s2">&quot;global_target&quot;</span><span class="p">:</span> <span class="n">target</span><span class="p">,</span>
+                <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">destination</span><span class="p">,</span>
+                <span class="s2">&quot;expand&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expand</span><span class="p">,</span>
+                <span class="s2">&quot;budget_capability&quot;</span><span class="p">:</span> <span class="n">budget_capability</span><span class="p">,</span>
+                <span class="s2">&quot;global_cap&quot;</span><span class="p">:</span> <span class="n">global_budget</span><span class="p">,</span>
+                <span class="s2">&quot;rank_allocations&quot;</span><span class="p">:</span> <span class="n">rank_allocations</span><span class="p">,</span>
+                <span class="s2">&quot;rank_budgets&quot;</span><span class="p">:</span> <span class="n">rank_budgets</span><span class="p">,</span>
+                <span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="n">backend</span><span class="p">,</span>
+                <span class="s2">&quot;supplied_run_id&quot;</span><span class="p">:</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">run_id</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">run_id</span><span class="p">),</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_finish_preparation</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">prepared</span><span class="p">:</span> <span class="n">_PreparedGeneration</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_PreparedGeneration</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Finish local preparation and agree grouped startup metadata.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">prepared</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_finish_preparation</span><span class="p">(</span><span class="n">prepared</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+            <span class="n">setup</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_startup_plan</span><span class="p">(</span><span class="n">prepared</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="n">run_id</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">secrets</span><span class="o">.</span><span class="n">randbits</span><span class="p">(</span><span class="mi">63</span><span class="p">)</span> <span class="k">if</span> <span class="n">setup</span><span class="p">[</span><span class="s2">&quot;run_id&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">setup</span><span class="p">[</span><span class="s2">&quot;run_id&quot;</span><span class="p">]</span>
+            <span class="p">)</span>
+            <span class="n">context</span> <span class="o">=</span> <span class="n">PackingContext</span><span class="p">(</span><span class="n">run_id</span><span class="o">=</span><span class="n">run_id</span><span class="p">)</span>
+            <span class="n">plan</span> <span class="o">=</span> <span class="n">_CSPCallPlan</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;inputs&quot;</span><span class="p">],</span>
+                <span class="n">global_target</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;target&quot;</span><span class="p">],</span>
+                <span class="n">local_target</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;local_target&quot;</span><span class="p">],</span>
+                <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">world_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">run_id</span><span class="o">=</span><span class="n">run_id</span><span class="p">,</span>
+                <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
+                <span class="n">rng</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;rng&quot;</span><span class="p">],</span>
+                <span class="n">pack_options</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;pack_options&quot;</span><span class="p">],</span>
+                <span class="n">candidate_budget</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;global_budget&quot;</span><span class="p">],</span>
+                <span class="n">has_budget_capability</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;budget_capability&quot;</span><span class="p">],</span>
+                <span class="n">group_context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">gather_to_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">expand</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_expand</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">prepared</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;_csp_call_plan&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plan</span>
+            <span class="k">return</span> <span class="n">prepared</span>
+
+        <span class="n">group_context</span> <span class="o">=</span> <span class="n">ProcessGroupContext</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_process_group</span><span class="p">,</span> <span class="n">execution_device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_packer_device</span>
+        <span class="p">)</span>
+        <span class="n">group_rank</span> <span class="o">=</span> <span class="n">group_context</span><span class="o">.</span><span class="n">rank</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="n">group_context</span><span class="o">.</span><span class="n">world_size</span>
+        <span class="n">backend</span> <span class="o">=</span> <span class="n">group_context</span><span class="o">.</span><span class="n">backend</span>
+        <span class="k">with</span> <span class="n">collective_error_sync</span><span class="p">(</span>
+            <span class="n">group_context</span><span class="p">,</span>
+            <span class="n">phase</span><span class="o">=</span><span class="s2">&quot;generation_preparation&quot;</span><span class="p">,</span>
+            <span class="n">error_type</span><span class="o">=</span><span class="ne">ValueError</span><span class="p">,</span>
+        <span class="p">)</span> <span class="k">as</span> <span class="n">phase</span><span class="p">:</span>
+            <span class="n">prepared</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_finish_preparation</span><span class="p">(</span><span class="n">prepared</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+            <span class="n">phase</span><span class="o">.</span><span class="n">phase</span> <span class="o">=</span> <span class="s2">&quot;startup_validation&quot;</span>
+            <span class="n">setup</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_startup_plan</span><span class="p">(</span>
+                <span class="n">prepared</span><span class="p">,</span>
+                <span class="n">rank</span><span class="o">=</span><span class="n">group_rank</span><span class="p">,</span>
+                <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+                <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">phase</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">setup</span><span class="p">[</span><span class="s2">&quot;shared_metadata&quot;</span><span class="p">]</span>
+        <span class="n">records</span> <span class="o">=</span> <span class="n">phase</span><span class="o">.</span><span class="n">records</span>
+        <span class="n">shared_fields</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">&quot;digest&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;global_target&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;destination&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;expand&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;budget_capability&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;global_cap&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;rank_allocations&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;rank_budgets&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;backend&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">shared</span> <span class="o">=</span> <span class="n">records</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">differing</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">rank</span>
+            <span class="k">for</span> <span class="n">rank</span><span class="p">,</span> <span class="n">record</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">records</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">!=</span> <span class="n">shared</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">shared_fields</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="n">differing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;CSPGenerator startup failed at &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;rank=</span><span class="si">{</span><span class="n">differing</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> phase=shared_request: ranks disagree on &quot;</span>
+                <span class="s2">&quot;conditioned input, target, destination, expansion, budget &quot;</span>
+                <span class="s2">&quot;capability, candidate cap, or rank allocations&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">supplied_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;supplied_run_id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">]</span>
+        <span class="n">root_id</span> <span class="o">=</span> <span class="n">supplied_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">root_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">value</span> <span class="o">!=</span> <span class="n">root_id</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">supplied_ids</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="p">):</span>
+            <span class="n">peer_rank</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span>
+                <span class="n">rank</span>
+                <span class="k">for</span> <span class="n">rank</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">supplied_ids</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">value</span> <span class="o">!=</span> <span class="n">root_id</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;CSPGenerator startup failed at &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;rank=</span><span class="si">{</span><span class="n">peer_rank</span><span class="si">}</span><span class="s2"> phase=run_id: distributed ranks supplied &quot;</span>
+                <span class="s2">&quot;different run_id values&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">group_rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">root_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">root_id</span> <span class="o">=</span> <span class="n">secrets</span><span class="o">.</span><span class="n">randbits</span><span class="p">(</span><span class="mi">63</span><span class="p">)</span>
+        <span class="n">identity</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="p">[</span><span class="mi">0</span> <span class="k">if</span> <span class="n">root_id</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">root_id</span><span class="p">)],</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">group_context</span><span class="o">.</span><span class="n">collective_device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="n">group_context</span><span class="o">.</span><span class="n">communication_scope</span><span class="p">():</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span>
+                <span class="n">identity</span><span class="p">,</span>
+                <span class="n">src</span><span class="o">=</span><span class="n">group_context</span><span class="o">.</span><span class="n">global_rank</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                <span class="n">group</span><span class="o">=</span><span class="n">group_context</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">run_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">identity</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+        <span class="n">mismatched</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">rank</span>
+            <span class="k">for</span> <span class="n">rank</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">supplied_ids</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">value</span> <span class="o">!=</span> <span class="n">run_id</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="n">mismatched</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;CSPGenerator startup failed at &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;rank=</span><span class="si">{</span><span class="n">mismatched</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> phase=run_id: distributed ranks supplied &quot;</span>
+                <span class="s2">&quot;different run_id values&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">plan</span> <span class="o">=</span> <span class="n">_CSPCallPlan</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;inputs&quot;</span><span class="p">],</span>
+            <span class="n">global_target</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;target&quot;</span><span class="p">],</span>
+            <span class="n">local_target</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;local_target&quot;</span><span class="p">],</span>
+            <span class="n">rank</span><span class="o">=</span><span class="n">group_rank</span><span class="p">,</span>
+            <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+            <span class="n">run_id</span><span class="o">=</span><span class="n">run_id</span><span class="p">,</span>
+            <span class="n">context</span><span class="o">=</span><span class="n">PackingContext</span><span class="p">(</span>
+                <span class="n">run_id</span><span class="o">=</span><span class="n">run_id</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">group_rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="n">world_size</span>
+            <span class="p">),</span>
+            <span class="n">rng</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;rng&quot;</span><span class="p">],</span>
+            <span class="n">pack_options</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;pack_options&quot;</span><span class="p">],</span>
+            <span class="n">candidate_budget</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;budgets&quot;</span><span class="p">][</span><span class="n">group_rank</span><span class="p">],</span>
+            <span class="n">has_budget_capability</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;budget_capability&quot;</span><span class="p">],</span>
+            <span class="n">group_context</span><span class="o">=</span><span class="n">group_context</span><span class="p">,</span>
+            <span class="n">gather_to_rank</span><span class="o">=</span><span class="n">setup</span><span class="p">[</span><span class="s2">&quot;destination&quot;</span><span class="p">],</span>
+            <span class="n">expand</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_expand</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">prepared</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;_csp_call_plan&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plan</span>
+        <span class="k">return</span> <span class="n">prepared</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_packer_device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the device resolved and pinned at adapter construction.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_input_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">MolecularPackingInput</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Require formula tensors to be CPU resident or on the packer device.&quot;&quot;&quot;</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_packer_device</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span>
+            <span class="s2">&quot;conformer_positions&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;conformer_ptr&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;molecule_conformer_ptr&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;molecule_atom_ptr&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;contact_distances&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;component_index&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;component_charge&quot;</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">source</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">if</span> <span class="n">source</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span> <span class="ow">and</span> <span class="n">source</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;inputs.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is on </span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="s2">; packer device is </span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="s2">&quot;Move the input to CPU or the selected packer device first.&quot;</span>
+                <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_rng_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Permit CPU seed generators and same-device CUDA generators.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">rng_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">rng</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">packer_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_packer_device</span>
+        <span class="k">if</span> <span class="n">rng_device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">rng_device</span> <span class="o">!=</span> <span class="n">packer_device</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;rng is on </span><span class="si">{</span><span class="n">rng_device</span><span class="si">}</span><span class="s2">; it must be CPU or match packer device &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">packer_device</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_execution_scope</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run CUDA packing on its pinned device and restore the caller&#39;s device.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">nullcontext</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pack_once</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plan</span><span class="p">:</span> <span class="n">_CSPCallPlan</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PackingResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Call the packer once and validate the rank-local result contract.&quot;&quot;&quot;</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">plan</span><span class="o">.</span><span class="n">pack_options</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">has_budget_capability</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;candidate_budget&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">candidate_budget</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_execution_scope</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_packer_device</span><span class="p">):</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_packer</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span>
+                <span class="n">plan</span><span class="o">.</span><span class="n">inputs</span><span class="p">,</span>
+                <span class="n">num_samples</span><span class="o">=</span><span class="n">plan</span><span class="o">.</span><span class="n">local_target</span><span class="p">,</span>
+                <span class="n">rng</span><span class="o">=</span><span class="n">plan</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span>
+                <span class="n">context</span><span class="o">=</span><span class="n">plan</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_result</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">plan</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_payload_count</span><span class="p">(</span><span class="n">structures</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the leading structure count for a supported payload.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structures</span><span class="p">,</span> <span class="n">RigidMoleculeASUBatch</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">structures</span><span class="o">.</span><span class="n">num_structures</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structures</span><span class="p">,</span> <span class="n">Batch</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">structures</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;PackingResult.structures must be a RigidMoleculeASUBatch or Batch&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_payload_device</span><span class="p">(</span><span class="n">structures</span><span class="p">:</span> <span class="n">RigidMoleculeASUBatch</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the primary payload device.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structures</span><span class="p">,</span> <span class="n">RigidMoleculeASUBatch</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">structures</span><span class="o">.</span><span class="n">cells</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">return</span> <span class="n">structures</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_batch_payload</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">accepted</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate common native Batch fields, levels, and occupied IDs.&quot;&quot;&quot;</span>
+        <span class="n">levels</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">level_keys</span>
+        <span class="n">node_fields</span> <span class="o">=</span> <span class="n">levels</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;atoms&quot;</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span>
+        <span class="n">system_fields</span> <span class="o">=</span> <span class="n">levels</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span>
+        <span class="n">missing_nodes</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">}</span> <span class="o">-</span> <span class="n">node_fields</span>
+        <span class="n">missing_system</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="s2">&quot;pbc&quot;</span><span class="p">,</span> <span class="s2">&quot;csp_source_structure_id&quot;</span><span class="p">}</span> <span class="o">-</span> <span class="n">system_fields</span>
+        <span class="k">if</span> <span class="n">missing_nodes</span> <span class="ow">or</span> <span class="n">missing_system</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;native Batch payload must place positions and atomic_numbers &quot;</span>
+                <span class="s2">&quot;at atom level and cell, pbc, and csp_source_structure_id at &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;system level; missing atom=</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing_nodes</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;system=</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing_system</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span>
+            <span class="s2">&quot;positions&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;cell&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;pbc&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;csp_source_structure_id&quot;</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;native Batch field </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must be a Tensor&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;native Batch field </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is on </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">; &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;expected </span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">!=</span> <span class="n">accepted</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;native Batch graph count does not match accepted_count&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;native Batch positions must have shape [N, 3]&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;native Batch atomic_numbers must have shape [N]&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;cell&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">accepted</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;native Batch cell must have shape [P, 3, 3]&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;pbc&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">accepted</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;native Batch pbc must have shape [P, 3]&quot;</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;csp_source_structure_id&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">ids</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span> <span class="ow">or</span> <span class="n">ids</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">accepted</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;native Batch csp_source_structure_id must be int64 [P, 2]&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ids</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">plan</span><span class="p">:</span> <span class="n">_CSPCallPlan</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check rank report, run identity, payload type, device, and IDs.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">PackingResult</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;packer.pack must return a PackingResult&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">scope</span> <span class="o">!=</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;packer.pack must return a rank-local PackingResult&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">run_id</span> <span class="o">!=</span> <span class="n">plan</span><span class="o">.</span><span class="n">run_id</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;PackingResult.run_id does not match PackingContext&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">reports</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;rank-local PackingResult must contain exactly one report&quot;</span><span class="p">)</span>
+        <span class="n">report</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">reports</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">report</span><span class="p">,</span> <span class="n">PackingReport</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;PackingResult.reports must contain PackingReport values&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">report</span><span class="o">.</span><span class="n">rank</span> <span class="o">!=</span> <span class="n">plan</span><span class="o">.</span><span class="n">rank</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;PackingReport.rank does not match PackingContext&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">report</span><span class="o">.</span><span class="n">requested_count</span> <span class="o">!=</span> <span class="n">plan</span><span class="o">.</span><span class="n">local_target</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;PackingReport.requested_count does not match local quota&quot;</span><span class="p">)</span>
+        <span class="n">accepted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_payload_count</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">report</span><span class="o">.</span><span class="n">accepted_count</span> <span class="o">!=</span> <span class="n">accepted</span> <span class="ow">or</span> <span class="n">result</span><span class="o">.</span><span class="n">accepted_count</span> <span class="o">!=</span> <span class="n">accepted</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;PackingResult accepted count does not match payload&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">candidate_budget</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">accepted</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;a zero candidate budget requires an empty PackingResult&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">generated_count</span> <span class="o">!=</span> <span class="n">report</span><span class="o">.</span><span class="n">generated_count</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;PackingResult.generated_count does not match its report&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">has_budget_capability</span> <span class="ow">and</span> <span class="n">report</span><span class="o">.</span><span class="n">generated_count</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;candidate-budget-capable packers must report generated_count&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">candidate_budget</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">report</span><span class="o">.</span><span class="n">generated_count</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;finite candidate budgets require a known generated_count&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">report</span><span class="o">.</span><span class="n">generated_count</span> <span class="o">&gt;</span> <span class="n">plan</span><span class="o">.</span><span class="n">candidate_budget</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;PackingReport.generated_count exceeds the local candidate budget&quot;</span>
+                <span class="p">)</span>
+
+        <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_packer_device</span>
+        <span class="n">payload_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_payload_device</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">payload_device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;PackingResult payload is on </span><span class="si">{</span><span class="n">payload_device</span><span class="si">}</span><span class="s2">; expected packer &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;device </span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="p">,</span> <span class="n">RigidMoleculeASUBatch</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_formula_inputs_equal</span><span class="p">(</span><span class="n">plan</span><span class="o">.</span><span class="n">inputs</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="o">.</span><span class="n">packing_input</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;RigidMoleculeASUBatch.packing_input differs from the &quot;</span>
+                    <span class="s2">&quot;conditioned formula input&quot;</span>
+                <span class="p">)</span>
+            <span class="n">ids</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="o">.</span><span class="n">structure_ids</span>
+            <span class="k">if</span> <span class="n">ids</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span> <span class="ow">or</span> <span class="n">ids</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">accepted</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;RigidMoleculeASUBatch.structure_ids must be int64 [P, 2]&quot;</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_batch_payload</span><span class="p">(</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="p">,</span>
+                <span class="n">accepted</span><span class="o">=</span><span class="n">accepted</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">expected_ids</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">structure_ids</span><span class="p">(</span><span class="n">accepted</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">expected_ids</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;payload structure IDs do not match PackingContext&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_deliver_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">PackingResult</span><span class="p">,</span> <span class="n">plan</span><span class="p">:</span> <span class="n">_CSPCallPlan</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the owning callback, then pass through or materialize the payload.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">plan</span><span class="o">.</span><span class="n">expand</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">result</span>
+        <span class="n">structures</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">structures</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structures</span><span class="p">,</span> <span class="n">Batch</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">structures</span>
+        <span class="k">if</span> <span class="n">structures</span><span class="o">.</span><span class="n">num_structures</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_empty_batch</span><span class="p">(</span><span class="n">structures</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_packer_device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">structures</span><span class="o">.</span><span class="n">to_batch</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_packer_device</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pack_call</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute local packing or the configured caller-owned gather.&quot;&quot;&quot;</span>
+        <span class="k">del</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">,</span> <span class="n">rng</span>
+        <span class="n">plan</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_csp_call_plan&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="n">_CSPCallPlan</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;missing validated CSPGenerator call plan&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">plan</span><span class="o">.</span><span class="n">group_context</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">plan</span><span class="o">.</span><span class="n">gather_to_rank</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pack_once</span><span class="p">(</span><span class="n">plan</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_deliver_result</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">plan</span><span class="p">)</span>
+
+        <span class="n">group_context</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">group_context</span>
+        <span class="n">local_result</span><span class="p">:</span> <span class="n">PackingResult</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="k">with</span> <span class="n">collective_error_sync</span><span class="p">(</span>
+            <span class="n">group_context</span><span class="p">,</span> <span class="n">phase</span><span class="o">=</span><span class="s2">&quot;local_packing&quot;</span><span class="p">,</span> <span class="n">error_type</span><span class="o">=</span><span class="ne">RuntimeError</span>
+        <span class="p">)</span> <span class="k">as</span> <span class="n">phase</span><span class="p">:</span>
+            <span class="n">local_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pack_once</span><span class="p">(</span><span class="n">plan</span><span class="p">)</span>
+            <span class="n">phase</span><span class="o">.</span><span class="n">phase</span> <span class="o">=</span> <span class="s2">&quot;native_metadata&quot;</span>
+            <span class="n">metadata</span> <span class="o">=</span> <span class="n">_describe_native</span><span class="p">(</span><span class="n">local_result</span><span class="o">.</span><span class="n">structures</span><span class="p">)</span>
+            <span class="n">phase</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;report&quot;</span><span class="p">:</span> <span class="n">local_result</span><span class="o">.</span><span class="n">reports</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="n">phase</span><span class="o">.</span><span class="n">phase</span> <span class="o">=</span> <span class="s2">&quot;terminal_record&quot;</span>
+        <span class="n">records</span> <span class="o">=</span> <span class="n">phase</span><span class="o">.</span><span class="n">records</span>
+        <span class="n">native_metadata</span> <span class="o">=</span> <span class="p">[</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">]</span>
+        <span class="n">reference</span> <span class="o">=</span> <span class="n">native_metadata</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">incompatible</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">rank</span>
+            <span class="k">for</span> <span class="n">rank</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">native_metadata</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;kind&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">reference</span><span class="p">[</span><span class="s2">&quot;kind&quot;</span><span class="p">]</span>
+            <span class="ow">or</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;layout&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">reference</span><span class="p">[</span><span class="s2">&quot;layout&quot;</span><span class="p">]</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="n">incompatible</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;CSPGenerator distributed native metadata failed at &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;rank=</span><span class="si">{</span><span class="n">incompatible</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> phase=pre_payload: ranks disagree on &quot;</span>
+                <span class="s2">&quot;native payload kind or schema&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">parts</span> <span class="o">=</span> <span class="n">_gather_payloads</span><span class="p">(</span>
+            <span class="n">local_result</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">native_metadata</span><span class="p">,</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="n">plan</span><span class="o">.</span><span class="n">inputs</span><span class="p">,</span>
+            <span class="n">group_context</span><span class="o">=</span><span class="n">group_context</span><span class="p">,</span>
+            <span class="n">destination</span><span class="o">=</span><span class="n">plan</span><span class="o">.</span><span class="n">gather_to_rank</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">gathered_result</span><span class="p">:</span> <span class="n">PackingResult</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">with</span> <span class="n">collective_error_sync</span><span class="p">(</span>
+            <span class="n">group_context</span><span class="p">,</span> <span class="n">phase</span><span class="o">=</span><span class="s2">&quot;assembly&quot;</span><span class="p">,</span> <span class="n">error_type</span><span class="o">=</span><span class="ne">RuntimeError</span>
+        <span class="p">)</span> <span class="k">as</span> <span class="n">phase</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">group_context</span><span class="o">.</span><span class="n">rank</span> <span class="o">==</span> <span class="n">plan</span><span class="o">.</span><span class="n">gather_to_rank</span><span class="p">:</span>
+                <span class="n">reports</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;report&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">)</span>
+                <span class="n">gathered_result</span> <span class="o">=</span> <span class="n">_assemble_result</span><span class="p">(</span>
+                    <span class="n">parts</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="n">plan</span><span class="o">.</span><span class="n">run_id</span><span class="p">,</span> <span class="n">reports</span><span class="o">=</span><span class="n">reports</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gathered_result</span><span class="p">,</span> <span class="n">PackingResult</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;_assemble_result must return a PackingResult&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">gathered_result</span><span class="o">.</span><span class="n">scope</span> <span class="o">!=</span> <span class="s2">&quot;gathered&quot;</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;_assemble_result must return scope=&#39;gathered&#39;&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">gathered_result</span><span class="o">.</span><span class="n">run_id</span> <span class="o">!=</span> <span class="n">plan</span><span class="o">.</span><span class="n">run_id</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;_assemble_result returned the wrong run_id&quot;</span><span class="p">)</span>
+            <span class="n">phase</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">gathered_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_deliver_result</span><span class="p">(</span><span class="n">gathered_result</span><span class="p">,</span> <span class="n">plan</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">plan</span><span class="o">.</span><span class="n">expand</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">_empty_batch</span><span class="p">(</span><span class="n">local_result</span><span class="o">.</span><span class="n">structures</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_packer_device</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

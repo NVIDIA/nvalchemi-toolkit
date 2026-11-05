@@ -34,6 +34,19 @@ selection.
 training losses, validation metrics, progress counters, and learning-rate
 scheduler values.
 
+**08 — LoRA Fine-Tuning**: Download the LPSC dataset in EXTXYZ format, convert
+it to in-memory atomic data, create training and validation subsets, fit atomic
+reference energies, and fine-tune ``medium-mpa-0`` with LoRA adapters.
+
+**09 — Offline Distillation**: Labeling a dataset with a frozen foundation
+teacher, streaming the labeled Zarr store, and distilling energy, force, and
+per-atom energy signals into a student with DistillationStrategy.
+
+**10 — On-Policy Distillation**: Generate-label-train segments driven by the
+student's own Langevin propagator, teacher labeling of visited frames, and a
+replay buffer mixed with a teacher-labeled reference dataset at a fixed replay
+ratio.
+
 
 
 .. raw:: html
@@ -44,7 +57,7 @@ scheduler values.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE2) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages.">
 
 .. only:: html
 
@@ -95,7 +108,7 @@ scheduler values.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE2 → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput.">
 
 .. only:: html
 
@@ -161,6 +174,74 @@ scheduler values.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example illustrates how to fine-tune a model with LoRA adapters using FineTuningStrategy with LoRAConfig. It fine-tunes the MACE medium-mpa-0 foundation model on the li/data/LPSC_600.extxyz subset from the public ev-tlt/MACE_finetuning_supplementary Hugging Face dataset. Dataset attribution: li/data/LPSC_600.extxyz comes from ev-tlt/MACE_finetuning_supplementary; the dataset lists li/data/ as CC BY 4.0, sourced from Zenodo 15686940 / Kim et al. See https://huggingface.co/datasets/ev-tlt/MACE_finetuning_supplementary and https://creativecommons.org/licenses/by/4.0/.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_08_lora_finetuning_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/08_lora_finetuning`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">LoRA Fine-Tuning MACE on LPSC dataset</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The generative driver runs any callable that matches the GeneratingFunction protocol: (inputs=None, , num_samples=1, rng=None, *kwargs) -&gt; Batch.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_09_generative_samplers_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/09_generative_samplers`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Generative workflows: model-owning samplers</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example distills a small student potential from a frozen foundation teacher, offline: the teacher scores the dataset once, label_dataset writes its signals into a Zarr store as ordinary teacher_* fields, and training then streams that store through the normal reader/dataset/loader path with no teacher forward passes at all.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_09_offline_distillation_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/09_offline_distillation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Offline Knowledge Distillation</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Offline distillation (see 09_offline_distillation) trains a student on whatever structures the dataset happens to hold. On-policy distillation trains it on the structures the student itself visits. The student&#x27;s own propagator generates frames, the frozen teacher labels them, and the labeled frames accumulate in a replay buffer. Every training batch is a mixture of replay-buffer frames and samples from a reference dataset, a fixed teacher-labeled dataset.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_10_onpolicy_distillation_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/10_onpolicy_distillation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">On-Policy Knowledge Distillation</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -178,4 +259,8 @@ scheduler values.
    /examples/intermediate/05_safety_and_monitoring
    /examples/intermediate/06_ddp_mlp_training
    /examples/intermediate/07_rich_training_reporting
+   /examples/intermediate/08_lora_finetuning
+   /examples/intermediate/09_generative_samplers
+   /examples/intermediate/09_offline_distillation
+   /examples/intermediate/10_onpolicy_distillation
 

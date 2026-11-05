@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Reporting &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Reporting &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/reporting';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Dynamics: Optimization and Molecular Dynamics" href="dynamics.html" />
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -493,8 +501,10 @@ choose the right tool for each output.</p>
 <p>Logging captures a direct stream of events — per-batch rows, per-graph
 observables, gradient statistics — in a form you can replay or audit after
 the run. Each record corresponds to one event and contains whatever that event
-produced. The built-in <code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code> for dynamics works this way: it writes one
-row per system per step with energy, <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, temperature, and status counts.</p>
+produced. The built-in <code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code> for dynamics works this way: by default,
+it writes one row per system per step with energy, <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, temperature, and
+status. With <code class="docutils literal notranslate"><span class="pre">by_group=True</span></code>, it writes one row per batch group from
+custom scalars that supply one value per group.</p>
 <p>Reporting produces curated summaries. A reporter receives the hook context at a
 chosen cadence, decides which scalars to extract, optionally reduces them across
 ranks, and renders or serializes the result. Detail that does not belong in a
@@ -521,9 +531,22 @@ count, timestamps, and a bounded recent-message buffer.</p></li>
 <li><p>Applies the configured error policy if a reporter raises.</p></li>
 </ol>
 <figure class="align-default" id="id2">
-<div class="graphviz"><object data="../_images/graphviz-64c0677f07a4af11bc677395db5414ec32dae0a8.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">Reporting orchestrator flow</p></object></div>
-<figcaption>
+digraph reporting_flow {
+    rankdir=TB
+
+    workflow     [label=&quot;Workflow\n(training / dynamics / custom)&quot;]
+    context      [label=&quot;HookContext\n(context + stage enum)&quot;]
+    orchestrator [label=&quot;ReportingOrchestrator\n(cadence + reporter fan-out)&quot;]
+    state        [label=&quot;ReportingState\n(event metadata + recent messages)&quot;]
+    reporter     [label=&quot;Reporter\n(TensorBoard / Rich / custom)&quot;]
+    output       [label=&quot;Output\n(file / run log / dashboard)&quot;]
+
+    workflow -&gt; context     [label=&quot;engine hook call&quot;]
+    context -&gt; orchestrator [label=&quot;stage match&quot;]
+    orchestrator -&gt; state   [label=&quot;mark event&quot;]
+    state -&gt; reporter       [label=&quot;report&quot;]
+    reporter -&gt; output      [label=&quot;write&quot;]
+}<figcaption>
 <p><span class="caption-text">Reporting orchestrator flow, from workflow to output.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
@@ -559,9 +582,24 @@ mean loss, total throughput across all GPUs. Set <code class="docutils literal n
 independence is acceptable and parallel writes to the same destination must be
 avoided.</p>
 <figure class="align-default" id="id3">
-<div class="graphviz"><object data="../_images/graphviz-3153b53d9fdb86d8ec0ee551b012e1802d24e0ae.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">Distributed reporting reduction flow</p></object></div>
-<figcaption>
+digraph distributed_reporting {
+    rankdir=TB
+
+    r0 [label=&quot;rank 0\ncollect_scalars&quot;]
+    r1 [label=&quot;rank 1\ncollect_scalars&quot;]
+    rn [label=&quot;rank n\ncollect_scalars&quot;]
+
+    reduce [label=&quot;reduce_scalar_snapshot\n(mean / sum / min / max)&quot; fillcolor=&quot;#4a3315&quot;]
+
+    w0 [label=&quot;rank 0\nwrites or renders&quot;]
+    wn [label=&quot;nonzero ranks\nreturn after reduction&quot; style=&quot;rounded,filled,dashed&quot;]
+
+    r0 -&gt; reduce
+    r1 -&gt; reduce
+    rn -&gt; reduce
+    reduce -&gt; w0
+    reduce -&gt; wn
+}<figcaption>
 <p><span class="caption-text">Distributed reporting: per-rank collection, reduction, and rank-zero write.</span><a class="headerlink" href="#id3" title="Link to this image">#</a></p>
 </figcaption>
 </figure>

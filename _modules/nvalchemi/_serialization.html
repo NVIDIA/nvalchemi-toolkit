@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi._serialization &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi._serialization &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/_serialization';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -429,20 +429,26 @@ document.write(`
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">lru_cache</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">NoneType</span><span class="p">,</span> <span class="n">UnionType</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModuleType</span><span class="p">,</span> <span class="n">NoneType</span><span class="p">,</span> <span class="n">UnionType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Self</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeforeValidator</span><span class="p">,</span> <span class="n">PlainSerializer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseModel</span><span class="p">,</span>
+    <span class="n">BeforeValidator</span><span class="p">,</span>
+    <span class="n">ConfigDict</span><span class="p">,</span>
+    <span class="n">PlainSerializer</span><span class="p">,</span>
+    <span class="n">ValidationError</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="n">_TYPE_SERIALIZERS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">type</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{}</span>
 <span class="sd">&quot;&quot;&quot;Registry mapping a type to its ``(serialize, deserialize)`` callable pair.&quot;&quot;&quot;</span>
 
 
 <div class="viewcode-block" id="register_type_serializer">
-<a class="viewcode-back" href="../../modules/training/generated/nvalchemi.training.register_type_serializer.html#nvalchemi.training.register_type_serializer">[docs]</a>
+<a class="viewcode-back" href="../../modules/training/generated/nvalchemi.training.register_type_serializer.html#nvalchemi.training.distillation.evaluation.register_type_serializer">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">register_type_serializer</span><span class="p">(</span>
     <span class="n">type_</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span>
     <span class="n">serialize</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">],</span>
@@ -569,8 +575,98 @@ document.write(`
     <span class="k">return</span> <span class="n">obj</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">capture_callable_spec</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">field_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;BaseSpec&quot;</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Capture a callable field as a :class:`~nvalchemi.training.BaseSpec`.</span>
+
+<span class="sd">    Uses the object&#39;s own ``to_spec()`` when it provides one (model-owning</span>
+<span class="sd">    procedures carry their construction), else a dotted-path capture through</span>
+<span class="sd">    :func:`_import_callable` as the recorded builder. Lambdas, closures, and</span>
+<span class="sd">    ``functools.partial`` objects carry no import path and are rejected by</span>
+<span class="sd">    :func:`_callable_path_of`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fn</span>
+<span class="sd">        The live callable to capture.</span>
+<span class="sd">    field_name</span>
+<span class="sd">        The model field being serialized; labels capture errors.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    BaseSpec</span>
+<span class="sd">        The captured construction spec.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``fn.to_spec()`` does not return a</span>
+<span class="sd">        :class:`~nvalchemi.training.BaseSpec`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseSpec</span><span class="p">,</span> <span class="n">create_model_spec</span>
+
+    <span class="n">to_spec</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s2">&quot;to_spec&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">to_spec</span><span class="p">):</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="n">to_spec</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">BaseSpec</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field_name</span><span class="si">}</span><span class="s2">.to_spec() must return a BaseSpec, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">spec</span>
+    <span class="k">return</span> <span class="n">create_model_spec</span><span class="p">(</span><span class="n">_import_callable</span><span class="p">,</span> <span class="n">target_path</span><span class="o">=</span><span class="n">_callable_path_of</span><span class="p">(</span><span class="n">fn</span><span class="p">))</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_callable_path_of</span><span class="p">(</span><span class="n">target</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the canonical dotted path (``module.QualName``) for ``target``.&quot;&quot;&quot;</span>
+    <span class="n">owner</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">&quot;__self__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">owner</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="p">(</span><span class="nb">type</span><span class="p">,</span> <span class="n">ModuleType</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">target</span><span class="si">!r}</span><span class="s2"> is an instance-bound method and cannot be captured by &quot;</span>
+            <span class="s2">&quot;import path alone. Wrap it in a callable object with a to_spec() &quot;</span>
+            <span class="s2">&quot;method that returns a BaseSpec.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">function</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">&quot;__func__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="n">function</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">owner_path</span> <span class="o">=</span> <span class="n">_cls_path_of</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">_import_cls</span><span class="p">(</span><span class="n">owner_path</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">owner</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;the imported owner is a different class&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">ImportError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">target</span><span class="si">!r}</span><span class="s2"> has a class-bound owner that is not importable by &quot;</span>
+                <span class="s2">&quot;dotted path. Wrap it in a callable object with a to_spec() &quot;</span>
+                <span class="s2">&quot;method that returns a BaseSpec.&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+
+        <span class="n">candidate_names</span> <span class="o">=</span> <span class="p">[</span><span class="nb">getattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">&quot;__name__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)]</span>
+        <span class="n">candidate_names</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+            <span class="n">name</span>
+            <span class="k">for</span> <span class="n">base</span> <span class="ow">in</span> <span class="n">owner</span><span class="o">.</span><span class="vm">__mro__</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">descriptor</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">base</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">descriptor</span><span class="p">,</span> <span class="nb">classmethod</span><span class="p">)</span> <span class="ow">and</span> <span class="n">descriptor</span><span class="o">.</span><span class="vm">__func__</span> <span class="ow">is</span> <span class="n">function</span>
+        <span class="p">)</span>
+        <span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">candidate_names</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">imported</span> <span class="o">=</span> <span class="n">_import_callable</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">owner_path</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">ImportError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="n">imported</span><span class="p">,</span> <span class="s2">&quot;__self__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="n">owner</span>
+                <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">imported</span><span class="p">,</span> <span class="s2">&quot;__func__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="n">function</span>
+            <span class="p">):</span>
+                <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">owner_path</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">target</span><span class="si">!r}</span><span class="s2"> has no importable class attribute on </span><span class="si">{</span><span class="n">owner_path</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+            <span class="s2">&quot;that preserves its classmethod binding. Wrap it in a callable &quot;</span>
+            <span class="s2">&quot;object with a to_spec() method that returns a BaseSpec.&quot;</span>
+        <span class="p">)</span>
+
     <span class="n">module</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">&quot;__module__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">qualname</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">&quot;__qualname__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">module</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">qualname</span> <span class="ow">or</span> <span class="s2">&quot;&lt;locals&gt;&quot;</span> <span class="ow">in</span> <span class="n">qualname</span> <span class="ow">or</span> <span class="s2">&quot;&lt;lambda&gt;&quot;</span> <span class="ow">in</span> <span class="n">qualname</span><span class="p">:</span>
@@ -609,9 +705,18 @@ document.write(`
         <span class="p">}:</span>
             <span class="k">continue</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">kwargs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
             <span class="k">continue</span>
+        <span class="c1"># A constructor argument may share its name with an inherited method</span>
+        <span class="c1"># (``nn.Module.train``), which ``getattr`` returns instead of the stored</span>
+        <span class="c1"># value; fall back to the private attribute that holds it.</span>
+        <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">ismethod</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="vm">__self__</span> <span class="ow">is</span> <span class="n">instance</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;_</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+                <span class="k">continue</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
     <span class="k">return</span> <span class="n">kwargs</span>
 
 
@@ -738,6 +843,80 @@ document.write(`
     <span class="n">PlainSerializer</span><span class="p">(</span><span class="n">_serialize_type</span><span class="p">),</span>
 <span class="p">]</span>
 <span class="sd">&quot;&quot;&quot;``type | None`` field annotation that round-trips via dotted-path strings.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="MeasurementRecord">
+<a class="viewcode-back" href="../../modules/training/generated/nvalchemi.training.distillation.evaluation.MeasurementRecord.html#nvalchemi.training.distillation.evaluation.MeasurementRecord">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MeasurementRecord</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Frozen measurement that exports as a plain dictionary and rebuilds from one.</span>
+
+<span class="sd">    A *measurement record* holds the results of one measurement. Subclasses</span>
+<span class="sd">    declare their fields as annotations. ``to_dict`` returns the field dump and</span>
+<span class="sd">    keeps tuples and ``None`` values as they are. ``from_dict`` validates a</span>
+<span class="sd">    mapping back into the record. A list read out of JSON therefore returns as</span>
+<span class="sd">    the tuple its field declares, and a non-finite float that a strict writer</span>
+<span class="sd">    spelled as a string returns as the number. The rebuild refuses a key the</span>
+<span class="sd">    record does not declare and a required field the export lacks.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi._serialization import MeasurementRecord</span>
+<span class="sd">    &gt;&gt;&gt; class Timing(MeasurementRecord):</span>
+<span class="sd">    ...     steps: int</span>
+<span class="sd">    ...     seconds: float | None = None</span>
+<span class="sd">    &gt;&gt;&gt; Timing.from_dict(Timing(steps=3).to_dict())</span>
+<span class="sd">    Timing(steps=3, seconds=None)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return every field as a plain dictionary.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild the record from a :meth:`to_dict` export.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If *data* carries a key the record does not declare, omits one of</span>
+<span class="sd">            its fields that has no default, or holds a value that fails a</span>
+<span class="sd">            field&#39;s validation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+        <span class="k">except</span> <span class="n">ValidationError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">_rebuild_failure</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rebuild_failure</span><span class="p">(</span><span class="bp">cls</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">MeasurementRecord</span><span class="p">],</span> <span class="n">exc</span><span class="p">:</span> <span class="n">ValidationError</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the rebuild error for *exc*, naming the keys or the fields at fault.&quot;&quot;&quot;</span>
+    <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">error</span> <span class="ow">in</span> <span class="n">exc</span><span class="o">.</span><span class="n">errors</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">error</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;extra_forbidden&quot;</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> cannot be rebuilt from a mapping carrying &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">unknown</span><span class="si">!r}</span><span class="s2">; expected keys from </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">model_fields</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">error</span> <span class="ow">in</span> <span class="n">exc</span><span class="o">.</span><span class="n">errors</span><span class="p">()</span> <span class="k">if</span> <span class="n">error</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;missing&quot;</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> cannot be rebuilt from a mapping missing the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;required </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">faults</span> <span class="o">=</span> <span class="s2">&quot;; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="s1">&#39;.&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">part</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">part</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">error</span><span class="p">[</span><span class="s1">&#39;loc&#39;</span><span class="p">])</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="p">[</span><span class="s1">&#39;msg&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">for</span> <span class="n">error</span> <span class="ow">in</span> <span class="n">exc</span><span class="o">.</span><span class="n">errors</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> cannot be rebuilt from a mapping: </span><span class="si">{</span><span class="n">faults</span><span class="si">}</span><span class="s2">.&quot;</span>
 </pre></div>
 
                 </article>

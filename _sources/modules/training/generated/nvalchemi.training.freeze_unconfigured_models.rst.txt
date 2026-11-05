@@ -1,0 +1,6 @@
+﻿nvalchemi.training.freeze\_unconfigured\_models
+===============================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: freeze_unconfigured_models

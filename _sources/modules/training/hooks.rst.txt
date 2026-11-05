@@ -237,7 +237,11 @@ each epoch when available.
 ``DDPHook`` is not a training-update hook, so it does not participate in
 ``DO_BACKWARD`` or ``DO_OPTIMIZER_STEP``. Register it alongside
 ``MixedPrecisionHook`` normally; DDP wrapping happens before AMP opens its
-per-batch autocast/update path.
+per-batch autocast/update path. Once the stage has run,
+:attr:`DDPHook.wrapped_keys <nvalchemi.training.hooks.DDPHook.wrapped_keys>`
+names the models the hook replaced, so a workflow that depends on one of them
+being synchronized can check for it by name rather than by inspecting the
+model it finds in the strategy.
 
 .. dataclass-table:: nvalchemi.training.hooks.DDPHook
 

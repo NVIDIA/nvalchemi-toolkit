@@ -58,8 +58,8 @@ To run this example end-to-end:
 1. Install the optional dependency (its torch pin conflicts with the
    ``mace`` / ``cuXX`` extras, so use a dedicated environment)::
 
-       uv venv .venv-uma && uv sync --extra uma
-       # or, with pip:  pip install 'nvalchemi-toolkit[uma]'
+       UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma-cu12 --no-group build
+       # or, with pip:  pip install 'nvalchemi-toolkit[uma-cu12]'
 
 2. Request access at https://huggingface.co/facebook/UMA (one-time
    approval).
@@ -95,10 +95,8 @@ from ase.build import bulk
 from ase.data import atomic_masses as ASE_ATOMIC_MASSES
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics import KB_EV
 from nvalchemi.dynamics.hooks import EnergyDriftMonitorHook, LoggingHook
-
-# KB_EV is an internal helper used here only to set MB velocities.
-from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.dynamics.integrators.npt import NPT
 from nvalchemi.dynamics.integrators.nve import NVE
 from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin

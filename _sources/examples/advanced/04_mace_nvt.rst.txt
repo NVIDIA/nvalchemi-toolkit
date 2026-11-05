@@ -58,7 +58,7 @@ checkpoint, e.g. the medium model::
 
 When ``MACE_MODEL_PATH`` is unset the example uses the LJ potential.
 
-.. GENERATED FROM PYTHON SOURCE LINES 56-76
+.. GENERATED FROM PYTHON SOURCE LINES 56-73
 
 .. code-block:: Python
 
@@ -72,12 +72,9 @@ When ``MACE_MODEL_PATH`` is unset the example uses the LJ potential.
     import torch
 
     from nvalchemi.data import AtomicData, Batch
-    from nvalchemi.dynamics import NVTLangevin
+    from nvalchemi.dynamics import KB_EV, NVTLangevin
     from nvalchemi.dynamics.base import DynamicsStage
-
-    # KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
-    # integrators.  A stable public re-export may be added in a future release.
-    from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
+    from nvalchemi.dynamics.hooks import kinetic_energy_per_graph
     from nvalchemi.hooks import NeighborListHook
 
     logging.basicConfig(level=logging.INFO)
@@ -89,7 +86,7 @@ When ``MACE_MODEL_PATH`` is unset the example uses the LJ potential.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 77-86
+.. GENERATED FROM PYTHON SOURCE LINES 74-83
 
 Model selection: MACE or LJ fallback
 --------------------------------------
@@ -101,7 +98,7 @@ Both code paths produce a ``model`` object that satisfies the
 :class:`~nvalchemi.models.base.BaseModelMixin` interface, so all simulation
 code below is model-agnostic.
 
-.. GENERATED FROM PYTHON SOURCE LINES 86-113
+.. GENERATED FROM PYTHON SOURCE LINES 83-110
 
 .. code-block:: Python
 
@@ -145,7 +142,7 @@ code below is model-agnostic.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 114-122
+.. GENERATED FROM PYTHON SOURCE LINES 111-119
 
 Neighbor list: automatic wiring via ModelConfig
 ------------------------------------------------
@@ -156,7 +153,7 @@ list format (COO or MATRIX), and whether to use a half-list.
 If ``neighbor_config`` is ``None`` (e.g. a demo model that does its own
 neighbour search), no hook is needed.
 
-.. GENERATED FROM PYTHON SOURCE LINES 122-128
+.. GENERATED FROM PYTHON SOURCE LINES 119-125
 
 .. code-block:: Python
 
@@ -173,7 +170,7 @@ neighbour search), no hook is needed.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 129-134
+.. GENERATED FROM PYTHON SOURCE LINES 126-131
 
 Building the system
 --------------------
@@ -181,7 +178,7 @@ When MACE is active we use a small water cluster (3 molecules, 9 atoms).
 With LJ we use an 8-atom argon cluster.  Both result in the same simulation
 code below.
 
-.. GENERATED FROM PYTHON SOURCE LINES 134-210
+.. GENERATED FROM PYTHON SOURCE LINES 131-207
 
 .. code-block:: Python
 
@@ -275,14 +272,14 @@ code below.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 211-215
+.. GENERATED FROM PYTHON SOURCE LINES 208-212
 
 NVT MD simulation
 ------------------
 100 steps of NVTLangevin at 300 K.  The neighbor hook (if any) fires at
 BEFORE_COMPUTE to rebuild the neighbor list before each forward pass.
 
-.. GENERATED FROM PYTHON SOURCE LINES 215-232
+.. GENERATED FROM PYTHON SOURCE LINES 212-229
 
 .. code-block:: Python
 
@@ -318,14 +315,14 @@ BEFORE_COMPUTE to rebuild the neighbor list before each forward pass.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 233-237
+.. GENERATED FROM PYTHON SOURCE LINES 230-234
 
 Model-agnostic observation
 ---------------------------
 Temperature and mean energy are computed the same way regardless of whether
 MACE or LJ provided the forces.
 
-.. GENERATED FROM PYTHON SOURCE LINES 237-257
+.. GENERATED FROM PYTHON SOURCE LINES 234-254
 
 .. code-block:: Python
 
@@ -369,7 +366,7 @@ MACE or LJ provided the forces.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.299 seconds)
+   **Total running time of the script:** (0 minutes 0.109 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_04_mace_nvt.py:

@@ -1,0 +1,1084 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.distillation.evaluation.stability &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/distillation/evaluation/stability';</script>
+    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.distillation.evaluation.stability</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;MD-stability evaluators for a student driving its own dynamics.</span>
+
+<span class="sd">:class:`~nvalchemi.dynamics.hooks.StabilityMonitor` is a dynamics hook that</span>
+<span class="sd">watches energy and momentum along a student-driven run; it lives in</span>
+<span class="sd">:mod:`nvalchemi.dynamics.hooks` and is re-exported here with its record and</span>
+<span class="sd">:func:`~nvalchemi.dynamics.hooks.total_momentum`. :func:`extensivity_error`</span>
+<span class="sd">checks that the student&#39;s energy scales with system size.</span>
+<span class="sd">:func:`radial_distribution` and :func:`compare_radial_distributions` compare</span>
+<span class="sd">the structure a trajectory samples against the structure of a reference</span>
+<span class="sd">trajectory, either pooled over every species or resolved to one species pair.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Collection</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_EXTENSIVE_SYSTEM_KEYS</span><span class="p">,</span>
+    <span class="n">DEFAULT_INTENSIVE_SYSTEM_KEYS</span><span class="p">,</span>
+    <span class="n">make_supercell</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.transforms.supercell</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_repeats</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">StabilityMetrics</span><span class="p">,</span> <span class="n">StabilityMonitor</span><span class="p">,</span> <span class="n">total_momentum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">NeighborConfig</span><span class="p">,</span> <span class="n">NeighborListFormat</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_neighbors</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.evaluation._export</span><span class="w"> </span><span class="kn">import</span> <span class="n">MeasurementRecord</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.scoring</span><span class="w"> </span><span class="kn">import</span> <span class="n">_NEIGHBOR_KEYS</span><span class="p">,</span> <span class="n">_as_scorer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses.reductions</span><span class="w"> </span><span class="kn">import</span> <span class="n">per_graph_sum</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.scoring</span><span class="w"> </span><span class="kn">import</span> <span class="n">TeacherScorer</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;ExtensivityMetrics&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;RDFComparison&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;RadialDistribution&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;StabilityMetrics&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;StabilityMonitor&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;compare_radial_distributions&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;extensivity_error&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;radial_distribution&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;total_momentum&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">_EPS</span> <span class="o">=</span> <span class="mf">1e-12</span>
+<span class="sd">&quot;&quot;&quot;Denominator guard for normalized histograms.&quot;&quot;&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_periodic</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether *batch* is periodic, read off ``pbc`` before ``cell``.</span>
+
+<span class="sd">    A batch that carries ``pbc`` is periodic when any axis is periodic. A batch</span>
+<span class="sd">    without ``pbc`` is periodic when it carries a cell, because a cluster read</span>
+<span class="sd">    without a cell has no ``pbc`` either.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pbc</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;pbc&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pbc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">pbc</span><span class="o">.</span><span class="n">any</span><span class="p">())</span>
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_refuse_aperiodic</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">purpose</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise unless *batch* is periodic, naming what the periodicity was for.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">_is_periodic</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
+        <span class="k">return</span>
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;cell&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">purpose</span><span class="si">}</span><span class="s2">; the batch carries no cell.&quot;</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">purpose</span><span class="si">}</span><span class="s2">; the batch carries a cell but its pbc marks every axis &quot;</span>
+        <span class="s2">&quot;non-periodic.&quot;</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="ExtensivityMetrics">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.ExtensivityMetrics.html#nvalchemi.training.distillation.evaluation.ExtensivityMetrics">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ExtensivityMetrics</span><span class="p">(</span><span class="n">MeasurementRecord</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Energy-scaling error of a model across replicated cells.</span>
+
+<span class="sd">    *Extensivity* is the property that a structure&#39;s energy grows in proportion</span>
+<span class="sd">    to its size: a ``k``-fold supercell has ``k`` times the energy of the cell</span>
+<span class="sd">    it replicates. This record measures how far a model departs from it.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    repeats : tuple[int, int, int]</span>
+<span class="sd">        Replication factors applied along each lattice vector.</span>
+<span class="sd">    num_graphs : int</span>
+<span class="sd">        Number of structures checked.</span>
+<span class="sd">    max_error_per_atom, mean_error_per_atom : float</span>
+<span class="sd">        Largest and mean absolute deviation of the supercell energy from the</span>
+<span class="sd">        copy count times the input cell&#39;s energy, divided by the supercell&#39;s</span>
+<span class="sd">        atom count.</span>
+<span class="sd">    max_relative_error : float</span>
+<span class="sd">        Largest ratio of the same deviation to the magnitude of the expected</span>
+<span class="sd">        supercell energy.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">repeats</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+    <span class="n">num_graphs</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">max_error_per_atom</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">mean_error_per_atom</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">max_relative_error</span><span class="p">:</span> <span class="nb">float</span></div>
+
+
+
+<div class="viewcode-block" id="extensivity_error">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.extensivity_error.html#nvalchemi.training.distillation.evaluation.extensivity_error">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">extensivity_error</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">TeacherScorer</span> <span class="o">|</span> <span class="n">BaseModelMixin</span><span class="p">,</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Batch</span><span class="p">]</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">repeats</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="n">extensive_keys</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_EXTENSIVE_SYSTEM_KEYS</span><span class="p">,</span>
+    <span class="n">intensive_keys</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_INTENSIVE_SYSTEM_KEYS</span><span class="p">,</span>
+    <span class="n">drop_keys</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExtensivityMetrics</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check that a model&#39;s energy scales with the number of replicated cells.</span>
+
+<span class="sd">    A size-extensive potential returns exactly ``k`` times the energy for a</span>
+<span class="sd">    ``k``-fold supercell. A student that learned a global readout breaks that</span>
+<span class="sd">    identity. So does a potential whose numerics are re-derived from the cell</span>
+<span class="sd">    it is given, such as an Ewald or PME tail whose splitting parameter follows</span>
+<span class="sd">    the atom count and volume. The break shows up in MD long before it shows up</span>
+<span class="sd">    in a held-out energy MAE.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : TeacherScorer | BaseModelMixin</span>
+<span class="sd">        Model to check. A bare model is wrapped in an</span>
+<span class="sd">        :class:`~nvalchemi.training.distillation.InProcessTeacherScorer`, which</span>
+<span class="sd">        builds and rolls back the neighbor list it needs.</span>
+<span class="sd">    data : Iterable[Batch] | Batch</span>
+<span class="sd">        Periodic structures to replicate; they are left unmodified.</span>
+<span class="sd">        :func:`~nvalchemi.data.transforms.make_supercell` carries node-level</span>
+<span class="sd">        fields into the supercell and scales system-level fields by their</span>
+<span class="sd">        extensivity. A system-level field with no defined scaling is rejected.</span>
+<span class="sd">    repeats : Sequence[int], optional</span>
+<span class="sd">        Replication factors along the three lattice vectors. Default</span>
+<span class="sd">        ``(2, 1, 1)``.</span>
+<span class="sd">    extensive_keys : Collection[str], optional</span>
+<span class="sd">        System-level fields multiplied by the copy count. Default</span>
+<span class="sd">        :data:`~nvalchemi.data.transforms.DEFAULT_EXTENSIVE_SYSTEM_KEYS`.</span>
+<span class="sd">    intensive_keys : Collection[str], optional</span>
+<span class="sd">        System-level fields carried unchanged. Default</span>
+<span class="sd">        :data:`~nvalchemi.data.transforms.DEFAULT_INTENSIVE_SYSTEM_KEYS`.</span>
+<span class="sd">    drop_keys : Collection[str], optional</span>
+<span class="sd">        Fields left out of the supercell, on top of the ephemeral neighbor</span>
+<span class="sd">        tensors, which are always dropped. A batch returned by</span>
+<span class="sd">        :meth:`~nvalchemi.dynamics.base.BaseDynamics.run` carries the</span>
+<span class="sd">        propagator&#39;s bookkeeping, such as ``status`` and ``system_id``, which</span>
+<span class="sd">        no scaling rule covers; pass ``propagator.bookkeeping_keys()`` to</span>
+<span class="sd">        replicate such a batch. Default ``()``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    ExtensivityMetrics</span>
+<span class="sd">        Worst-case and mean energy-scaling error, in eV/atom.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *repeats* is not three positive integers. If a structure is not</span>
+<span class="sd">        periodic (it has no cell, or its ``pbc`` marks every axis</span>
+<span class="sd">        non-periodic), or carries a system-level field that neither scales</span>
+<span class="sd">        with the supercell nor is dropped. If *data* holds no graphs.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import extensivity_error</span>
+<span class="sd">    &gt;&gt;&gt; extensivity_error(student, holdout, repeats=(2, 2, 1))  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; extensivity_error(  # doctest: +SKIP</span>
+<span class="sd">    ...     student, nve.run(batch), drop_keys=nve.bookkeeping_keys()</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">factors</span> <span class="o">=</span> <span class="n">_resolve_repeats</span><span class="p">(</span><span class="n">repeats</span><span class="p">)</span>
+    <span class="n">scorer</span> <span class="o">=</span> <span class="n">_as_scorer</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">])</span>
+    <span class="n">copies</span> <span class="o">=</span> <span class="n">factors</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">factors</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">factors</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">dropped</span> <span class="o">=</span> <span class="n">_NEIGHBOR_KEYS</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">drop_keys</span><span class="p">)</span>
+    <span class="n">errors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">relative</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="p">[</span><span class="n">data</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Batch</span><span class="p">)</span> <span class="k">else</span> <span class="n">data</span><span class="p">:</span>
+        <span class="n">_refuse_aperiodic</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;Extensivity requires periodic structures&quot;</span><span class="p">)</span>
+        <span class="n">supercell</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="n">make_supercell</span><span class="p">(</span>
+                    <span class="n">structure</span><span class="p">,</span>
+                    <span class="n">factors</span><span class="p">,</span>
+                    <span class="n">extensive_keys</span><span class="o">=</span><span class="n">extensive_keys</span><span class="p">,</span>
+                    <span class="n">intensive_keys</span><span class="o">=</span><span class="n">intensive_keys</span><span class="p">,</span>
+                    <span class="n">drop_keys</span><span class="o">=</span><span class="n">dropped</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">structure</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="n">to_data_list</span><span class="p">()</span>
+            <span class="p">],</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">expected</span> <span class="o">=</span> <span class="n">copies</span> <span class="o">*</span> <span class="n">scorer</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="n">batch</span><span class="p">)[</span><span class="s2">&quot;teacher_energy&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">observed</span> <span class="o">=</span> <span class="n">scorer</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="n">supercell</span><span class="p">)[</span><span class="s2">&quot;teacher_energy&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">deviation</span> <span class="o">=</span> <span class="p">(</span><span class="n">observed</span> <span class="o">-</span> <span class="n">expected</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">deviation</span> <span class="o">/</span> <span class="p">(</span><span class="n">copies</span> <span class="o">*</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="p">))</span>
+        <span class="n">relative</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">deviation</span> <span class="o">/</span> <span class="n">expected</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="n">_EPS</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">errors</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;data must hold at least one graph to replicate.&quot;</span><span class="p">)</span>
+    <span class="n">per_atom</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ExtensivityMetrics</span><span class="p">(</span>
+        <span class="n">repeats</span><span class="o">=</span><span class="n">factors</span><span class="p">,</span>
+        <span class="n">num_graphs</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">per_atom</span><span class="o">.</span><span class="n">numel</span><span class="p">()),</span>
+        <span class="n">max_error_per_atom</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">per_atom</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span>
+        <span class="n">mean_error_per_atom</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">per_atom</span><span class="o">.</span><span class="n">mean</span><span class="p">()),</span>
+        <span class="n">max_relative_error</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">relative</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="RadialDistribution">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.RadialDistribution.html#nvalchemi.training.distillation.evaluation.RadialDistribution">[docs]</a>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RadialDistribution</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Radial distribution function accumulated over one or more frames.</span>
+
+<span class="sd">    The *radial distribution* ``g(r)`` is the pair correlation function: how</span>
+<span class="sd">    often pairs of atoms sit at separation ``r``, normalized so an ideal gas</span>
+<span class="sd">    gives ``1``.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    edges : Float[torch.Tensor, &quot;num_bins+1&quot;]</span>
+<span class="sd">        Bin edges from ``0`` to ``r_max``, in A.</span>
+<span class="sd">    g_r : Float[torch.Tensor, &quot;num_bins&quot;]</span>
+<span class="sd">        Pair correlation function, normalized so an ideal gas gives ``1``.</span>
+<span class="sd">    counts : Float[torch.Tensor, &quot;num_bins&quot;]</span>
+<span class="sd">        Ordered-pair counts summed over every graph and frame. Each pair is</span>
+<span class="sd">        apportioned between the two bins whose centers bracket its distance.</span>
+<span class="sd">    num_frames : int</span>
+<span class="sd">        Number of graphs the histogram was accumulated over.</span>
+<span class="sd">    num_atoms : int</span>
+<span class="sd">        Number of atoms summed over the same graphs, whatever the pair filter.</span>
+<span class="sd">    r_max : float</span>
+<span class="sd">        Cutoff the pairs were collected within.</span>
+<span class="sd">    pair : tuple[int, int] | None</span>
+<span class="sd">        Atomic numbers the pairs were restricted to, or ``None`` for the total</span>
+<span class="sd">        ``g(r)`` over every species at once.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">edges</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">g_r</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">counts</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="n">num_frames</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">num_atoms</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">r_max</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">pair</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="RadialDistribution.to_dict">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.RadialDistribution.html#nvalchemi.training.distillation.evaluation.RadialDistribution.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the scalar fields and the curve as lists.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;edges&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">&quot;g_r&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">g_r</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">&quot;counts&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">&quot;num_frames&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_frames</span><span class="p">,</span>
+            <span class="s2">&quot;num_atoms&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">,</span>
+            <span class="s2">&quot;r_max&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">r_max</span><span class="p">,</span>
+            <span class="s2">&quot;pair&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pair</span><span class="p">,</span>
+        <span class="p">}</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="RDFComparison">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.RDFComparison.html#nvalchemi.training.distillation.evaluation.RDFComparison">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RDFComparison</span><span class="p">(</span><span class="n">MeasurementRecord</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Scalar divergences between two radial distribution functions.</span>
+
+<span class="sd">    The comparison has the species resolution of its curves. Two total</span>
+<span class="sd">    ``g(r)`` curves are compared without regard to species, so a student that</span>
+<span class="sd">    swapped two sublattices can score well while its partial curves are wrong.</span>
+<span class="sd">    ``pair`` records which resolution was measured.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    jensen_shannon : float</span>
+<span class="sd">        Base-2 Jensen-Shannon divergence between the two normalized</span>
+<span class="sd">        pair-distance histograms, in ``[0, 1]``.</span>
+<span class="sd">    l1 : float</span>
+<span class="sd">        Integrated absolute difference of the two ``g(r)`` curves, in A.</span>
+<span class="sd">    max_deviation : float</span>
+<span class="sd">        Largest absolute difference between the two curves in any bin.</span>
+<span class="sd">    num_bins : int</span>
+<span class="sd">        Bins the comparison ran over.</span>
+<span class="sd">    pair : tuple[int, int] | None</span>
+<span class="sd">        Atomic numbers both curves were resolved to, or ``None`` for</span>
+<span class="sd">        species-blind totals.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">jensen_shannon</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">l1</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">max_deviation</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">num_bins</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">pair</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="radial_distribution">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.radial_distribution.html#nvalchemi.training.distillation.evaluation.radial_distribution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">radial_distribution</span><span class="p">(</span>
+    <span class="n">frames</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Batch</span><span class="p">]</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">r_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">6.0</span><span class="p">,</span>
+    <span class="n">num_bins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">60</span><span class="p">,</span>
+    <span class="n">pair</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RadialDistribution</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Accumulate the radial distribution function of a trajectory.</span>
+
+<span class="sd">    Every graph is one frame, so a trajectory that</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.hooks.SnapshotHook` captured into a</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.sinks.DataSink` can be passed straight from</span>
+<span class="sd">    ``sink.read()``. Pairs are collected with the framework&#39;s own neighbor</span>
+<span class="sd">    build at ``r_max`` on a copy of each frame, so the caller&#39;s neighbor state</span>
+<span class="sd">    is left as it was. By default every pair goes into one</span>
+<span class="sd">    histogram: the number-weighted total</span>
+<span class="sd">    ``g(r) = \\sum_{ab} x_a x_b g_{ab}(r)``, which cannot see chemical</span>
+<span class="sd">    ordering. Pass *pair* to resolve one species pair and gate a multi-species</span>
+<span class="sd">    student on its partial curves. The normalization is</span>
+<span class="sd">    ``g(r) = n(r) / (N \\rho V_{shell})``, generalized over frames. Each pair</span>
+<span class="sd">    is apportioned between the two bins whose centers bracket its distance,</span>
+<span class="sd">    and the neighbor list is built one bin past ``r_max``. The histogram is</span>
+<span class="sd">    therefore continuous in the positions rather than stepping when a shell</span>
+<span class="sd">    crosses a bin edge.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    frames : Iterable[Batch] | Batch</span>
+<span class="sd">        Periodic frames to accumulate.</span>
+<span class="sd">    r_max : float, optional</span>
+<span class="sd">        Largest pair distance binned, in A. It may exceed the cell vectors,</span>
+<span class="sd">        because the neighbor build enumerates as many periodic images as the</span>
+<span class="sd">        cutoff needs. Default ``6.0``.</span>
+<span class="sd">    num_bins : int, optional</span>
+<span class="sd">        Uniform bins between ``0`` and ``r_max``. Default ``60``.</span>
+<span class="sd">    pair : Sequence[int] | None, optional</span>
+<span class="sd">        Two atomic numbers ``(a, b)``. Only pairs whose first atom has atomic</span>
+<span class="sd">        number ``a`` and whose second atom has ``b`` are counted. Default</span>
+<span class="sd">        ``None`` (every pair, pooled into the species-blind total).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    RadialDistribution</span>
+<span class="sd">        Curve, raw counts, and the sizes they were accumulated over.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``r_max`` or ``num_bins`` is not positive. If *pair* is not two</span>
+<span class="sd">        atomic numbers, or names a species the frames do not carry. If a frame</span>
+<span class="sd">        is not periodic or its cell encloses no volume, or if no frame was</span>
+<span class="sd">        supplied.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import radial_distribution</span>
+<span class="sd">    &gt;&gt;&gt; student_rdf = radial_distribution(sink.read(), r_max=6.0)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; na_cl = radial_distribution(sink.read(), pair=(11, 17))  # doctest: +SKIP</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">r_max</span> <span class="o">&lt;=</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="n">num_bins</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;r_max and num_bins must be positive; got r_max=</span><span class="si">{</span><span class="n">r_max</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;num_bins=</span><span class="si">{</span><span class="n">num_bins</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">species</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">pair</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">number</span><span class="p">)</span> <span class="k">for</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">pair</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">species</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">species</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;pair must be two atomic numbers to resolve a partial g(r); got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">pair</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">width</span> <span class="o">=</span> <span class="n">r_max</span> <span class="o">/</span> <span class="n">num_bins</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">NeighborConfig</span><span class="p">(</span>
+        <span class="n">cutoff</span><span class="o">=</span><span class="n">r_max</span> <span class="o">+</span> <span class="n">width</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span><span class="p">,</span> <span class="n">half_list</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_bins</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">ideal</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">num_frames</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">num_atoms</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="p">[</span><span class="n">frames</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">frames</span><span class="p">,</span> <span class="n">Batch</span><span class="p">)</span> <span class="k">else</span> <span class="n">frames</span><span class="p">:</span>
+        <span class="n">_refuse_aperiodic</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;A radial distribution needs periodic frames&quot;</span><span class="p">)</span>
+        <span class="n">volumes</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">det</span><span class="p">()</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">((</span><span class="n">volumes</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Every frame needs a cell enclosing a positive volume; got cell &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;volumes </span><span class="si">{</span><span class="n">volumes</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">!r}</span><span class="s2">. A radial distribution is normalized &quot;</span>
+                <span class="s2">&quot;by the ideal-gas density, which a cell enclosing no volume does &quot;</span>
+                <span class="s2">&quot;not define, and an isolated molecule read with a zero cell would &quot;</span>
+                <span class="s2">&quot;score as a perfect match against anything. Give the frames a &quot;</span>
+                <span class="s2">&quot;periodic cell.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">frame</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="n">_NEIGHBOR_KEYS</span><span class="p">)</span>
+        <span class="n">compute_neighbors</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+        <span class="n">distances</span> <span class="o">=</span> <span class="n">_pair_distances</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">species</span><span class="p">)</span>
+        <span class="n">counts</span> <span class="o">+=</span> <span class="n">_cloud_in_cell</span><span class="p">(</span><span class="n">distances</span><span class="p">,</span> <span class="n">num_bins</span><span class="p">,</span> <span class="n">width</span><span class="p">)</span>
+        <span class="n">ideal</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">((</span><span class="n">_pair_populations</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">species</span><span class="p">)</span> <span class="o">/</span> <span class="n">volumes</span><span class="o">.</span><span class="n">cpu</span><span class="p">())</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="n">num_frames</span> <span class="o">+=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="n">num_atoms</span> <span class="o">+=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span>
+    <span class="k">if</span> <span class="n">num_frames</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;frames must hold at least one graph.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">species</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">ideal</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;The frames carry no atom of one of the atomic numbers &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">species</span><span class="p">)</span><span class="si">!r}</span><span class="s2">, so a partial g(r) over that pair has no &quot;</span>
+            <span class="s2">&quot;ideal-gas density to normalize against.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">edges</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">r_max</span><span class="p">,</span> <span class="n">num_bins</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">shells</span> <span class="o">=</span> <span class="p">(</span><span class="mf">4.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="p">(</span><span class="n">edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">-</span> <span class="n">edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">RadialDistribution</span><span class="p">(</span>
+        <span class="n">edges</span><span class="o">=</span><span class="n">edges</span><span class="p">,</span>
+        <span class="n">g_r</span><span class="o">=</span><span class="n">counts</span> <span class="o">/</span> <span class="p">(</span><span class="n">ideal</span> <span class="o">*</span> <span class="n">shells</span><span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="n">_EPS</span><span class="p">),</span>
+        <span class="n">counts</span><span class="o">=</span><span class="n">counts</span><span class="p">,</span>
+        <span class="n">num_frames</span><span class="o">=</span><span class="n">num_frames</span><span class="p">,</span>
+        <span class="n">num_atoms</span><span class="o">=</span><span class="n">num_atoms</span><span class="p">,</span>
+        <span class="n">r_max</span><span class="o">=</span><span class="n">r_max</span><span class="p">,</span>
+        <span class="n">pair</span><span class="o">=</span><span class="n">species</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_pair_populations</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">species</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return each graph&#39;s ordered-pair population for the counted species.</span>
+
+<span class="sd">    The population is ``N_g^2`` when every species is pooled, or</span>
+<span class="sd">    ``N_{a,g} N_{b,g}`` for a resolved pair. It sets the ideal-gas expectation</span>
+<span class="sd">    that the counts are divided by. Both forms carry the usual ``O(1/N)`` bias</span>
+<span class="sd">    of counting ``N^2`` ordered pairs where ``N(N - 1)`` are distinct.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">species</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">sizes</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">numbers</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">populations</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">species</span><span class="p">:</span>
+        <span class="n">selected</span> <span class="o">=</span> <span class="p">(</span><span class="n">numbers</span> <span class="o">==</span> <span class="n">number</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">populations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">per_graph_sum</span><span class="p">(</span><span class="n">selected</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">populations</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">populations</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_pair_distances</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">species</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the length of every pair in the batch&#39;s sparse neighbor list.</span>
+
+<span class="sd">    A *species* filter keeps the ordered pairs running from its first atomic</span>
+<span class="sd">    number to its second, matching the ordered population the counts are</span>
+<span class="sd">    normalized by. The list is a full one, so it is closed under transposition</span>
+<span class="sd">    and ``(a, b)`` selects the same distances as ``(b, a)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">neighbors</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">neighbor_list</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="n">neighbors</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">target</span> <span class="o">=</span> <span class="n">neighbors</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">delta</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">[</span><span class="n">target</span><span class="p">]</span> <span class="o">-</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">[</span><span class="n">source</span><span class="p">]</span>
+    <span class="n">shifts</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;neighbor_list_shifts&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">shifts</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">cells</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">[</span><span class="n">source</span><span class="p">]]</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">delta</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ms,msd-&gt;md&quot;</span><span class="p">,</span> <span class="n">shifts</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">delta</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="n">cells</span><span class="p">)</span>
+    <span class="n">distances</span> <span class="o">=</span> <span class="n">delta</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">species</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">distances</span>
+    <span class="n">numbers</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">distances</span><span class="p">[(</span><span class="n">numbers</span><span class="p">[</span><span class="n">source</span><span class="p">]</span> <span class="o">==</span> <span class="n">species</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">numbers</span><span class="p">[</span><span class="n">target</span><span class="p">]</span> <span class="o">==</span> <span class="n">species</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_cloud_in_cell</span><span class="p">(</span>
+    <span class="n">distances</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">num_bins</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">width</span><span class="p">:</span> <span class="nb">float</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the pair histogram, each distance split between two bins.</span>
+
+<span class="sd">    A pair contributes to the two bins whose centers bracket its distance,</span>
+<span class="sd">    weighted by how close it sits to each. The weights sum to one. A pair in</span>
+<span class="sd">    the half-bin margin past the last center deposits only the share that</span>
+<span class="sd">    falls inside the range.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">offsets</span> <span class="o">=</span> <span class="n">distances</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">/</span> <span class="n">width</span> <span class="o">-</span> <span class="mf">0.5</span>
+    <span class="n">lower</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">floor</span><span class="p">()</span>
+    <span class="n">upper_weight</span> <span class="o">=</span> <span class="n">offsets</span> <span class="o">-</span> <span class="n">lower</span>
+    <span class="n">index</span> <span class="o">=</span> <span class="n">lower</span><span class="o">.</span><span class="n">long</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">padded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_bins</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">padded</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_bins</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">upper_weight</span><span class="p">)</span>
+    <span class="n">padded</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_bins</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">upper_weight</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">padded</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="compare_radial_distributions">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.compare_radial_distributions.html#nvalchemi.training.distillation.evaluation.compare_radial_distributions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compare_radial_distributions</span><span class="p">(</span>
+    <span class="n">reference</span><span class="p">:</span> <span class="n">RadialDistribution</span><span class="p">,</span> <span class="n">candidate</span><span class="p">:</span> <span class="n">RadialDistribution</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RDFComparison</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Score how far a candidate trajectory&#39;s structure sits from a reference.</span>
+
+<span class="sd">    The headline number is the Jensen-Shannon divergence of the two normalized</span>
+<span class="sd">    pair-distance histograms. It is symmetric, bounded in ``[0, 1]`` with a</span>
+<span class="sd">    base-2 logarithm, and finite where one histogram has an empty bin. A</span>
+<span class="sd">    Kullback-Leibler divergence or a chi-squared distance is not finite there</span>
+<span class="sd">    on RDF data. The ``g(r)`` curves themselves are compared with an</span>
+<span class="sd">    integrated absolute difference. The comparison is only as species-resolved</span>
+<span class="sd">    as its curves. To gate chemical ordering, build one curve pair per species</span>
+<span class="sd">    pair with the ``pair`` argument of :func:`radial_distribution`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    reference : RadialDistribution</span>
+<span class="sd">        Reference-trajectory curve.</span>
+<span class="sd">    candidate : RadialDistribution</span>
+<span class="sd">        Student-trajectory curve, binned identically and resolved to the same</span>
+<span class="sd">        species pair.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    RDFComparison</span>
+<span class="sd">        The divergence and the two curve distances.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the two curves do not share bin edges, if they resolve different</span>
+<span class="sd">        species, or if either accumulated no pairs at all.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import (</span>
+<span class="sd">    ...     compare_radial_distributions,</span>
+<span class="sd">    ...     radial_distribution,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; match = compare_radial_distributions(  # doctest: +SKIP</span>
+<span class="sd">    ...     radial_distribution(teacher_frames),</span>
+<span class="sd">    ...     radial_distribution(student_frames),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">reference</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">candidate</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">shape</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span>
+        <span class="n">reference</span><span class="o">.</span><span class="n">edges</span><span class="p">,</span> <span class="n">candidate</span><span class="o">.</span><span class="n">edges</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Radial distributions must share bin edges to be compared; got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;r_max=</span><span class="si">{</span><span class="n">reference</span><span class="o">.</span><span class="n">r_max</span><span class="si">!r}</span><span class="s2"> over </span><span class="si">{</span><span class="n">reference</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> bins &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;against r_max=</span><span class="si">{</span><span class="n">candidate</span><span class="o">.</span><span class="n">r_max</span><span class="si">!r}</span><span class="s2"> over &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">candidate</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> bins.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">reference</span><span class="o">.</span><span class="n">pair</span> <span class="o">!=</span> <span class="n">candidate</span><span class="o">.</span><span class="n">pair</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Radial distributions must resolve the same species to be compared; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;got pair=</span><span class="si">{</span><span class="n">reference</span><span class="o">.</span><span class="n">pair</span><span class="si">!r}</span><span class="s2"> against pair=</span><span class="si">{</span><span class="n">candidate</span><span class="o">.</span><span class="n">pair</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">reference_total</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+    <span class="n">candidate_total</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">reference_total</span> <span class="o">&lt;=</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="n">candidate_total</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Both radial distributions must hold pairs; got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">reference_total</span><span class="si">!r}</span><span class="s2"> and </span><span class="si">{</span><span class="n">candidate_total</span><span class="si">!r}</span><span class="s2"> counted pairs.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="n">reference</span><span class="o">.</span><span class="n">counts</span> <span class="o">/</span> <span class="n">reference_total</span>
+    <span class="n">second</span> <span class="o">=</span> <span class="n">candidate</span><span class="o">.</span><span class="n">counts</span> <span class="o">/</span> <span class="n">candidate_total</span>
+    <span class="n">mixture</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">first</span> <span class="o">+</span> <span class="n">second</span><span class="p">)</span>
+    <span class="n">divergence</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span>
+        <span class="n">_relative_entropy</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">mixture</span><span class="p">)</span> <span class="o">+</span> <span class="n">_relative_entropy</span><span class="p">(</span><span class="n">second</span><span class="p">,</span> <span class="n">mixture</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">difference</span> <span class="o">=</span> <span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">g_r</span> <span class="o">-</span> <span class="n">candidate</span><span class="o">.</span><span class="n">g_r</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+    <span class="n">width</span> <span class="o">=</span> <span class="n">reference</span><span class="o">.</span><span class="n">edges</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">reference</span><span class="o">.</span><span class="n">edges</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">RDFComparison</span><span class="p">(</span>
+        <span class="n">jensen_shannon</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">divergence</span><span class="p">),</span>
+        <span class="n">l1</span><span class="o">=</span><span class="nb">float</span><span class="p">((</span><span class="n">difference</span> <span class="o">*</span> <span class="n">width</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+        <span class="n">max_deviation</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">difference</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span>
+        <span class="n">num_bins</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">numel</span><span class="p">()),</span>
+        <span class="n">pair</span><span class="o">=</span><span class="n">reference</span><span class="o">.</span><span class="n">pair</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_relative_entropy</span><span class="p">(</span>
+    <span class="n">distribution</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">mixture</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the base-2 Kullback-Leibler divergence, treating empty bins as zero.&quot;&quot;&quot;</span>
+    <span class="n">ratio</span> <span class="o">=</span> <span class="n">distribution</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="n">_EPS</span><span class="p">)</span> <span class="o">/</span> <span class="n">mixture</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="n">_EPS</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">distribution</span> <span class="o">*</span> <span class="n">ratio</span><span class="o">.</span><span class="n">log2</span><span class="p">())</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

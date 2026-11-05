@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Distributed Simulations &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Distributed Simulations &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,11 +55,11 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/distributed';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="ShardTensor: How Per-Atom Fields Flow Across Ranks" href="distributed_shardtensor.html" />
-    <link rel="prev" title="Data Sinks" href="dynamics_sinks.html" />
+    <link rel="prev" title="Generative Models" href="generative.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="current nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -657,8 +665,7 @@ inline rather than exposing a shipped <code class="docutils literal notranslate"
 <section id="runtime-architecture">
 <span id="dd-runtime-architecture"></span><h2>Runtime architecture<a class="headerlink" href="#runtime-architecture" title="Link to this heading">#</a></h2>
 <figure class="align-default" id="id1">
-<div class="graphviz"><object data="../_images/graphviz-186e58f5aed257ff2bb9da7c29395402c0217444.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">digraph distributed_step {
+digraph distributed_step {
     rankdir=TB
     fontname=&quot;Helvetica&quot;
     node [fontname=&quot;Helvetica&quot; fontsize=11 shape=box style=&quot;rounded,filled&quot;]
@@ -673,8 +680,7 @@ inline rather than exposing a shipped <code class="docutils literal notranslate"
     Integ [label=&quot;inner integrator\npost_update + atom migration&quot; fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;]
 
     DP -&gt; Halo -&gt; NL -&gt; Wrap -&gt; Inner -&gt; Cons -&gt; Integ
-}</p></object></div>
-<figcaption>
+}<figcaption>
 <p><span class="caption-text">Per-step flow under DomainParallel.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
@@ -778,7 +784,7 @@ width.</p></li>
 rebuilding every step. Set to 0 for one-shot inference; set to
 <code class="docutils literal notranslate"><span class="pre">0.3</span> <span class="pre">–</span> <span class="pre">1.0</span> <span class="pre">Å</span></code> for MD where atoms drift between rebuilds.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mesh</span></code> — the
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.device_mesh.DeviceMesh" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeviceMesh</span></code></a>. Construct
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.device_mesh.DeviceMesh" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeviceMesh</span></code></a>. Construct
 manually or derive from <code class="docutils literal notranslate"><span class="pre">dist.get_world_size()</span></code>.</p></li>
 </ul>
 <p><code class="docutils literal notranslate"><span class="pre">DomainConfig</span></code> also carries optional fields for advanced runs — <code class="docutils literal notranslate"><span class="pre">compile</span></code>
@@ -898,12 +904,15 @@ these, there is nothing to do — wrap in <code class="docutils literal notransl
 <td><p>Global KE + pressure; replicated cell</p></td>
 <td><p>—</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FIRE</span></code> / <code class="docutils literal notranslate"><span class="pre">FIRE2</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">FIRE</span></code> (deprecated)</p></td>
 <td><p>Global <code class="docutils literal notranslate"><span class="pre">v·f</span></code>, <code class="docutils literal notranslate"><span class="pre">v·v</span></code>, <code class="docutils literal notranslate"><span class="pre">f·f</span></code> dot-products</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">07_fire_nvt_dd.py</span></code></p></td>
 </tr>
 </tbody>
 </table>
+<p><code class="docutils literal notranslate"><span class="pre">FIRE</span></code> is deprecated, and it is the one deprecated compatibility exception here:
+<code class="docutils literal notranslate"><span class="pre">FIRE2</span></code> is not supported under <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code> yet, so use <code class="docutils literal notranslate"><span class="pre">FIRE</span></code> for
+domain-decomposed relaxations until it is.</p>
 <p>You can also run <strong>two-dimensional parallelism</strong> — a pipeline of stages,
 each stage itself domain-decomposed — by feeding <code class="docutils literal notranslate"><span class="pre">DomainParallel</span></code> stages
 to a <code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> over a <code class="docutils literal notranslate"><span class="pre">(pipeline,</span> <span class="pre">domain)</span></code> mesh;
@@ -1018,12 +1027,12 @@ end-to-end version of the snippet above.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="dynamics_sinks.html"
+       href="generative.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Data Sinks</p>
+        <p class="prev-next-title">Generative Models</p>
       </div>
     </a>
     <a class="right-next"

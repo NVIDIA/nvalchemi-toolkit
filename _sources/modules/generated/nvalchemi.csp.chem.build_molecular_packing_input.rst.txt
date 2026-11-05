@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.chem.build\_molecular\_packing\_input
+===================================================
+
+.. currentmodule:: nvalchemi.csp.chem
+
+.. autofunction:: build_molecular_packing_input

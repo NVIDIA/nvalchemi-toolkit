@@ -1,0 +1,1302 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.peft.lora_wrappers &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/peft/lora_wrappers';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.peft.lora_wrappers</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;LoRA wrappers for interatomic potential models.</span>
+
+<span class="sd">This module extends the underlying LoRA registry with wrappers for e3nn layers</span>
+<span class="sd">used by E(3) equivariant interatomic potentials.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.func</span><span class="w"> </span><span class="kn">import</span> <span class="n">functional_call</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">_peft</span>
+
+<span class="n">LoRALayer</span> <span class="o">=</span> <span class="n">_peft</span><span class="o">.</span><span class="n">LoRALayer</span>
+<span class="n">LoRALinear</span> <span class="o">=</span> <span class="n">_peft</span><span class="o">.</span><span class="n">LoRALinear</span>
+<span class="n">_TRANSFORMER_ENGINE_LORA_LINEAR</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+    <span class="n">_peft</span><span class="o">.</span><span class="n">_physicsnemo_peft</span><span class="o">.</span><span class="n">lora</span><span class="p">,</span> <span class="s2">&quot;LoRA_te_Linear&quot;</span><span class="p">,</span> <span class="kc">None</span>
+<span class="p">)</span>
+<span class="k">if</span> <span class="n">_TRANSFORMER_ENGINE_LORA_LINEAR</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">TransformerEngineLoRALinear</span> <span class="o">=</span> <span class="n">_TRANSFORMER_ENGINE_LORA_LINEAR</span>
+
+
+<span class="n">LoRAWrappableLayer</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">type</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]</span>
+<span class="n">LoRAWrapper</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">type</span><span class="p">[</span><span class="n">_peft</span><span class="o">.</span><span class="n">LoRALayer</span><span class="p">]</span>
+<span class="n">LoRAWrapperRegistrations</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">LoRAWrappableLayer</span><span class="p">,</span> <span class="n">LoRAWrapper</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;CuEquivarianceLoRALinear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;E3NNFullyConnectedLoRALayer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;EquivariantLoRALinear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRALayer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRALinear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRAWrapper&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRAWrapperRegistrations&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LoRAWrappableLayer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;available_lora_wrappers&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+<span class="k">if</span> <span class="n">_TRANSFORMER_ENGINE_LORA_LINEAR</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">__all__</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;TransformerEngineLoRALinear&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Lazily expose optional wrapper classes.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;TransformerEngineLoRALinear&quot;</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;TransformerEngineLoRALinear requires transformer_engine to be installed.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;module </span><span class="si">{</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2"> has no attribute </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_import_e3nn</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span> <span class="nb">type</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span> <span class="nb">object</span><span class="p">,</span> <span class="nb">type</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Import e3nn objects needed by the equivariant LoRA wrappers.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">serialization</span><span class="p">,</span> <span class="s2">&quot;add_safe_globals&quot;</span><span class="p">):</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">serialization</span><span class="o">.</span><span class="n">add_safe_globals</span><span class="p">([</span><span class="nb">slice</span><span class="p">])</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">e3nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">o3</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">e3nn.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dropout</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">e3nn.nn._fc</span><span class="w"> </span><span class="kn">import</span> <span class="n">_Layer</span>
+    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;Equivariant LoRA requires e3nn. Install the e3nn dependency.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">return</span> <span class="n">o3</span><span class="o">.</span><span class="n">Linear</span><span class="p">,</span> <span class="n">_Layer</span><span class="p">,</span> <span class="n">o3</span><span class="p">,</span> <span class="n">Dropout</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_e3nn_layer_cls</span><span class="p">(</span><span class="n">kind</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;linear&quot;</span><span class="p">,</span> <span class="s2">&quot;fully_connected&quot;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return an e3nn layer class by kind.&quot;&quot;&quot;</span>
+    <span class="n">linear_cls</span><span class="p">,</span> <span class="n">fc_layer_cls</span><span class="p">,</span> <span class="n">_o3</span><span class="p">,</span> <span class="n">_dropout_cls</span> <span class="o">=</span> <span class="n">_import_e3nn</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;linear&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">linear_cls</span>
+    <span class="k">elif</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;fully_connected&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">fc_layer_cls</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid e3nn layer kind: </span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_cueq_linear_cls</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the cuEquivariance linear layer class.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">cuequivariance_torch.operations.linear</span><span class="w"> </span><span class="kn">import</span> <span class="n">Linear</span>
+    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;cuEquivariance LoRA requires cuequivariance-torch. Install the &quot;</span>
+            <span class="s2">&quot;CUDA-aligned cuEq dependencies.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">return</span> <span class="n">Linear</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">EquivariantLoRALinear</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">LoRALayer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;LoRA layer for equivariant linear layers ``e3nn.o3.Linear``.</span>
+
+<span class="sd">    The adapter is itself equivariant: ``base(x) + scale * B(A(x))`` where</span>
+<span class="sd">    ``A`` and ``B`` are ``e3nn.o3.Linear`` maps through irreps common to the</span>
+<span class="sd">    base layer&#39;s input and output.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    base_layer : nn.Module</span>
+<span class="sd">        An ``e3nn.o3.Linear`` instance to wrap.</span>
+<span class="sd">    rank : int</span>
+<span class="sd">        Adapter multiplicity per irrep.</span>
+<span class="sd">    alpha : float</span>
+<span class="sd">        LoRA scaling parameter.</span>
+<span class="sd">    dropout : float, optional</span>
+<span class="sd">        Adapter dropout probability. Defaults to ``0.0``.</span>
+<span class="sd">    init : _peft.LoRAInit, optional</span>
+<span class="sd">        Initialization for the input-side adapter weights (``lora_A``).</span>
+<span class="sd">        ``&quot;default&quot;`` uses a small Gaussian (``normal_(std=1e-3)``);</span>
+<span class="sd">        pass a callable ``(tensor) -&gt; None`` for a custom in-place scheme.</span>
+<span class="sd">        ``lora_B`` always starts at zero.</span>
+<span class="sd">    **kwargs : Any</span>
+<span class="sd">        Additional keyword arguments.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mergeable : bool</span>
+<span class="sd">        Required by ``LoRALayer``; whether this adapter can be folded into the</span>
+<span class="sd">        wrapped base layer.</span>
+<span class="sd">    enabled : bool</span>
+<span class="sd">        Required by ``LoRALayer``; whether the LoRA residual is active during</span>
+<span class="sd">        forward passes.</span>
+
+<span class="sd">    Properties</span>
+<span class="sd">    ----------</span>
+<span class="sd">    lora_A : nn.Parameter</span>
+<span class="sd">        Required by ``LoRALayer``; weight parameter of the input-side equivariant adapter layer.</span>
+<span class="sd">    lora_B : nn.Parameter</span>
+<span class="sd">        Required by ``LoRALayer``; weight parameter of the output-side equivariant adapter layer.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">mergeable</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_layer</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">dropout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">init</span><span class="p">:</span> <span class="n">_peft</span><span class="o">.</span><span class="n">LoRAInit</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">linear_cls</span><span class="p">,</span> <span class="n">_fc_layer_cls</span><span class="p">,</span> <span class="n">_o3</span><span class="p">,</span> <span class="n">dropout_cls</span> <span class="o">=</span> <span class="n">_import_e3nn</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="n">linear_cls</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;EquivariantLoRALinear can only wrap e3nn.o3.Linear layers.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span> <span class="o">=</span> <span class="n">base_layer</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+            <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># Initialize LoRA adapter layers.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">irreps_in</span> <span class="o">=</span> <span class="n">base_layer</span><span class="o">.</span><span class="n">irreps_in</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">irreps_out</span> <span class="o">=</span> <span class="n">base_layer</span><span class="o">.</span><span class="n">irreps_out</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">adapter_irreps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_adapter_irreps</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">irreps_in</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">irreps_out</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span> <span class="o">=</span> <span class="n">linear_cls</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">irreps_in</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">adapter_irreps</span><span class="p">,</span>
+            <span class="n">internal_weights</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">shared_weights</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">biases</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span> <span class="o">=</span> <span class="n">linear_cls</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">adapter_irreps</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">irreps_out</span><span class="p">,</span>
+            <span class="n">internal_weights</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">shared_weights</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">biases</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lora_dropout</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">dropout_cls</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">irreps_in</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">dropout</span><span class="p">)</span> <span class="k">if</span> <span class="n">dropout</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="k">else</span> <span class="n">nn</span><span class="o">.</span><span class="n">Identity</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="c1"># Initialize LoRA weights via ``init`` while keeping the adapter</span>
+        <span class="c1"># residual at zero (``lora_B`` starts at zero).</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">init</span><span class="p">):</span>
+                <span class="n">init</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">init</span> <span class="o">==</span> <span class="s2">&quot;default&quot;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="n">mean</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;unknown init strategy </span><span class="si">{</span><span class="n">init</span><span class="si">!r}</span><span class="s2">; use &#39;default&#39; or a callable.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+
+        <span class="c1"># Pre-compute instruction maps for efficient merged weight computation.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_build_instruction_maps</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lora_A</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the input-side LoRA parameter.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="o">.</span><span class="n">weight</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lora_B</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the output-side LoRA parameter.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="o">.</span><span class="n">weight</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_compatible</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">base_layer</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether ``base_layer`` has shared input/output irreps.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">_build_adapter_irreps</span><span class="p">(</span>
+                <span class="n">base_layer</span><span class="o">.</span><span class="n">irreps_in</span><span class="p">,</span>
+                <span class="n">base_layer</span><span class="o">.</span><span class="n">irreps_out</span><span class="p">,</span>
+                <span class="n">rank</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_adapter_irreps</span><span class="p">(</span>
+        <span class="n">irreps_in</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">irreps_out</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build equivariant adapter irreps from input/output overlap.</span>
+
+<span class="sd">        Following MACE&#39;s convention, each shared irrep type receives ``rank``</span>
+<span class="sd">        copies.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_linear_cls</span><span class="p">,</span> <span class="n">_fc_layer_cls</span><span class="p">,</span> <span class="n">o3</span><span class="p">,</span> <span class="n">_dropout_cls</span> <span class="o">=</span> <span class="n">_import_e3nn</span><span class="p">()</span>
+        <span class="n">irreps_in</span> <span class="o">=</span> <span class="n">o3</span><span class="o">.</span><span class="n">Irreps</span><span class="p">(</span><span class="n">irreps_in</span><span class="p">)</span><span class="o">.</span><span class="n">simplify</span><span class="p">()</span>
+        <span class="n">irreps_out</span> <span class="o">=</span> <span class="n">o3</span><span class="o">.</span><span class="n">Irreps</span><span class="p">(</span><span class="n">irreps_out</span><span class="p">)</span><span class="o">.</span><span class="n">simplify</span><span class="p">()</span>
+        <span class="n">in_irrep_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">ir</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">ir</span> <span class="ow">in</span> <span class="n">irreps_in</span><span class="p">}</span>
+        <span class="n">out_irrep_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">ir</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">ir</span> <span class="ow">in</span> <span class="n">irreps_out</span><span class="p">}</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">in_irrep_types</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">irreps_in</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;cannot build equivariant LoRA adapter: input irreps are not unique.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">out_irrep_types</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">irreps_out</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;cannot build equivariant LoRA adapter: output irreps are not unique.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">shared_irrep_types</span> <span class="o">=</span> <span class="n">in_irrep_types</span> <span class="o">&amp;</span> <span class="n">out_irrep_types</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">shared_irrep_types</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;cannot build equivariant LoRA adapter: input and output irreps &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;share no common irreps (</span><span class="si">{</span><span class="n">irreps_in</span><span class="si">!s}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">irreps_out</span><span class="si">!s}</span><span class="s2">).&quot;</span>
+            <span class="p">)</span>
+        <span class="n">shared_irrep_types</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">shared_irrep_types</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">ir</span><span class="p">:</span> <span class="p">(</span><span class="n">ir</span><span class="o">.</span><span class="n">l</span><span class="p">,</span> <span class="n">ir</span><span class="o">.</span><span class="n">p</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">o3</span><span class="o">.</span><span class="n">Irreps</span><span class="p">([(</span><span class="n">rank</span><span class="p">,</span> <span class="n">ir</span><span class="p">)</span> <span class="k">for</span> <span class="n">ir</span> <span class="ow">in</span> <span class="n">shared_irrep_types</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_instruction_maps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build maps for composing A/B adapter paths into base paths.&quot;&quot;&quot;</span>
+        <span class="c1"># Maps input irrep index to ``(instruction_index, adapter_irrep_index,</span>
+        <span class="c1"># path_weight)`` for the input-side adapter layer.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_A_path_by_input</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">instr</span><span class="o">.</span><span class="n">i_in</span><span class="p">:</span> <span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">instr</span><span class="o">.</span><span class="n">i_out</span><span class="p">,</span> <span class="n">instr</span><span class="o">.</span><span class="n">path_weight</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">instr</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="o">.</span><span class="n">instructions</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="c1"># Maps ``(adapter_irrep_index, output_irrep_index)`` to</span>
+        <span class="c1"># ``(instruction_index, path_weight)`` for the output-side adapter layer.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_B_path_by_adapter_output</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="p">(</span><span class="n">instr</span><span class="o">.</span><span class="n">i_in</span><span class="p">,</span> <span class="n">instr</span><span class="o">.</span><span class="n">i_out</span><span class="p">):</span> <span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">instr</span><span class="o">.</span><span class="n">path_weight</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">instr</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="o">.</span><span class="n">instructions</span><span class="p">)</span>
+        <span class="p">}</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_weight_blocks_by_instruction</span><span class="p">(</span><span class="n">linear</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reshape flat ``linear.weight`` into per-instruction blocks.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        linear : nn.Module</span>
+<span class="sd">            An ``e3nn.o3.Linear`` instance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[int, torch.Tensor]</span>
+<span class="sd">            Instruction index to weight matrix with shape ``instr.path_shape``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">blocks</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">instr</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">linear</span><span class="o">.</span><span class="n">instructions</span><span class="p">):</span>
+            <span class="c1"># e3nn stores all instruction weights in one flat vector. For</span>
+            <span class="c1"># o3.Linear, each instruction weight mixes multiplicity channels</span>
+            <span class="c1"># for one matching irrep path.</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="n">instr</span><span class="o">.</span><span class="n">path_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">instr</span><span class="o">.</span><span class="n">path_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">blocks</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">linear</span><span class="o">.</span><span class="n">weight</span><span class="p">[</span><span class="n">offset</span> <span class="p">:</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">size</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+                <span class="n">instr</span><span class="o">.</span><span class="n">path_shape</span>
+            <span class="p">)</span>
+            <span class="n">offset</span> <span class="o">+=</span> <span class="n">size</span>
+        <span class="k">return</span> <span class="n">blocks</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_merged_weight</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return base plus LoRA delta in flat ``o3.Linear.weight`` layout.&quot;&quot;&quot;</span>
+        <span class="n">base_blocks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_blocks_by_instruction</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="p">)</span>
+        <span class="n">lora_A_blocks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_blocks_by_instruction</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="p">)</span>
+        <span class="n">lora_B_blocks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_blocks_by_instruction</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="p">)</span>
+
+        <span class="n">merged_blocks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">base_idx</span><span class="p">,</span> <span class="n">base_instr</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">instructions</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">base_instr</span><span class="o">.</span><span class="n">i_in</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A_path_by_input</span><span class="p">:</span>
+                <span class="n">merged_blocks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">base_blocks</span><span class="p">[</span><span class="n">base_idx</span><span class="p">])</span>
+                <span class="k">continue</span>
+
+            <span class="n">A_idx</span><span class="p">,</span> <span class="n">i_mid</span><span class="p">,</span> <span class="n">path_weight_A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A_path_by_input</span><span class="p">[</span><span class="n">base_instr</span><span class="o">.</span><span class="n">i_in</span><span class="p">]</span>
+            <span class="n">B_key</span> <span class="o">=</span> <span class="p">(</span><span class="n">i_mid</span><span class="p">,</span> <span class="n">base_instr</span><span class="o">.</span><span class="n">i_out</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">B_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_B_path_by_adapter_output</span><span class="p">:</span>
+                <span class="n">merged_blocks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">base_blocks</span><span class="p">[</span><span class="n">base_idx</span><span class="p">])</span>
+                <span class="k">continue</span>
+
+            <span class="n">B_idx</span><span class="p">,</span> <span class="n">path_weight_B</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_B_path_by_adapter_output</span><span class="p">[</span><span class="n">B_key</span><span class="p">]</span>
+            <span class="n">ratio</span> <span class="o">=</span> <span class="n">path_weight_A</span> <span class="o">*</span> <span class="n">path_weight_B</span> <span class="o">/</span> <span class="n">base_instr</span><span class="o">.</span><span class="n">path_weight</span>
+            <span class="n">delta</span> <span class="o">=</span> <span class="n">lora_A_blocks</span><span class="p">[</span><span class="n">A_idx</span><span class="p">]</span> <span class="o">@</span> <span class="n">lora_B_blocks</span><span class="p">[</span><span class="n">B_idx</span><span class="p">]</span>
+            <span class="n">merged_blocks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">base_blocks</span><span class="p">[</span><span class="n">base_idx</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">*</span> <span class="n">ratio</span> <span class="o">*</span> <span class="n">delta</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">block</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span> <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">merged_blocks</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the frozen base layer plus the equivariant LoRA residual.&quot;&quot;&quot;</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">out</span>
+                <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_dropout</span><span class="p">(</span><span class="n">x</span><span class="p">)))</span>
+                <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">merge_into_base</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fold the LoRA delta into the frozen base layer.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_merged_weight</span><span class="p">())</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CuEquivarianceLoRALinear</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">LoRALayer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;LoRA layer for cuEquivariance linear layers.</span>
+
+<span class="sd">    Models converted to cuEquivariance typically replace ``e3nn.o3.Linear``</span>
+<span class="sd">    modules with ``cuequivariance_torch.operations.linear.Linear``. This</span>
+<span class="sd">    wrapper keeps the same equivariant LoRA idea as</span>
+<span class="sd">    :class:`EquivariantLoRALinear`, but builds the adapter path from cuEq</span>
+<span class="sd">    linear layers so the converted module tree stays on the cuEq backend.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    cuEq linear modules do not expose e3nn&#39;s instruction table. This wrapper</span>
+<span class="sd">    reconstructs the equivalent per-irrep packed-weight block map from the cuEq</span>
+<span class="sd">    irreps and segmented polynomial path coefficients when merging adapters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">mergeable</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_layer</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">dropout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">init</span><span class="p">:</span> <span class="n">_peft</span><span class="o">.</span><span class="n">LoRAInit</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">linear_cls</span> <span class="o">=</span> <span class="n">_cueq_linear_cls</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="n">linear_cls</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;CuEquivarianceLoRALinear can only wrap &quot;</span>
+                <span class="s2">&quot;cuequivariance_torch.operations.linear.Linear layers.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">dropout</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;CuEquivarianceLoRALinear does not support nonzero dropout.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="s2">&quot;internal_weights&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;CuEquivarianceLoRALinear requires cuEq Linear layers with &quot;</span>
+                <span class="s2">&quot;internal weights.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="s2">&quot;shared_weights&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;CuEquivarianceLoRALinear requires shared-weight cuEq Linear layers.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="s2">&quot;weight_classes&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;CuEquivarianceLoRALinear does not support cuEq Linear layers &quot;</span>
+                <span class="s2">&quot;with multiple weight classes.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span> <span class="o">=</span> <span class="n">base_layer</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+            <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">irreps_in</span> <span class="o">=</span> <span class="n">base_layer</span><span class="o">.</span><span class="n">irreps_in</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">irreps_out</span> <span class="o">=</span> <span class="n">base_layer</span><span class="o">.</span><span class="n">irreps_out</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">adapter_irreps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_adapter_irreps</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">irreps_in</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">irreps_out</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span>
+        <span class="p">)</span>
+
+        <span class="n">ref_weight</span> <span class="o">=</span> <span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span>
+        <span class="n">layout_in</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">base_layer</span><span class="o">.</span><span class="n">transpose_in</span><span class="p">,</span> <span class="s2">&quot;source&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">layout_out</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">base_layer</span><span class="o">.</span><span class="n">transpose_out</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">adapter_layout</span> <span class="o">=</span> <span class="n">layout_out</span> <span class="ow">or</span> <span class="n">layout_in</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span> <span class="o">=</span> <span class="n">linear_cls</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">irreps_in</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">adapter_irreps</span><span class="p">,</span>
+            <span class="n">internal_weights</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">shared_weights</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">layout_in</span><span class="o">=</span><span class="n">layout_in</span><span class="p">,</span>
+            <span class="n">layout_out</span><span class="o">=</span><span class="n">adapter_layout</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">ref_weight</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">ref_weight</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span> <span class="o">=</span> <span class="n">linear_cls</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">adapter_irreps</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">irreps_out</span><span class="p">,</span>
+            <span class="n">internal_weights</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">shared_weights</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">layout_in</span><span class="o">=</span><span class="n">adapter_layout</span><span class="p">,</span>
+            <span class="n">layout_out</span><span class="o">=</span><span class="n">layout_out</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">ref_weight</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">ref_weight</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lora_dropout</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Identity</span><span class="p">()</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">init</span><span class="p">):</span>
+                <span class="n">init</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">init</span> <span class="o">==</span> <span class="s2">&quot;default&quot;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="n">mean</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;unknown init strategy </span><span class="si">{</span><span class="n">init</span><span class="si">!r}</span><span class="s2">; use &#39;default&#39; or a callable.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lora_A</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the input-side cuEq LoRA parameter.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="o">.</span><span class="n">weight</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lora_B</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the output-side cuEq LoRA parameter.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="o">.</span><span class="n">weight</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_compatible</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">base_layer</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether ``base_layer`` can use a cuEq LoRA residual.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">_build_adapter_irreps</span><span class="p">(</span>
+                <span class="n">base_layer</span><span class="o">.</span><span class="n">irreps_in</span><span class="p">,</span>
+                <span class="n">base_layer</span><span class="o">.</span><span class="n">irreps_out</span><span class="p">,</span>
+                <span class="n">rank</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">bool</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="s2">&quot;internal_weights&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+            <span class="ow">and</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="s2">&quot;shared_weights&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+            <span class="ow">and</span> <span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="s2">&quot;weight_classes&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_adapter_irreps</span><span class="p">(</span>
+        <span class="n">irreps_in</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">irreps_out</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build cuEq adapter irreps from shared input/output irreps.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">cuequivariance</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cue</span>
+        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;cuEquivariance LoRA requires cuequivariance.&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+        <span class="n">irreps_in</span> <span class="o">=</span> <span class="n">cue</span><span class="o">.</span><span class="n">Irreps</span><span class="p">(</span><span class="n">irreps_in</span><span class="p">)</span>
+        <span class="n">irreps_out</span> <span class="o">=</span> <span class="n">cue</span><span class="o">.</span><span class="n">Irreps</span><span class="p">(</span><span class="n">irreps_out</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">irreps_in</span><span class="o">.</span><span class="n">irrep_class</span> <span class="o">!=</span> <span class="n">irreps_out</span><span class="o">.</span><span class="n">irrep_class</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;cannot build cuEq LoRA adapter for different irrep classes &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">irreps_in</span><span class="o">.</span><span class="n">irrep_class</span><span class="si">}</span><span class="s2"> vs </span><span class="si">{</span><span class="n">irreps_out</span><span class="o">.</span><span class="n">irrep_class</span><span class="si">}</span><span class="s2">).&quot;</span>
+            <span class="p">)</span>
+        <span class="n">in_irrep_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">mul_ir</span><span class="o">.</span><span class="n">ir</span> <span class="k">for</span> <span class="n">mul_ir</span> <span class="ow">in</span> <span class="n">irreps_in</span><span class="p">}</span>
+        <span class="n">out_irrep_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">mul_ir</span><span class="o">.</span><span class="n">ir</span> <span class="k">for</span> <span class="n">mul_ir</span> <span class="ow">in</span> <span class="n">irreps_out</span><span class="p">}</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">in_irrep_types</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">irreps_in</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;cannot build cuEq LoRA adapter: input irreps are not unique.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">out_irrep_types</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">irreps_out</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;cannot build cuEq LoRA adapter: output irreps are not unique.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">shared_irrep_types</span> <span class="o">=</span> <span class="n">in_irrep_types</span> <span class="o">&amp;</span> <span class="n">out_irrep_types</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">shared_irrep_types</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;cannot build cuEq LoRA adapter: input and output irreps share &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;no common irreps (</span><span class="si">{</span><span class="n">irreps_in</span><span class="si">!s}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">irreps_out</span><span class="si">!s}</span><span class="s2">).&quot;</span>
+            <span class="p">)</span>
+        <span class="n">shared_irrep_types</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="n">shared_irrep_types</span><span class="p">,</span>
+            <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">ir</span><span class="p">:</span> <span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">ir</span><span class="p">,</span> <span class="s2">&quot;l&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">ir</span><span class="p">,</span> <span class="s2">&quot;p&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">ir</span><span class="p">)),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">cue</span><span class="o">.</span><span class="n">Irreps</span><span class="p">(</span>
+            <span class="n">irreps_in</span><span class="o">.</span><span class="n">irrep_class</span><span class="p">,</span>
+            <span class="p">[(</span><span class="n">rank</span><span class="p">,</span> <span class="n">ir</span><span class="p">)</span> <span class="k">for</span> <span class="n">ir</span> <span class="ow">in</span> <span class="n">shared_irrep_types</span><span class="p">],</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the frozen cuEq base layer plus the equivariant LoRA residual.&quot;&quot;&quot;</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="p">(</span><span class="n">x</span><span class="p">))</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_linear_path_coefficient</span><span class="p">(</span><span class="n">linear</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">path_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the cuEq segmented-polynomial coefficient for a linear path.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">graph</span> <span class="o">=</span> <span class="n">linear</span><span class="o">.</span><span class="n">f</span><span class="o">.</span><span class="n">m</span><span class="o">.</span><span class="n">graphs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">graph</span>
+            <span class="n">coefficient</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;c</span><span class="si">{</span><span class="n">path_index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">IndexError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot inspect cuEq Linear path coefficients for LoRA merge.&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">coefficient</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_weight_blocks_by_irrep</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">linear</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">object</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return cuEq linear weight blocks keyed by irrep.</span>
+
+<span class="sd">        The cuEq descriptor packs one ``(mul_in, mul_out)`` weight block for</span>
+<span class="sd">        each matching input/output irrep pair in descriptor path order.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">blocks</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">object</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">path_index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">weight</span> <span class="o">=</span> <span class="n">linear</span><span class="o">.</span><span class="n">weight</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">weight</span><span class="p">,</span> <span class="s2">&quot;ndim&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="nb">int</span><span class="p">(</span><span class="n">weight</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;CuEquivarianceLoRALinear merge requires a single shared cuEq &quot;</span>
+                <span class="s2">&quot;weight class.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">mul_in</span><span class="p">,</span> <span class="n">ir_in</span> <span class="ow">in</span> <span class="n">linear</span><span class="o">.</span><span class="n">irreps_in</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">mul_out</span><span class="p">,</span> <span class="n">ir_out</span> <span class="ow">in</span> <span class="n">linear</span><span class="o">.</span><span class="n">irreps_out</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">ir_in</span> <span class="o">!=</span> <span class="n">ir_out</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">ir_in</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="s2">&quot;CuEquivarianceLoRALinear merge requires unique input &quot;</span>
+                        <span class="s2">&quot;and output irreps.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mul_in</span><span class="p">)</span> <span class="o">*</span> <span class="nb">int</span><span class="p">(</span><span class="n">mul_out</span><span class="p">)</span>
+                <span class="n">blocks</span><span class="p">[</span><span class="n">ir_in</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">weight</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">offset</span> <span class="p">:</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">size</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+                        <span class="nb">int</span><span class="p">(</span><span class="n">mul_in</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">mul_out</span><span class="p">)</span>
+                    <span class="p">),</span>
+                    <span class="n">offset</span><span class="p">,</span>
+                    <span class="n">size</span><span class="p">,</span>
+                    <span class="bp">cls</span><span class="o">.</span><span class="n">_linear_path_coefficient</span><span class="p">(</span><span class="n">linear</span><span class="p">,</span> <span class="n">path_index</span><span class="p">),</span>
+                <span class="p">)</span>
+                <span class="n">offset</span> <span class="o">+=</span> <span class="n">size</span>
+                <span class="n">path_index</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">offset</span> <span class="o">!=</span> <span class="nb">int</span><span class="p">(</span><span class="n">weight</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;cuEq Linear packed weight layout did not match the expected &quot;</span>
+                <span class="s2">&quot;per-irrep block sizes.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">blocks</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_merged_weight</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return base plus LoRA delta in cuEq flat packed-weight layout.&quot;&quot;&quot;</span>
+        <span class="n">merged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="n">base_blocks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_blocks_by_irrep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="p">)</span>
+        <span class="n">lora_A_blocks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_blocks_by_irrep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_A_layer</span><span class="p">)</span>
+        <span class="n">lora_B_blocks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_blocks_by_irrep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_B_layer</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">ir</span><span class="p">,</span> <span class="p">(</span><span class="n">base_block</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">base_coeff</span><span class="p">)</span> <span class="ow">in</span> <span class="n">base_blocks</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">ir</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">lora_A_blocks</span> <span class="ow">or</span> <span class="n">ir</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">lora_B_blocks</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">A_block</span><span class="p">,</span> <span class="n">_A_offset</span><span class="p">,</span> <span class="n">_A_size</span><span class="p">,</span> <span class="n">A_coeff</span> <span class="o">=</span> <span class="n">lora_A_blocks</span><span class="p">[</span><span class="n">ir</span><span class="p">]</span>
+            <span class="n">B_block</span><span class="p">,</span> <span class="n">_B_offset</span><span class="p">,</span> <span class="n">_B_size</span><span class="p">,</span> <span class="n">B_coeff</span> <span class="o">=</span> <span class="n">lora_B_blocks</span><span class="p">[</span><span class="n">ir</span><span class="p">]</span>
+            <span class="n">delta</span> <span class="o">=</span> <span class="p">(</span><span class="n">A_block</span> <span class="o">@</span> <span class="n">B_block</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">*</span> <span class="n">A_coeff</span> <span class="o">*</span> <span class="n">B_coeff</span> <span class="o">/</span> <span class="n">base_coeff</span>
+            <span class="p">)</span>
+            <span class="n">merged</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">offset</span> <span class="p">:</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">size</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">((</span><span class="n">base_block</span> <span class="o">+</span> <span class="n">delta</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">merged</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">merge_into_base</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fold the LoRA delta into the frozen cuEq base layer.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_merged_weight</span><span class="p">())</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">E3NNFullyConnectedLoRALayer</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">LoRALayer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;LoRA layer for fully connected scalar MLP layers ``e3nn.nn._fc._Layer``.</span>
+
+<span class="sd">    These internal layers store weights in ``(in_features, out_features)``</span>
+<span class="sd">    layout, so the LoRA delta is ``A @ B`` rather than the ``torch.nn.Linear``</span>
+<span class="sd">    ``B @ A`` convention.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    base_layer : nn.Module</span>
+<span class="sd">        An ``e3nn.nn._fc._Layer`` instance to wrap.</span>
+<span class="sd">    rank : int</span>
+<span class="sd">        LoRA rank.</span>
+<span class="sd">    alpha : float</span>
+<span class="sd">        LoRA scaling numerator.</span>
+<span class="sd">    dropout : float, optional</span>
+<span class="sd">        Adapter dropout probability. Defaults to ``0.0``.</span>
+<span class="sd">    init : _peft.LoRAInit, optional</span>
+<span class="sd">        Initialization for the input-side adapter weights (``lora_A``).</span>
+<span class="sd">        ``&quot;default&quot;`` uses ``kaiming_uniform_(a=√5)``; pass a callable</span>
+<span class="sd">        ``(tensor) -&gt; None`` for a custom in-place scheme. ``lora_B`` is</span>
+<span class="sd">        always zero so the adapter residual starts at identity.</span>
+<span class="sd">    **kwargs : Any</span>
+<span class="sd">        Additional keyword arguments.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mergeable : bool</span>
+<span class="sd">        Required by ``LoRALayer``; whether this adapter supports merging into the</span>
+<span class="sd">        wrapped base layer.</span>
+<span class="sd">    enabled : bool</span>
+<span class="sd">        Required by ``LoRALayer``; whether the LoRA residual is active during</span>
+<span class="sd">        forward passes.</span>
+<span class="sd">    lora_A : nn.Parameter</span>
+<span class="sd">        Required by ``LoRALayer``; Input-side low-rank factor with shape ``(in_features, rank)``.</span>
+<span class="sd">    lora_B : nn.Parameter</span>
+<span class="sd">        Required by ``LoRALayer``; Output-side low-rank factor with shape ``(rank, out_features)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">mergeable</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_layer</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">dropout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">init</span><span class="p">:</span> <span class="n">_peft</span><span class="o">.</span><span class="n">LoRAInit</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">_linear_cls</span><span class="p">,</span> <span class="n">fc_layer_cls</span><span class="p">,</span> <span class="n">_o3</span><span class="p">,</span> <span class="n">_dropout_cls</span> <span class="o">=</span> <span class="n">_import_e3nn</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="n">fc_layer_cls</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;E3NNFullyConnectedLoRALayer can only wrap e3nn.nn._fc._Layer.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="s2">&quot;weight&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;e3nn fully connected layer has no weight parameter.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dropout</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;E3NNFullyConnectedLoRALayer does not support nonzero dropout &quot;</span>
+                <span class="s2">&quot;because e3nn fully connected LoRA must be applied in weight &quot;</span>
+                <span class="s2">&quot;space to match merge_into_base.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span> <span class="o">=</span> <span class="n">base_layer</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+            <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="n">weight</span> <span class="o">=</span> <span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span>
+        <span class="n">in_features</span><span class="p">,</span> <span class="n">out_features</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">weight</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">weight</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_make_lora_params</span><span class="p">(</span>
+            <span class="n">in_features</span><span class="p">,</span>
+            <span class="n">out_features</span><span class="p">,</span>
+            <span class="n">weight</span><span class="p">,</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">rank</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">alpha</span><span class="p">),</span>
+            <span class="n">dropout</span><span class="p">,</span>
+            <span class="n">init</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_compatible</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">base_layer</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether ``base_layer`` exposes a matrix weight.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">_linear_cls</span><span class="p">,</span> <span class="n">fc_layer_cls</span><span class="p">,</span> <span class="n">_o3</span><span class="p">,</span> <span class="n">_dropout_cls</span> <span class="o">=</span> <span class="n">_import_e3nn</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="n">fc_layer_cls</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">base_layer</span><span class="p">,</span> <span class="s2">&quot;weight&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">&quot;ndim&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_merged_weight</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the base weight plus the low-rank adapter delta.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_A</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">lora_B</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the frozen base layer plus the scalar LoRA residual.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+        <span class="c1"># e3nn _Layer normalizes ``weight`` inside forward. Applying the LoRA</span>
+        <span class="c1"># delta as an output residual would skip that normalization and would</span>
+        <span class="c1"># not match ``merge_into_base``.</span>
+        <span class="c1"># ``functional_call`` substitutes the effective weight for this call</span>
+        <span class="c1"># without mutating the frozen base layer parameter.</span>
+        <span class="k">return</span> <span class="n">functional_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_merged_weight</span><span class="p">()},</span> <span class="p">(</span><span class="n">x</span><span class="p">,))</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">merge_into_base</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fold the LoRA delta into the frozen base layer.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_layer</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">add_</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">lora_A</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">lora_B</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span><span class="p">)</span>
+
+
+<span class="n">_BUILTIN_LORA_WRAPPER_FACTORIES</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">(</span>
+        <span class="n">_cueq_linear_cls</span><span class="p">,</span>
+        <span class="n">CuEquivarianceLoRALinear</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="p">(</span>
+        <span class="n">partial</span><span class="p">(</span><span class="n">_e3nn_layer_cls</span><span class="p">,</span> <span class="s2">&quot;linear&quot;</span><span class="p">),</span>
+        <span class="n">EquivariantLoRALinear</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="p">(</span>
+        <span class="n">partial</span><span class="p">(</span><span class="n">_e3nn_layer_cls</span><span class="p">,</span> <span class="s2">&quot;fully_connected&quot;</span><span class="p">),</span>
+        <span class="n">E3NNFullyConnectedLoRALayer</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_register_lora_wrappers</span><span class="p">(</span>
+    <span class="n">registrations</span><span class="p">:</span> <span class="n">LoRAWrapperRegistrations</span> <span class="o">=</span> <span class="p">(),</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">temporary</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Register available built-in wrappers followed by custom wrappers.&quot;&quot;&quot;</span>
+    <span class="n">resolved</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">LoRAWrappableLayer</span><span class="p">,</span> <span class="n">LoRAWrapper</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">layer_cls_factory</span><span class="p">,</span> <span class="n">wrapper_cls</span> <span class="ow">in</span> <span class="n">_BUILTIN_LORA_WRAPPER_FACTORIES</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">layer_cls</span> <span class="o">=</span> <span class="n">layer_cls_factory</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Skipping built-in LoRA wrapper </span><span class="si">{</span><span class="n">wrapper_cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">resolved</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">layer_cls</span><span class="p">,</span> <span class="n">wrapper_cls</span><span class="p">))</span>
+
+    <span class="k">for</span> <span class="n">layer_cls</span><span class="p">,</span> <span class="n">wrapper_cls</span> <span class="ow">in</span> <span class="p">(</span><span class="o">*</span><span class="n">resolved</span><span class="p">,</span> <span class="o">*</span><span class="n">registrations</span><span class="p">):</span>
+        <span class="n">existing</span> <span class="o">=</span> <span class="n">_peft</span><span class="o">.</span><span class="n">_LORA_WRAPPERS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">layer_cls</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">existing</span> <span class="ow">is</span> <span class="n">wrapper_cls</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">existing</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;Temporarily overriding&quot;</span> <span class="k">if</span> <span class="n">temporary</span> <span class="k">else</span> <span class="s2">&quot;Overriding&quot;</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">action</span><span class="si">}</span><span class="s2"> LoRA wrapper for &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">layer_cls</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">layer_cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2">: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">existing</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">existing</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2"> -&gt; &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">wrapper_cls</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">wrapper_cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">_peft</span><span class="o">.</span><span class="n">register_lora_wrapper</span><span class="p">(</span><span class="n">layer_cls</span><span class="p">,</span> <span class="n">wrapper_cls</span><span class="p">)</span>
+
+
+<span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_temporary_lora_wrapper_registrations</span><span class="p">(</span>
+    <span class="n">registrations</span><span class="p">:</span> <span class="n">LoRAWrapperRegistrations</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Install wrappers temporarily and restore the prior registry afterward.&quot;&quot;&quot;</span>
+    <span class="n">previous</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">_peft</span><span class="o">.</span><span class="n">_LORA_WRAPPERS</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_register_lora_wrappers</span><span class="p">(</span><span class="n">registrations</span><span class="p">,</span> <span class="n">temporary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">yield</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">_peft</span><span class="o">.</span><span class="n">_LORA_WRAPPERS</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">_peft</span><span class="o">.</span><span class="n">_LORA_WRAPPERS</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">previous</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="available_lora_wrappers">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.peft.lora.available_lora_wrappers.html#nvalchemi.training.peft.lora.available_lora_wrappers">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">available_lora_wrappers</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">LoRAWrapperRegistrations</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return registered (layer, LoRA-wrapper) pairs.&quot;&quot;&quot;</span>
+    <span class="n">_register_lora_wrappers</span><span class="p">(</span><span class="n">temporary</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_peft</span><span class="o">.</span><span class="n">_LORA_WRAPPERS</span><span class="o">.</span><span class="n">items</span><span class="p">())</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

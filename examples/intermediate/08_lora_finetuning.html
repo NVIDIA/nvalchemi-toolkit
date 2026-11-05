@@ -1,0 +1,1641 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>LoRA Fine-Tuning MACE on LPSC dataset &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/intermediate/08_lora_finetuning';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Generative workflows: model-owning samplers" href="09_generative_samplers.html" />
+    <link rel="prev" title="Rich Training Reporting" href="07_rich_training_reporting.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Intermediate Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/05_byo_graph_transformer.html">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Intermediate Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">LoRA...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-intermediate-08-lora-finetuning-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="lora-fine-tuning-mace-on-lpsc-dataset">
+<span id="sphx-glr-examples-intermediate-08-lora-finetuning-py"></span><h1>LoRA Fine-Tuning MACE on LPSC dataset<a class="headerlink" href="#lora-fine-tuning-mace-on-lpsc-dataset" title="Link to this heading">#</a></h1>
+<p>This example illustrates how to fine-tune a model with LoRA adapters using
+<a class="reference internal" href="../../modules/training/generated/nvalchemi.training.FineTuningStrategy.html#nvalchemi.training.FineTuningStrategy" title="nvalchemi.training.FineTuningStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code></a> with
+<a class="reference internal" href="../../modules/training/generated/nvalchemi.training.peft.lora.LoRAConfig.html#nvalchemi.training.peft.lora.LoRAConfig" title="nvalchemi.training.peft.lora.LoRAConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoRAConfig</span></code></a>. It fine-tunes the MACE <code class="docutils literal notranslate"><span class="pre">medium-mpa-0</span></code>
+foundation model on the <code class="docutils literal notranslate"><span class="pre">li/data/LPSC_600.extxyz</span></code> subset from the public
+<code class="docutils literal notranslate"><span class="pre">ev-tlt/MACE_finetuning_supplementary</span></code> Hugging Face dataset.
+Dataset attribution: <code class="docutils literal notranslate"><span class="pre">li/data/LPSC_600.extxyz</span></code> comes from
+<code class="docutils literal notranslate"><span class="pre">ev-tlt/MACE_finetuning_supplementary</span></code>; the dataset lists <code class="docutils literal notranslate"><span class="pre">li/data/</span></code> as
+CC BY 4.0, sourced from Zenodo 15686940 / Kim et al. See
+<a class="reference external" href="https://huggingface.co/datasets/ev-tlt/MACE_finetuning_supplementary">https://huggingface.co/datasets/ev-tlt/MACE_finetuning_supplementary</a> and
+<a class="reference external" href="https://creativecommons.org/licenses/by/4.0/">https://creativecommons.org/licenses/by/4.0/</a>.</p>
+<p>The workflow is as follows:</p>
+<ol class="arabic simple">
+<li><p>Prepare the LPSC_600 dataset by downloading <code class="docutils literal notranslate"><span class="pre">LPSC_600.extxyz</span></code> and
+converting the structures into <a class="reference internal" href="../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> objects.</p></li>
+<li><p>Split the data into training and validation subsets.</p></li>
+<li><p>Prepare the MACE <code class="docutils literal notranslate"><span class="pre">medium-mpa-0</span></code> foundation model for fine-tuning by
+fitting residual atomic reference-energy corrections and updating the model
+with the refitted values.</p></li>
+<li><p>Inspect the registered LoRA wrappers to see which layer types can receive
+adapters.</p></li>
+<li><p>Construct the LoRA fine-tuning strategy, attach adapters, and train with
+validation reporting.</p></li>
+<li><p>Save a trainable-only PEFT checkpoint, reload it into a fresh foundation
+model, and run validation inference.</p></li>
+</ol>
+<p>It can be run on one GPU with the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>cu12<span class="w"> </span>--extra<span class="w"> </span>ase<span class="w"> </span>--extra<span class="w"> </span>mace<span class="w">        </span>--with<span class="w"> </span>huggingface-hub<span class="w">        </span>python<span class="w"> </span>examples/intermediate/08_lora_finetuning.py
+</pre></div>
+</div>
+<p>Or use <code class="docutils literal notranslate"><span class="pre">--extra</span> <span class="pre">cu13</span></code> to match your CUDA environment. The runtime constants
+below keep the example small. Increase <code class="docutils literal notranslate"><span class="pre">TRAINING_EPOCHS</span></code> for a longer run.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">iread</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">huggingface_hub</span><span class="w"> </span><span class="kn">import</span> <span class="n">hf_hub_download</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DataLoader</span><span class="p">,</span>
+    <span class="n">InMemoryDataset</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">HookContext</span><span class="p">,</span>
+    <span class="n">NeighborListHook</span><span class="p">,</span>
+    <span class="n">ReportingOrchestrator</span><span class="p">,</span>
+    <span class="n">RichReporter</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.mace</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MACEWrapper</span></a>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ComposedLossFunction</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EnergyHuberLoss</span></a><span class="p">,</span>
+    <span class="n">FineTuningStrategy</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ForceHuberLoss</span></a><span class="p">,</span>
+    <span class="n">OptimizerConfig</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">StressHuberLoss</span></a><span class="p">,</span>
+    <span class="n">TrainingStage</span><span class="p">,</span>
+    <span class="n">ValidationConfig</span><span class="p">,</span>
+    <span class="n">default_training_fn</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_peft_checkpoint_into_model</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.peft.lora</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LoRAConfig</span><span class="p">,</span>
+    <span class="n">available_lora_wrappers</span><span class="p">,</span>
+    <span class="n">is_lora_layer</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.reference_energies</span><span class="w"> </span><span class="kn">import</span> <span class="n">fit_atomic_reference_energies</span>
+
+<span class="c1"># Data and output paths</span>
+<span class="n">DATA_ROOT</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;outputs/lpsc_lora&quot;</span><span class="p">)</span>
+<span class="n">LPSC_HF_REPO_ID</span> <span class="o">=</span> <span class="s2">&quot;ev-tlt/MACE_finetuning_supplementary&quot;</span>
+<span class="n">LPSC_HF_FILENAME</span> <span class="o">=</span> <span class="s2">&quot;li/data/LPSC_600.extxyz&quot;</span>
+<span class="n">REFERENCE_ENERGIES_PATH</span> <span class="o">=</span> <span class="n">DATA_ROOT</span> <span class="o">/</span> <span class="s2">&quot;reference_energies&quot;</span> <span class="o">/</span> <span class="s2">&quot;medium-mpa-0-lpsc.json&quot;</span>
+<span class="n">PEFT_CHECKPOINT_DIR</span> <span class="o">=</span> <span class="n">DATA_ROOT</span> <span class="o">/</span> <span class="s2">&quot;peft_checkpoints&quot;</span>
+<span class="n">REFERENCE_ENERGY_FIT_KIND</span> <span class="o">=</span> <span class="s2">&quot;baseline_residual_added_to_checkpoint_e0&quot;</span>
+
+<span class="c1"># Training, loss function, and optimization settings</span>
+<span class="n">SEED</span> <span class="o">=</span> <span class="mi">42</span>
+<span class="n">VALIDATION_FRACTION</span> <span class="o">=</span> <span class="mf">0.1</span>
+<span class="n">BATCH_SIZE</span> <span class="o">=</span> <span class="mi">64</span>
+<span class="n">VALIDATION_BATCH_SIZE</span> <span class="o">=</span> <span class="mi">64</span>
+<span class="n">TRAINING_EPOCHS</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="n">VALIDATION_EVERY_STEPS</span> <span class="o">=</span> <span class="mi">50</span>
+<span class="n">LEARNING_RATE</span> <span class="o">=</span> <span class="mf">5.0e-4</span>
+<span class="n">WEIGHT_DECAY</span> <span class="o">=</span> <span class="mf">1.0e-4</span>
+<span class="n">HUBER_DELTA</span> <span class="o">=</span> <span class="mf">0.01</span>
+<span class="n">ENERGY_WEIGHT</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">FORCE_WEIGHT</span> <span class="o">=</span> <span class="mf">10.0</span>
+<span class="n">STRESS_WEIGHT</span> <span class="o">=</span> <span class="mf">20.0</span>
+
+<span class="c1"># Foundation model and LoRA settings</span>
+<span class="n">MACE_CHECKPOINT</span> <span class="o">=</span> <span class="s2">&quot;medium-mpa-0&quot;</span>
+<a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">MACE_DTYPE</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">float32</span></a>
+<span class="n">ENABLE_CUEQ</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">LORA_RANK</span> <span class="o">=</span> <span class="mi">16</span>
+<span class="n">LORA_ALPHA</span> <span class="o">=</span> <span class="mf">2.0</span>
+<span class="n">LORA_DROPOUT</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="n">LORA_TARGET_PATTERNS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;main.model.node_embedding.linear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;main.model.interactions.0.linear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;main.model.interactions.*.linear_up&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;main.model.interactions.*.conv_tp_weights.layer[123]&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;main.model.products.*.linear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;main.model.readouts.*.linear&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;main.model.readouts.*.linear_1&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;main.model.readouts.*.linear_2&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">TRAINABLE_PATTERNS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;main.model.interactions.1.linear.weight&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;main.model.interactions.*.density_fn.layer0.weight&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">seed_everything</span><span class="p">(</span><span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Seed Python, NumPy, and PyTorch RNGs used by this example.&quot;&quot;&quot;</span>
+    <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">():</span>
+        <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.manual_seed_all.html#torch.cuda.manual_seed_all" title="torch.cuda.manual_seed_all" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">manual_seed_all</span></a><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <a href="https://docs.pytorch.org/docs/stable/backends.html#torch.backends.cudnn.benchmark" title="torch.backends.cudnn.benchmark" class="sphx-glr-backref-module-torch-backends-cudnn sphx-glr-backref-type-py-attribute"><span class="n">torch</span><span class="o">.</span><span class="n">backends</span><span class="o">.</span><span class="n">cudnn</span><span class="o">.</span><span class="n">benchmark</span></a> <span class="o">=</span> <span class="kc">False</span>
+    <a href="https://docs.pytorch.org/docs/stable/backends.html#torch.backends.cudnn.deterministic" title="torch.backends.cudnn.deterministic" class="sphx-glr-backref-module-torch-backends-cudnn sphx-glr-backref-type-py-attribute"><span class="n">torch</span><span class="o">.</span><span class="n">backends</span><span class="o">.</span><span class="n">cudnn</span><span class="o">.</span><span class="n">deterministic</span></a> <span class="o">=</span> <span class="kc">True</span>
+
+
+<span class="n">seed_everything</span><span class="p">(</span><span class="n">SEED</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="downloading-and-converting-lpsc-600-dataset">
+<h2>Downloading and converting LPSC_600 dataset<a class="headerlink" href="#downloading-and-converting-lpsc-600-dataset" title="Link to this heading">#</a></h2>
+<p>We begin by downloading the raw <code class="docutils literal notranslate"><span class="pre">extxyz</span></code> file with <code class="docutils literal notranslate"><span class="pre">huggingface_hub</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">download_lpsc_extxyz</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Download ``li/data/LPSC_600.extxyz`` from Hugging Face.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Downloading </span><span class="si">{</span><span class="n">LPSC_HF_FILENAME</span><span class="si">}</span><span class="s2"> from Hugging Face.&quot;</span><span class="p">,</span>
+        <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span>
+        <span class="n">hf_hub_download</span><span class="p">(</span>
+            <span class="n">repo_id</span><span class="o">=</span><span class="n">LPSC_HF_REPO_ID</span><span class="p">,</span>
+            <span class="n">filename</span><span class="o">=</span><span class="n">LPSC_HF_FILENAME</span><span class="p">,</span>
+            <span class="n">repo_type</span><span class="o">=</span><span class="s2">&quot;dataset&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+
+<span class="n">extxyz_path</span> <span class="o">=</span> <span class="n">download_lpsc_extxyz</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Downloading li/data/LPSC_600.extxyz from Hugging Face.
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+</pre></div>
+</div>
+<p>Once the file is available locally, we read each structure with ASE and convert
+it into <a class="reference internal" href="../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a>. The LPSC file stores the labels as
+<code class="docutils literal notranslate"><span class="pre">ref_energy</span></code> and <code class="docutils literal notranslate"><span class="pre">ref_forces</span></code>. ASE treats <code class="docutils literal notranslate"><span class="pre">stress</span></code> as a calculator
+result, so we copy it into <code class="docutils literal notranslate"><span class="pre">atoms.info</span></code> before calling
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">from_atoms()</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">atomic_data_from_atoms</span><span class="p">(</span><span class="n">atoms</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert one ASE Atoms object to ALCHEMI AtomicData.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">atoms</span><span class="o">.</span><span class="n">info</span> <span class="ow">and</span> <span class="n">atoms</span><span class="o">.</span><span class="n">calc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">stress</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">results</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stress&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">stress</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">atoms</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stress</span>
+    <span class="k">return</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">from_atoms</span><span class="p">(</span>
+        <span class="n">atoms</span><span class="p">,</span>
+        <span class="n">energy_key</span><span class="o">=</span><span class="s2">&quot;ref_energy&quot;</span><span class="p">,</span>
+        <span class="n">forces_key</span><span class="o">=</span><span class="s2">&quot;ref_forces&quot;</span><span class="p">,</span>
+        <span class="n">stress_key</span><span class="o">=</span><span class="s2">&quot;stress&quot;</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">MACE_DTYPE</span></a><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">atomic_data_from_atoms</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span> <span class="k">for</span> <span class="n">atoms</span> <span class="ow">in</span> <span class="n">iread</span><span class="p">(</span><span class="n">extxyz_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="s2">&quot;:&quot;</span><span class="p">)]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loaded </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span><span class="si">}</span><span class="s2"> structures into memory.&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/ase/atoms.py:427: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.
+As an alternative, you can create a new view using np.reshape (with copy=False if needed).
+  a.shape = (-1,) + shape
+Loaded 500 structures into memory.
+</pre></div>
+</div>
+</section>
+<section id="creating-train-validation-subsets">
+<h2>Creating train/validation subsets<a class="headerlink" href="#creating-train-validation-subsets" title="Link to this heading">#</a></h2>
+<p>We shuffle once with a fixed seed, then build training and validation splits.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Need at least two structures for train/validation split.&quot;</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">Random</span><span class="p">(</span><span class="n">SEED</span><span class="p">)</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
+<span class="n">validation_count</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span> <span class="o">*</span> <span class="n">VALIDATION_FRACTION</span><span class="p">)))</span>
+<span class="n">full_batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
+<span class="n">train_batch</span> <span class="o">=</span> <span class="n">full_batch</span><span class="p">[:</span><span class="o">-</span><span class="n">validation_count</span><span class="p">]</span>
+<span class="n">validation_batch</span> <span class="o">=</span> <span class="n">full_batch</span><span class="p">[</span><span class="o">-</span><span class="n">validation_count</span><span class="p">:]</span>
+<span class="k">del</span> <span class="n">samples</span><span class="p">,</span> <span class="n">full_batch</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Created deterministic split: </span><span class="si">{</span><span class="n">train_batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2"> train, &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">validation_batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2"> validation.&quot;</span><span class="p">,</span>
+    <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Created deterministic split: 450 train, 50 validation.
+</pre></div>
+</div>
+</section>
+<section id="loading-batches">
+<h2>Loading batches<a class="headerlink" href="#loading-batches" title="Link to this heading">#</a></h2>
+<p>The converted LPSC subset is small enough to keep each split in memory. The
+dataloader then yields mini-batches and moves them to the selected device.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_loader</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataLoader</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a dataloader&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span>
+        <span class="n">InMemoryDataset</span><span class="p">(</span>
+            <span class="n">in_memory_batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span>
+            <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+        <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
+        <span class="n">drop_last</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
+        <span class="n">prefetch_factor</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">num_streams</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">use_streams</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="n">train_loader</span> <span class="o">=</span> <span class="n">make_loader</span><span class="p">(</span>
+    <span class="n">train_batch</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="n">BATCH_SIZE</span><span class="p">,</span>
+    <span class="n">shuffle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">validation_loader</span> <span class="o">=</span> <span class="n">make_loader</span><span class="p">(</span>
+    <span class="n">validation_batch</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="n">VALIDATION_BATCH_SIZE</span><span class="p">,</span>
+    <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="preparing-the-fine-tuning-model">
+<h2>Preparing the fine-tuning model<a class="headerlink" href="#preparing-the-fine-tuning-model" title="Link to this heading">#</a></h2>
+<p>Before loading the fine-tuning model, we need to refit the per-element
+reference energies.
+<code class="docutils literal notranslate"><span class="pre">fit_atomic_reference_energies</span></code> counts how many atoms of each element appear
+in every training structure, then solves a least-squares problem to find the
+per-element energy corrections that best explain the remaining error of
+<code class="docutils literal notranslate"><span class="pre">medium-mpa-0</span></code>. We add those residual corrections back to the checkpoint’s
+original reference energies before loading the fine-tuning model. This follows
+the model-aware E0 reestimation workflow described in Tompa et al.,
+<a class="reference external" href="https://arxiv.org/abs/2606.12704">https://arxiv.org/abs/2606.12704</a>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">baseline_energy_fn</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MACEWrapper</span></a><span class="p">,</span> <span class="n">neighbor_hook</span><span class="p">:</span> <span class="n">NeighborListHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a callable that evaluates baseline graph energies.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">baseline</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">:</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">HookContext</span><span class="p">(</span><span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+        <span class="n">neighbor_hook</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">BEFORE_FORWARD</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">model</span><span class="p">(</span><span class="n">batch</span><span class="p">)[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">baseline</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">mace_checkpoint_reference_energies</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MACEWrapper</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the per-element reference energies stored in a MACE checkpoint.&quot;&quot;&quot;</span>
+    <span class="n">atomic_numbers</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">atomic_number</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">atomic_number</span> <span class="ow">in</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="torch.as_tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span></a><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="p">]</span>
+    <span class="n">atomic_energies</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">atomic_energies_fn</span><span class="o">.</span><span class="n">atomic_energies</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">atomic_numbers</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">atomic_energies</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;MACE atomic number and reference-energy tables have different lengths: &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">atomic_numbers</span><span class="p">)</span><span class="si">}</span><span class="s2"> != </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">atomic_energies</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="n">atomic_number</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">atomic_number</span><span class="p">,</span> <span class="n">energy</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">atomic_numbers</span><span class="p">,</span> <span class="n">atomic_energies</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">add_reference_energy_corrections</span><span class="p">(</span>
+    <span class="n">checkpoint_reference_energies</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+    <span class="n">residual_corrections</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Add fitted residual corrections to checkpoint reference energies.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="n">atomic_number</span><span class="p">:</span> <span class="n">checkpoint_reference_energies</span><span class="p">[</span><span class="n">atomic_number</span><span class="p">]</span> <span class="o">+</span> <span class="n">correction</span>
+        <span class="k">for</span> <span class="n">atomic_number</span><span class="p">,</span> <span class="n">correction</span> <span class="ow">in</span> <span class="n">residual_corrections</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+
+
+<span class="k">if</span> <span class="n">REFERENCE_ENERGIES_PATH</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+    <span class="c1"># Reuse the cached fit when this example has already been run.</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">REFERENCE_ENERGIES_PATH</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+    <span class="n">cache_is_current</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fit_kind&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">REFERENCE_ENERGY_FIT_KIND</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">cache_is_current</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="k">if</span> <span class="n">cache_is_current</span><span class="p">:</span>
+    <span class="n">reference_energies</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">atomic_number</span><span class="p">):</span> <span class="nb">float</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">atomic_number</span><span class="p">,</span> <span class="n">energy</span> <span class="ow">in</span> <span class="n">raw</span><span class="p">[</span><span class="s2">&quot;reference_energies&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Loaded cached refitted reference energies for &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">reference_energies</span><span class="p">)</span><span class="si">}</span><span class="s2"> elements.&quot;</span><span class="p">,</span>
+        <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="c1"># Otherwise, fit the corrections from the training structures.</span>
+    <span class="n">foundation_model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MACEWrapper</span></a><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span>
+        <span class="n">MACE_CHECKPOINT</span><span class="p">,</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">MACE_DTYPE</span></a><span class="p">,</span>
+        <span class="n">enable_cueq</span><span class="o">=</span><span class="n">ENABLE_CUEQ</span><span class="p">,</span>
+        <span class="n">compile_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">foundation_model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">}</span>
+    <span class="n">foundation_model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+    <span class="n">reference_neighbor_hook</span> <span class="o">=</span> <span class="n">NeighborListHook</span><span class="p">(</span>
+        <span class="n">foundation_model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">,</span>
+        <span class="n">stage</span><span class="o">=</span><span class="n">TrainingStage</span><span class="o">.</span><span class="n">BEFORE_FORWARD</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">checkpoint_reference_energies</span> <span class="o">=</span> <span class="n">mace_checkpoint_reference_energies</span><span class="p">(</span><span class="n">foundation_model</span><span class="p">)</span>
+    <span class="n">reference_loader</span> <span class="o">=</span> <span class="n">make_loader</span><span class="p">(</span>
+        <span class="n">train_batch</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="n">BATCH_SIZE</span><span class="p">,</span>
+        <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">fit_results</span> <span class="o">=</span> <span class="n">fit_atomic_reference_energies</span><span class="p">(</span>
+            <span class="n">reference_loader</span><span class="p">,</span>
+            <span class="n">baseline_energy_fn</span><span class="o">=</span><span class="n">baseline_energy_fn</span><span class="p">(</span>
+                <span class="n">foundation_model</span><span class="p">,</span>
+                <span class="n">reference_neighbor_hook</span><span class="p">,</span>
+            <span class="p">),</span>
+            <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+            <span class="n">max_batches</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># Fit all structures</span>
+        <span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">reference_loader</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">del</span> <span class="n">foundation_model</span>
+        <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
+
+    <span class="n">residual_reference_energy_corrections</span> <span class="o">=</span> <span class="n">fit_results</span><span class="o">.</span><span class="n">reference_energies</span>
+    <span class="n">reference_energies</span> <span class="o">=</span> <span class="n">add_reference_energy_corrections</span><span class="p">(</span>
+        <span class="n">checkpoint_reference_energies</span><span class="p">,</span>
+        <span class="n">residual_reference_energy_corrections</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">REFERENCE_ENERGIES_PATH</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">REFERENCE_ENERGIES_PATH</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span>
+        <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;checkpoint&quot;</span><span class="p">:</span> <span class="n">MACE_CHECKPOINT</span><span class="p">,</span>
+                <span class="s2">&quot;fit_kind&quot;</span><span class="p">:</span> <span class="n">REFERENCE_ENERGY_FIT_KIND</span><span class="p">,</span>
+                <span class="s2">&quot;reference_energies&quot;</span><span class="p">:</span> <span class="n">reference_energies</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Fit residual reference-energy corrections for &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">reference_energies</span><span class="p">)</span><span class="si">}</span><span class="s2"> elements &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;from </span><span class="si">{</span><span class="n">fit_results</span><span class="o">.</span><span class="n">num_structures</span><span class="si">}</span><span class="s2"> structures.&quot;</span><span class="p">,</span>
+        <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Loaded cached refitted reference energies for 4 elements.
+</pre></div>
+</div>
+<p>The fine-tuning model is then loaded with the refitted reference energies by
+passing them through <code class="docutils literal notranslate"><span class="pre">atomic_energies</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MACEWrapper</span></a><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span>
+    <span class="n">MACE_CHECKPOINT</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">MACE_DTYPE</span></a><span class="p">,</span>
+    <span class="n">enable_cueq</span><span class="o">=</span><span class="n">ENABLE_CUEQ</span><span class="p">,</span>
+    <span class="n">compile_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">atomic_energies</span><span class="o">=</span><span class="n">reference_energies</span><span class="p">,</span>
+    <span class="n">train</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}</span>
+<span class="n">model</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/torch/jit/_script.py:1488: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+  warnings.warn(
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/torch/jit/_script.py:1488: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+  warnings.warn(
+GPU information: NVIDIA GB10, 12, 1, 128, 48, 140, 1700
+Using medium MPA-0 model as default MACE-MP model, to use previous (before 3.10) default model please specify &#39;medium&#39; as model argument
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/torch/jit/_serialization.py:176: DeprecationWarning: `torch.jit.load` is deprecated. Please switch to `torch.export`.
+  warnings.warn(
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/torch/jit/_serialization.py:176: DeprecationWarning: `torch.jit.load` is deprecated. Please switch to `torch.export`.
+  warnings.warn(
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/torch/jit/_serialization.py:176: DeprecationWarning: `torch.jit.load` is deprecated. Please switch to `torch.export`.
+  warnings.warn(
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/mace/modules/models.py:85: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.detach().clone() or sourceTensor.detach().clone().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  &quot;atomic_numbers&quot;, torch.tensor(atomic_numbers, dtype=torch.int64)
+
+MACEWrapper(
+  outputs={atomic_energies, energy, forces, stress}
+  active_outputs={energy, forces, stress}
+  autograd_outputs={forces, stress}
+  optional_inputs={cell, unit_shifts}
+  pbc=[supports_pbc]
+  neighbors=(cutoff=6.0, format=coo)
+  (model): ScaleShiftMACE(
+    (node_embedding): LinearNodeEmbeddingBlock(
+      (linear): Linear(
+        shared_weights=True, internal_weights=True, weight_numel=11392
+        (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+        (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+        (f): ╭ a=[11392:1⨯(89,128)] b=[89:1⨯(1,89)] -&gt; C=[128:1⨯(1,128)]
+        ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=1 i=1 u=89 v=128
+        SegmentedPolynomial(
+          (m): SegmentedPolynomialNaive(
+            (graphs): ModuleList(
+              (0): uv,iu,iv operands=[(89, 128)],[(1, 89)],[(1, 128)] paths=[op0[0]*op1[0]*op2[0]*0.11]
+            )
+          )
+        )
+      )
+    )
+    (radial_embedding): RadialEmbeddingBlock(
+      (bessel_fn): BesselBasis(r_max=6.0, num_basis=10, trainable=False)
+      (distance_transform): AgnesiTransform(a=1.0805, q=0.9183, p=4.5791)
+      (cutoff_fn): PolynomialCutoff(p=5, r_max=6.0)
+    )
+    (pair_repulsion_fn): ZBLBasis(c=tensor([0.1818, 0.5099, 0.2802, 0.0282], device=&#39;cuda:0&#39;))
+    (spherical_harmonics): SphericalHarmonics()
+    (atomic_energies_fn): AtomicEnergiesBlock(energies=[[-1.1173, 0.0010, -0.2914, -0.0178, -0.2689, -1.2617, -3.1244, -1.5484, -0.5188, -0.0124, -0.2288, -0.0095, -0.2163, -0.8264, -1.8871, -0.8865, -0.2573, -0.0493, -0.2270, -0.0928, -2.1140, -2.5005, -3.7048, -5.6026, -5.3254, -3.5200, -1.9356, -0.9352, -0.6003, -0.1651, -0.3299, -0.7797, -1.6837, -0.7694, -0.2221, -0.0336, -0.1882, -0.0683, -2.1708, -2.2858, -3.1343, -4.6021, -3.4520, -2.3807, -1.4686, -1.4773, -0.3395, -0.1684, -0.3547, -0.8364, -1.4110, -0.6574, -0.1896, -0.0086, -0.1377, -0.0346, -0.4558, -1.3309, -0.2967, -0.3039, -0.3090, -0.2547, -8.3800, -10.3890, -0.3060, -0.3068, -0.3087, -0.3161, -0.2519, -0.0643, -0.3200, -3.5277, -3.5449, -4.6566, -4.7011, -2.8826, -1.4678, -0.5027, -0.2880, -0.1245, -0.3174, -0.7764, -1.3263, -0.2683, -0.9082, -2.4765, -4.9044, -7.6338, -10.7724]])
+    (interactions): ModuleList(
+      (0): RealAgnosticDensityInteractionBlock(
+        (linear_up): Linear(
+          shared_weights=True, internal_weights=True, weight_numel=16384
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[16384:1⨯(128,128)] b=[128:1⨯(1,128)] -&gt; C=[128:1⨯(1,128)]
+          ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=1 i=1 u=128 v=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uv,iu,iv operands=[(128, 128)],[(1, 128)],[(1, 128)] paths=[op0[0]*op1[0]*op2[0]*0.09]
+              )
+            )
+          )
+        )
+        (conv_tp): ╭ a=[512:4⨯(128)] b=[128:1⨯(128)] c=[16:16⨯()] -&gt; D=[2048:16⨯(128)]
+        ╰─ []·a[u]·b[u]·c[]➜D[u] ─ num_paths=16 u=128
+        SegmentedPolynomial(
+          (m): SegmentedPolynomialFromUniform1dJit()
+        )
+        (conv_tp_weights): FullyConnectedNet[10, 64, 64, 64, 512]
+        (linear): Linear(
+          shared_weights=True, internal_weights=True, weight_numel=65536
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[65536:4⨯(128,128)] b=[2048:(1,128)+(3,128)+...] -&gt; C=[2048:(1,128)+(3,128)+...]
+          ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=4 i={1, 3, 5, 7} u=128 v=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uv,iu,iv sizes=65536,2048,2048 num_segments=4,4,4 num_paths=4 i={1, 3, 5, 7} u=128 v=128
+              )
+            )
+          )
+        )
+        (skip_tp): FullyConnectedTensorProduct(
+          shared_weights=True, internal_weights=True, weight_numel=5832704
+          (transpose_in1): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_in2): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[5832704:4⨯(128,89,128)] b=[2048:(1,128)+(3,128)+...] c=[89:1⨯(1,89)] -&gt; D=[2048:(1,128)+(3,128)+...]
+          ╰─ [ijk]·a[uvw]·b[iu]·c[jv]➜D[kw] ─ num_paths=4 i={1, 3, 5, 7} j=1 k={1, 3, 5, 7} u=128 v=89 w=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uvw,iu,jv,kw+ijk sizes=5832704,2048,89,2048 num_segments=4,4,1,4 num_paths=4 i={1, 3, 5, 7} j=1 k={1, 3, 5, 7} u=128 v=89 w=128
+              )
+            )
+          )
+        )
+        (density_fn): FullyConnectedNet[10, 1]
+        (reshape): reshape_irreps()
+      )
+      (1): RealAgnosticDensityResidualInteractionBlock(
+        (linear_up): Linear(
+          shared_weights=True, internal_weights=True, weight_numel=32768
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[32768:2⨯(128,128)] b=[512:(1,128)+(3,128)] -&gt; C=[512:(1,128)+(3,128)]
+          ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=2 i={1, 3} u=128 v=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uv,iu,iv sizes=32768,512,512 num_segments=2,2,2 num_paths=2 i={1, 3} u=128 v=128
+              )
+            )
+          )
+        )
+        (conv_tp): ╭ a=[1280:10⨯(128)] b=[512:4⨯(128)] c=[16:16⨯()] -&gt; D=[5120:40⨯(128)]
+        ╰─ []·a[u]·b[u]·c[]➜D[u] ─ num_paths=86 u=128
+        SegmentedPolynomial(
+          (m): SegmentedPolynomialFromUniform1dJit()
+        )
+        (conv_tp_weights): FullyConnectedNet[10, 64, 64, 64, 1280]
+        (linear): Linear(
+          shared_weights=True, internal_weights=True, weight_numel=163840
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[163840:10⨯(128,128)] b=[5120:(1,128)+(1,128)+...] -&gt; C=[2048:(1,128)+(3,128)+...]
+          ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=10 i={1, 3, 5, 7} u=128 v=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uv,iu,iv sizes=163840,5120,2048 num_segments=10,10,4 num_paths=10 i={1, 3, 5, 7} u=128 v=128
+              )
+            )
+          )
+        )
+        (skip_tp): FullyConnectedTensorProduct(
+          shared_weights=True, internal_weights=True, weight_numel=1458176
+          (transpose_in1): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_in2): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[1458176:1⨯(128,89,128)] b=[512:(1,128)+(3,128)] c=[89:1⨯(1,89)] -&gt; D=[128:1⨯(1,128)]
+          ╰─ [ijk]·a[uvw]·b[iu]·c[jv]➜D[kw] ─ num_paths=1 i={1, 3} j=1 k=1 u=128 v=89 w=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uvw,iu,jv,kw+ijk sizes=1458176,512,89,128 num_segments=1,2,1,1 num_paths=1 i={1, 3} j=1 k=1 u=128 v=89 w=128
+              )
+            )
+          )
+        )
+        (density_fn): FullyConnectedNet[10, 1]
+        (reshape): reshape_irreps()
+      )
+    )
+    (products): ModuleList(
+      (0): EquivariantProductBasisBlock(
+        (symmetric_contractions): SymmetricContraction(
+          contraction_degree=3, weight_shape=(86, 128)
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[3712:29⨯(128)] b=[2048:16⨯(128)] -&gt; C=[512:4⨯(128)]
+          │  []·a[u]·b[u]➜C[u] ─────────── num_paths=4 u=128
+          │  []·a[u]·b[u]·b[u]➜C[u] ────── num_paths=86 u=128
+          ╰─ []·a[u]·b[u]·b[u]·b[u]➜C[u] ─ num_paths=1949 u=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialFromUniform1dJit()
+          )
+        )
+        (linear): Linear(
+          shared_weights=True, internal_weights=True, weight_numel=32768
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[32768:2⨯(128,128)] b=[512:(1,128)+(3,128)] -&gt; C=[512:(1,128)+(3,128)]
+          ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=2 i={1, 3} u=128 v=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uv,iu,iv sizes=32768,512,512 num_segments=2,2,2 num_paths=2 i={1, 3} u=128 v=128
+              )
+            )
+          )
+        )
+      )
+      (1): EquivariantProductBasisBlock(
+        (symmetric_contractions): SymmetricContraction(
+          contraction_degree=3, weight_shape=(28, 128)
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[1664:13⨯(128)] b=[2048:16⨯(128)] -&gt; C=[128:1⨯(128)]
+          │  []·a[u]·b[u]➜C[u] ─────────── num_paths=1 u=128
+          │  []·a[u]·b[u]·b[u]➜C[u] ────── num_paths=16 u=128
+          ╰─ []·a[u]·b[u]·b[u]·b[u]➜C[u] ─ num_paths=353 u=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialFromUniform1dJit()
+          )
+        )
+        (linear): Linear(
+          shared_weights=True, internal_weights=True, weight_numel=16384
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[16384:1⨯(128,128)] b=[128:1⨯(1,128)] -&gt; C=[128:1⨯(1,128)]
+          ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=1 i=1 u=128 v=128
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uv,iu,iv operands=[(128, 128)],[(1, 128)],[(1, 128)] paths=[op0[0]*op1[0]*op2[0]*0.09]
+              )
+            )
+          )
+        )
+      )
+    )
+    (readouts): ModuleList(
+      (0): LinearReadoutBlock(
+        (linear): Linear(
+          shared_weights=True, internal_weights=True, weight_numel=128
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[128:1⨯(128,1)] b=[512:(1,128)+(3,128)] -&gt; C=[1:1⨯(1,1)]
+          ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=1 i={1, 3} u=128 v=1
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uv,iu,iv sizes=128,512,1 num_segments=1,2,1 num_paths=1 i={1, 3} u=128 v=1
+              )
+            )
+          )
+        )
+      )
+      (1): NonLinearReadoutBlock(
+        (linear_1): Linear(
+          shared_weights=True, internal_weights=True, weight_numel=2048
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[2048:1⨯(128,16)] b=[128:1⨯(1,128)] -&gt; C=[16:1⨯(1,16)]
+          ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=1 i=1 u=128 v=16
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uv,iu,iv operands=[(128, 16)],[(1, 128)],[(1, 16)] paths=[op0[0]*op1[0]*op2[0]*0.09]
+              )
+            )
+          )
+        )
+        (non_linearity): Activation [x] (16x0e -&gt; 16x0e)
+        (linear_2): Linear(
+          shared_weights=True, internal_weights=True, weight_numel=16
+          (transpose_in): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (transpose_out): TransposeIrrepsLayout((irrep,mul) -&gt; (irrep,mul))
+          (f): ╭ a=[16:1⨯(16,1)] b=[16:1⨯(1,16)] -&gt; C=[1:1⨯(1,1)]
+          ╰─ []·a[uv]·b[iu]➜C[iv] ─ num_paths=1 i=1 u=16 v=1
+          SegmentedPolynomial(
+            (m): SegmentedPolynomialNaive(
+              (graphs): ModuleList(
+                (0): uv,iu,iv operands=[(16, 1)],[(1, 16)],[(1, 1)] paths=[op0[0]*op1[0]*op2[0]*0.25]
+              )
+            )
+          )
+        )
+      )
+    )
+    (scale_shift): ScaleShiftBlock(scale=0.7736, shift=0.0000)
+  )
+)
+</pre></div>
+</div>
+</section>
+<section id="checking-supported-lora-layers">
+<h2>Checking supported LoRA layers<a class="headerlink" href="#checking-supported-lora-layers" title="Link to this heading">#</a></h2>
+<p>Registered wrappers define which layer classes can receive LoRA adapters.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">class_name</span><span class="p">(</span><span class="bp">cls</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a compact import path for a class.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2">&quot;</span>
+
+
+<span class="c1"># Print currently registered layer-to-LoRA wrapper pairs.</span>
+<span class="n">wrappers</span> <span class="o">=</span> <span class="n">available_lora_wrappers</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Available LoRA wrappers: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">wrappers</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">for</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">layer_cls</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">wrapper_cls</span></a> <span class="ow">in</span> <span class="n">wrappers</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;  - </span><span class="si">{</span><span class="n">class_name</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">layer_cls</span></a><span class="p">)</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">class_name</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">wrapper_cls</span></a><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Available LoRA wrappers: 4
+  - torch.nn.modules.linear.Linear -&gt; physicsnemo.experimental.peft.lora.LoRALinear
+  - cuequivariance_torch.operations.linear.Linear -&gt; nvalchemi.training.peft.lora_wrappers.CuEquivarianceLoRALinear
+  - e3nn.o3._linear.Linear -&gt; nvalchemi.training.peft.lora_wrappers.EquivariantLoRALinear
+  - e3nn.nn._fc._Layer -&gt; nvalchemi.training.peft.lora_wrappers.E3NNFullyConnectedLoRALayer
+</pre></div>
+</div>
+</section>
+<section id="configuring-and-running-lora-fine-tuning">
+<h2>Configuring and running LoRA fine-tuning<a class="headerlink" href="#configuring-and-running-lora-fine-tuning" title="Link to this heading">#</a></h2>
+<p>Similar to <a class="reference internal" href="../../modules/training/generated/nvalchemi.training.TrainingStrategy.html#nvalchemi.training.TrainingStrategy" title="nvalchemi.training.TrainingStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainingStrategy</span></code></a> and
+<a class="reference internal" href="../../modules/training/generated/nvalchemi.training.FineTuningStrategy.html#nvalchemi.training.FineTuningStrategy" title="nvalchemi.training.FineTuningStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FineTuningStrategy</span></code></a>, this workflow combines the
+training objective, validation reporter, neighbor-list hook, optimizer setup,
+and a <a class="reference internal" href="../../modules/training/generated/nvalchemi.training.peft.lora.LoRAConfig.html#nvalchemi.training.peft.lora.LoRAConfig" title="nvalchemi.training.peft.lora.LoRAConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoRAConfig</span></code></a>. The LoRA target patterns select
+the MACE layers that receive adapters, while the trainable patterns keep a
+small set of base-model parameters trainable. Module patches can also be
+provided to customize model components, but they are not needed in this
+example.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">seed_everything</span><span class="p">(</span><span class="n">SEED</span><span class="p">)</span>
+
+<span class="n">loss_fn</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ComposedLossFunction</span></a> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">ENERGY_WEIGHT</span>
+    <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">EnergyHuberLoss</span></a><span class="p">(</span>
+        <span class="n">per_atom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">delta</span><span class="o">=</span><span class="n">HUBER_DELTA</span><span class="p">,</span>
+        <span class="n">ignore_nonfinite</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="o">+</span> <span class="n">FORCE_WEIGHT</span>
+    <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">ForceHuberLoss</span></a><span class="p">(</span>
+        <span class="n">normalize_by_atom_count</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">delta</span><span class="o">=</span><span class="n">HUBER_DELTA</span><span class="p">,</span>
+        <span class="n">ignore_nonfinite</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="o">+</span> <span class="n">STRESS_WEIGHT</span>
+    <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">StressHuberLoss</span></a><span class="p">(</span>
+        <span class="n">delta</span><span class="o">=</span><span class="n">HUBER_DELTA</span><span class="p">,</span>
+        <span class="n">ignore_nonfinite</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">loss_fn</span><span class="o">.</span><span class="n">normalize_weights</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">validation_scalars</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">TrainingStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract total and unweighted component validation losses for RichReporter.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">stage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">AFTER_VALIDATION</span> <span class="ow">or</span> <span class="n">ctx</span><span class="o">.</span><span class="n">validation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="n">summary</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">validation</span>
+    <span class="n">scalars</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;loss&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">summary</span><span class="p">[</span><span class="s2">&quot;total_loss&quot;</span><span class="p">])}</span>
+    <span class="n">scalars</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">summary</span><span class="p">[</span><span class="s2">&quot;per_component_unweighted&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">scalars</span>
+
+
+<span class="n">rich_reporter</span> <span class="o">=</span> <span class="n">RichReporter</span><span class="p">(</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;LPSC LoRA validation&quot;</span><span class="p">,</span>
+    <span class="n">custom_scalars</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;validation&quot;</span><span class="p">:</span> <span class="n">validation_scalars</span><span class="p">},</span>
+    <span class="n">include_losses</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">include_optimizer_lrs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">layout</span><span class="o">=</span><span class="s2">&quot;training&quot;</span><span class="p">,</span>
+    <span class="n">plot_keys</span><span class="o">=</span><span class="p">(</span>
+        <span class="s2">&quot;validation/loss&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;validation/ForceHuberLoss&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;validation/EnergyHuberLoss&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;validation/StressHuberLoss&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">max_scalars</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">max_plots</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">transient</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">strategy</span> <span class="o">=</span> <span class="n">FineTuningStrategy</span><span class="p">(</span>
+    <span class="n">models</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">optimizer_configs</span><span class="o">=</span><span class="n">OptimizerConfig</span><span class="p">(</span>
+        <span class="n">optimizer_cls</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.AdamW.html#torch.optim.AdamW" title="torch.optim.AdamW" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span></a><span class="p">,</span>
+        <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="n">LEARNING_RATE</span><span class="p">,</span> <span class="s2">&quot;weight_decay&quot;</span><span class="p">:</span> <span class="n">WEIGHT_DECAY</span><span class="p">},</span>
+    <span class="p">),</span>
+    <span class="n">num_epochs</span><span class="o">=</span><span class="n">TRAINING_EPOCHS</span><span class="p">,</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">training_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span><span class="p">,</span>
+    <span class="n">devices</span><span class="o">=</span><span class="p">[</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">],</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">NeighborListHook</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">,</span>
+            <span class="n">stage</span><span class="o">=</span><span class="n">TrainingStage</span><span class="o">.</span><span class="n">BEFORE_FORWARD</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">ReportingOrchestrator</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">rich_reporter</span><span class="p">],</span>
+            <span class="n">stages</span><span class="o">=</span><span class="p">{</span><span class="n">TrainingStage</span><span class="o">.</span><span class="n">AFTER_VALIDATION</span><span class="p">},</span>
+            <span class="n">rank_zero_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">],</span>
+    <span class="n">validation_config</span><span class="o">=</span><span class="n">ValidationConfig</span><span class="p">(</span>
+        <span class="n">validation_data</span><span class="o">=</span><span class="n">validation_loader</span><span class="p">,</span>
+        <span class="n">validation_fn</span><span class="o">=</span><span class="n">default_training_fn</span><span class="p">,</span>
+        <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span><span class="p">,</span>
+        <span class="n">every_n_steps</span><span class="o">=</span><span class="n">VALIDATION_EVERY_STEPS</span><span class="p">,</span>
+        <span class="n">grad_mode</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+        <span class="n">use_ema</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;validation&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">peft_config</span><span class="o">=</span><span class="n">LoRAConfig</span><span class="p">(</span>
+        <span class="n">rank</span><span class="o">=</span><span class="n">LORA_RANK</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="n">LORA_ALPHA</span><span class="p">,</span>
+        <span class="n">lora_dropout</span><span class="o">=</span><span class="n">LORA_DROPOUT</span><span class="p">,</span>
+        <span class="n">lora_target_patterns</span><span class="o">=</span><span class="n">LORA_TARGET_PATTERNS</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">trainable_patterns</span><span class="o">=</span><span class="n">TRAINABLE_PATTERNS</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>After the strategy attaches adapters, inspect the inserted LoRA modules before
+training.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Print LoRA modules installed in strategy.</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;LoRA adapters inserted:&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">model_name</span><span class="p">,</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">strategy</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">module_names</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">named_modules</span><span class="p">()</span> <span class="k">if</span> <span class="n">is_lora_layer</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">module_names</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  - </span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">: none&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">continue</span>
+    <span class="k">for</span> <span class="n">module_name</span> <span class="ow">in</span> <span class="n">module_names</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  - </span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>LoRA adapters inserted:
+  - main.model.node_embedding.linear
+  - main.model.interactions.0.linear_up
+  - main.model.interactions.0.conv_tp_weights.layer1
+  - main.model.interactions.0.conv_tp_weights.layer2
+  - main.model.interactions.0.conv_tp_weights.layer3
+  - main.model.interactions.0.linear
+  - main.model.interactions.1.linear_up
+  - main.model.interactions.1.conv_tp_weights.layer1
+  - main.model.interactions.1.conv_tp_weights.layer2
+  - main.model.interactions.1.conv_tp_weights.layer3
+  - main.model.products.0.linear
+  - main.model.products.1.linear
+  - main.model.readouts.0.linear
+  - main.model.readouts.1.linear_1
+  - main.model.readouts.1.linear_2
+</pre></div>
+</div>
+<p>With the strategy configured, run the fine-tuning loop and save the trained
+PEFT weights. <code class="docutils literal notranslate"><span class="pre">RichReporter</span></code> reports validation metrics during training.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">seed_everything</span><span class="p">(</span><span class="n">SEED</span><span class="p">)</span>
+<span class="n">strategy</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">train_loader</span><span class="p">)</span>
+
+<span class="c1"># Save only optimizer-selected parameters plus buffers; the checkpoint metadata</span>
+<span class="c1"># records how to recreate the LoRA structure on a fresh base model.</span>
+<span class="n">checkpoint_index</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">save_checkpoint</span><span class="p">(</span>
+    <span class="n">PEFT_CHECKPOINT_DIR</span><span class="p">,</span>
+    <span class="n">save_trainable_state_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Saved PEFT checkpoint </span><span class="si">{</span><span class="n">checkpoint_index</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">PEFT_CHECKPOINT_DIR</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">parameter_summary</span> <span class="o">=</span> <span class="n">strategy</span><span class="o">.</span><span class="n">trainable_parameter_summary</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;LoRA adapter parameters: </span><span class="si">{</span><span class="n">parameter_summary</span><span class="p">[</span><span class="s1">&#39;lora&#39;</span><span class="p">][</span><span class="s1">&#39;parameter_count&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="s2">&quot;Extra trainable base parameters: &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">parameter_summary</span><span class="p">[</span><span class="s1">&#39;extra&#39;</span><span class="p">][</span><span class="s1">&#39;parameter_count&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Total trainable parameters: </span><span class="si">{</span><span class="n">parameter_summary</span><span class="p">[</span><span class="s1">&#39;all&#39;</span><span class="p">][</span><span class="s1">&#39;parameter_count&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">del</span> <span class="n">strategy</span><span class="p">,</span> <span class="n">model</span>
+<span class="n">train_loader</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+<span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  LPSC LoRA validation | training | AFTER_VALIDATION | step 35
+
+╭─────── Latest Metrics ───────╮╭────────────── Training Curves ───────────────╮
+│                              ││               validation/loss                │
+│   Metric            Latest   ││                   validation/loss            │
+│  ──────────────────────────  ││          ┌───────────────────────────────┐   │
+│   training/b       1.14406   ││   0.00383┤                               │   │
+│   atches_per                 ││   0.00298┤               ▝               │   │
+│   _s                         ││   0.00170┤                               │   │
+╰──────────────────────────────╯│          └┬───────┬──────┬───────┬──────┬┘   │
+╭────────── Progress ──────────╮│         17.5    26.2   35.0    43.8  52.5    │
+│ rank                       0 ││                        step                  │
+│ event                      1 ││                                              │
+│ step                      35 ││          validation/ForceHuberLoss           │
+│ batch                     35 ││               validation/ForceHuberLoss      │
+│ epoch                      5 ││           ┌──────────────────────────────┐   │
+│ epoch batch                0 ││   0.000383┤                              │   │
+│ steps/s              1.14406 ││   0.000298┤               ▘              │   │
+╰──────────────────────────────╯╰──────────────────────────────────────────────╯
+╭────────────────────────────────── Messages ──────────────────────────────────╮
+│ info         No reporter messages.                                           │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/nvalchemi/training/strategy.py:1640: UserWarning: Saving a checkpoint with save_trainable_state_only=True stores only optimizer-selected parameters and buffers. Restoring this checkpoint requires the saved model spec to reconstruct the exact base model weights.
+  return save_checkpoint(
+Saved PEFT checkpoint 8 to outputs/lpsc_lora/peft_checkpoints
+LoRA adapter parameters: 87,984
+Extra trainable base parameters: 163,860
+Total trainable parameters: 251,844
+</pre></div>
+</div>
+</section>
+<section id="loading-the-trained-lora-checkpoint-for-inference">
+<h2>Loading the trained LoRA checkpoint for inference<a class="headerlink" href="#loading-the-trained-lora-checkpoint-for-inference" title="Link to this heading">#</a></h2>
+<p>The PEFT checkpoint can be attached to a freshly loaded foundation model for
+inference with
+<a class="reference internal" href="../../modules/training/generated/nvalchemi.training.peft.load_peft_checkpoint_into_model.html#nvalchemi.training.peft.load_peft_checkpoint_into_model" title="nvalchemi.training.peft.load_peft_checkpoint_into_model"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_peft_checkpoint_into_model()</span></code></a>. Here, we use a
+held-out validation batch as a simple inference example. For inference after
+training, the LoRA adapters can also be folded directly into the
+strategy-owned model with
+<code class="xref py py-func docutils literal notranslate"><span class="pre">merge_lora_into_model()</span></code>, for example
+<code class="docutils literal notranslate"><span class="pre">merge_lora_into_model(strategy.models[&quot;main&quot;])</span></code>. The code below
+demonstrates the save-and-load workflow instead.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">loaded_model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">MACEWrapper</span></a><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span>
+    <span class="n">MACE_CHECKPOINT</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">MACE_DTYPE</span></a><span class="p">,</span>
+    <span class="n">enable_cueq</span><span class="o">=</span><span class="n">ENABLE_CUEQ</span><span class="p">,</span>
+    <span class="n">compile_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">atomic_energies</span><span class="o">=</span><span class="n">reference_energies</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">loaded_model</span> <span class="o">=</span> <span class="n">load_peft_checkpoint_into_model</span><span class="p">(</span>
+    <span class="n">loaded_model</span><span class="p">,</span>
+    <span class="n">PEFT_CHECKPOINT_DIR</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">loaded_model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}</span>
+<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval" title="torch.nn.Module.eval" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">loaded_model</span><span class="o">.</span><span class="n">eval</span></a><span class="p">()</span>
+<span class="k">for</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter" title="torch.nn.parameter.Parameter" class="sphx-glr-backref-module-torch-nn-parameter sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">parameter</span></a> <span class="ow">in</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">loaded_model</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">():</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter" title="torch.nn.parameter.Parameter" class="sphx-glr-backref-module-torch-nn-parameter sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">parameter</span></a><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">validation_neighbor_hook</span> <span class="o">=</span> <span class="n">NeighborListHook</span><span class="p">(</span>
+    <span class="n">loaded_model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">,</span>
+    <span class="n">stage</span><span class="o">=</span><span class="n">TrainingStage</span><span class="o">.</span><span class="n">BEFORE_FORWARD</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># MACE obtains forces and stress by differentiating the energy, so this</span>
+<span class="c1"># validation pass keeps gradients enabled during the forward call.</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">validation_loader</span><span class="p">))</span>
+<span class="k">with</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.enable_grad.html#torch.enable_grad" title="torch.enable_grad" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">enable_grad</span></a><span class="p">():</span>
+    <span class="n">ctx</span> <span class="o">=</span> <span class="n">HookContext</span><span class="p">(</span><span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">loaded_model</span><span class="p">)</span>
+    <span class="n">validation_neighbor_hook</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">TrainingStage</span><span class="o">.</span><span class="n">BEFORE_FORWARD</span><span class="p">)</span>
+    <span class="n">predictions</span> <span class="o">=</span> <span class="n">default_training_fn</span><span class="p">(</span><span class="n">loaded_model</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">node_counts</span></a> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;predicted_energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+<span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">energy_counts</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">node_counts</span></a><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">node_counts</span><span class="o">.</span><span class="n">shape</span></a><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">([</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;predicted_energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)),</span>
+<span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">target_energy</span></a> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;predicted_energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+<span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">target_forces</span></a> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;predicted_forces&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+<span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">target_stress</span></a> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">stress</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;predicted_stress&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+<span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">validation_mae_energy</span></a> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">(</span><span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;predicted_energy&quot;</span><span class="p">]</span> <span class="o">/</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">energy_counts</span></a> <span class="o">-</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">target_energy</span></a> <span class="o">/</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">energy_counts</span></a><span class="p">)</span>
+    <span class="o">.</span><span class="n">abs</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+<span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">validation_mae_forces</span></a> <span class="o">=</span> <span class="p">(</span><span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;predicted_forces&quot;</span><span class="p">]</span> <span class="o">-</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">target_forces</span></a><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">validation_mae_stress</span></a> <span class="o">=</span> <span class="p">(</span><span class="n">predictions</span><span class="p">[</span><span class="s2">&quot;predicted_stress&quot;</span><span class="p">]</span> <span class="o">-</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">target_stress</span></a><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Validation MAE for energy per atom: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">validation_mae_energy</span></a><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Validation MAE for forces: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">validation_mae_forces</span></a><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Validation MAE for stress: </span><span class="si">{</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">validation_mae_stress</span></a><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="n">validation_loader</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using medium MPA-0 model as default MACE-MP model, to use previous (before 3.10) default model please specify &#39;medium&#39; as model argument
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/torch/jit/_serialization.py:176: DeprecationWarning: `torch.jit.load` is deprecated. Please switch to `torch.export`.
+  warnings.warn(
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/torch/jit/_serialization.py:176: DeprecationWarning: `torch.jit.load` is deprecated. Please switch to `torch.export`.
+  warnings.warn(
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/torch/jit/_serialization.py:176: DeprecationWarning: `torch.jit.load` is deprecated. Please switch to `torch.export`.
+  warnings.warn(
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/.venv/lib/python3.13/site-packages/mace/modules/models.py:85: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.detach().clone() or sourceTensor.detach().clone().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  &quot;atomic_numbers&quot;, torch.tensor(atomic_numbers, dtype=torch.int64)
+Validation MAE for energy per atom: 0.000855
+Validation MAE for forces: 0.030135
+Validation MAE for stress: 0.000401
+</pre></div>
+</div>
+<p>Exact values depend on hardware, dependency versions, and training settings.
+As a rough point of comparison, one reference run on an NVIDIA L4 GPU with
+<code class="docutils literal notranslate"><span class="pre">TRAINING_EPOCHS</span> <span class="pre">=</span> <span class="pre">100</span></code> reached:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Validation MAE for energy per atom: 0.000363
+Validation MAE for forces: 0.013591
+Validation MAE for stress: 0.000173
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 35.930 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-intermediate-08-lora-finetuning-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/02c8abd1a7c87fcba8c1b97a1c3ea78b/08_lora_finetuning.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">08_lora_finetuning.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/939342af315eb6b7d6857997e7457483/08_lora_finetuning.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">08_lora_finetuning.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/bfddd50f16fd4d637ddaa13cc01c58c5/08_lora_finetuning.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">08_lora_finetuning.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="07_rich_training_reporting.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Rich Training Reporting</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="09_generative_samplers.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Generative workflows: model-owning samplers</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#downloading-and-converting-lpsc-600-dataset">Downloading and converting LPSC_600 dataset</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-train-validation-subsets">Creating train/validation subsets</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-batches">Loading batches</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#preparing-the-fine-tuning-model">Preparing the fine-tuning model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checking-supported-lora-layers">Checking supported LoRA layers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuring-and-running-lora-fine-tuning">Configuring and running LoRA fine-tuning</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-the-trained-lora-checkpoint-for-inference">Loading the trained LoRA checkpoint for inference</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/intermediate/08_lora_finetuning.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

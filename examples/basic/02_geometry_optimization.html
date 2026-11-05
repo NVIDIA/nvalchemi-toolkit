@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>FIRE Geometry Optimization with Lennard-Jones Argon &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>FIRE2 Geometry Optimization with Lennard-Jones Argon &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/basic/02_geometry_optimization';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="ASE Integration: Real Molecular Structures in nvalchemi-toolkit" href="03_ase_integration.html" />
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Basic Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -451,7 +462,7 @@ document.write(`
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">Basic Examples</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page">FIRE...</li>
+    <li class="breadcrumb-item active" aria-current="page">FIRE2...</li>
   </ul>
 </nav>
 </div>
@@ -473,15 +484,15 @@ document.write(`
 <p><a class="reference internal" href="#sphx-glr-download-examples-basic-02-geometry-optimization-py"><span class="std std-ref">Go to the end</span></a>
 to download the full example code.</p>
 </div>
-<section class="sphx-glr-example-title" id="fire-geometry-optimization-with-lennard-jones-argon">
-<span id="sphx-glr-examples-basic-02-geometry-optimization-py"></span><h1>FIRE Geometry Optimization with Lennard-Jones Argon<a class="headerlink" href="#fire-geometry-optimization-with-lennard-jones-argon" title="Link to this heading">#</a></h1>
+<section class="sphx-glr-example-title" id="fire2-geometry-optimization-with-lennard-jones-argon">
+<span id="sphx-glr-examples-basic-02-geometry-optimization-py"></span><h1>FIRE2 Geometry Optimization with Lennard-Jones Argon<a class="headerlink" href="#fire2-geometry-optimization-with-lennard-jones-argon" title="Link to this heading">#</a></h1>
 <p>This example demonstrates geometry optimization using the
-<code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE</span></code> algorithm on a batch of argon
+<code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE2</span></code> algorithm on a batch of argon
 clusters described by the Lennard-Jones potential.</p>
-<p><strong>FIRE</strong> (Fast Inertial Relaxation Engine) is a damped molecular-dynamics
+<p><strong>FIRE2</strong> (Fast Inertial Relaxation Engine) is a damped molecular-dynamics
 optimizer.  Rather than computing gradients of a surrogate function, it
 propagates atoms with Newtonian dynamics but periodically damps the velocities
-toward the net force direction.  FIRE often converges faster than steepest descent near minima while remaining
+toward the net force direction.  FIRE2 often converges faster than steepest descent near minima while remaining
 robust far from equilibrium, making it practical for batched relaxation
 campaigns where many systems must be processed in an ML-potential workflow.</p>
 <p>A <a class="reference internal" href="../../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> is registered on the
@@ -501,7 +512,7 @@ and a CUDA side stream so logging does not stall the GPU pipeline.</p>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceHook</span><span class="p">,</span> <span class="n">DynamicsStage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoggingHook</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.lj</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">LennardJonesModelWrapper</span></a>
@@ -518,7 +529,7 @@ neutral atoms.  The standard argon parameters are:</p>
 </ul>
 <p>The equilibrium pair distance is r_min = 2^(1/6) σ ≈ 3.82 Å, where the
 force is zero and the energy is −ε.  Starting atoms near r_min gives a
-stable configuration that FIRE can relax in just a few hundred steps.</p>
+stable configuration that FIRE2 can relax in just a few hundred steps.</p>
 <p><code class="docutils literal notranslate"><span class="pre">max_neighbors=32</span></code> is generous for small clusters; <code class="docutils literal notranslate"><span class="pre">skin=0.5</span></code> means the
 neighbor list is only rebuilt when any atom moves more than 0.25 Å since
 the last rebuild.</p>
@@ -543,7 +554,7 @@ the last rebuild.</p>
 <h2>System builder — simple cubic lattice<a class="headerlink" href="#system-builder-simple-cubic-lattice" title="Link to this heading">#</a></h2>
 <p>Atoms are placed on a simple cubic lattice with spacing <code class="docutils literal notranslate"><span class="pre">a</span></code> (Å).
 A spacing slightly above the LJ equilibrium distance r_min ≈ 2^(1/6)·σ ≈
-3.82 Å gives a stable starting configuration that FIRE can quickly relax.
+3.82 Å gives a stable starting configuration that FIRE2 can quickly relax.
 Atomic number 18 = Argon; masses are auto-filled from the periodic table.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">_R_MIN</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">6</span><span class="p">)</span> <span class="o">*</span> <span class="n">LJ_SIGMA</span>  <span class="c1"># ≈ 3.82 Å</span>
 
@@ -568,7 +579,7 @@ Atomic number 18 = Argon; masses are auto-filled from the periodic table.</p>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">n_per_side</span><span class="o">**</span><span class="mi">3</span>
     <span class="n">positions</span> <span class="o">=</span> <span class="n">_cubic_lattice</span><span class="p">(</span><span class="n">n_per_side</span><span class="p">,</span> <span class="n">spacing</span><span class="p">)</span>
-    <span class="c1"># Add small random perturbations so FIRE has something to relax.</span>
+    <span class="c1"># Add small random perturbations so FIRE2 has something to relax.</span>
     <a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="n">n_per_side</span><span class="p">)</span>
     <span class="n">positions</span> <span class="o">=</span> <span class="n">positions</span> <span class="o">+</span> <span class="mf">0.05</span> <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn_like.html#torch.randn_like" title="torch.randn_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span></a><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
 
@@ -599,12 +610,12 @@ systems are removed from the active batch at the start of the next step, so
 the optimizer does not waste compute on them.  The run terminates early once
 every system has converged or <code class="docutils literal notranslate"><span class="pre">n_steps</span></code> is reached.</p>
 </section>
-<section id="fire-geometry-optimization">
-<h2>FIRE Geometry Optimization<a class="headerlink" href="#fire-geometry-optimization" title="Link to this heading">#</a></h2>
-<p>Build a batch of two 2×2×2 (8-atom) Argon clusters and relax with FIRE.</p>
+<section id="fire2-geometry-optimization">
+<h2>FIRE2 Geometry Optimization<a class="headerlink" href="#fire2-geometry-optimization" title="Link to this heading">#</a></h2>
+<p>Build a batch of two 2×2×2 (8-atom) Argon clusters and relax with FIRE2.</p>
 <p>The NeighborListHook fires at BEFORE_COMPUTE and writes <code class="docutils literal notranslate"><span class="pre">neighbor_matrix</span></code>
 and <code class="docutils literal notranslate"><span class="pre">num_neighbors</span></code> into the batch atoms group before each model evaluation.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=== FIRE Geometry Optimization ===&quot;</span><span class="p">)</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=== FIRE2 Geometry Optimization ===&quot;</span><span class="p">)</span>
 
 <span class="c1"># Two identical lattice sizes; different spacings give different starting energy.</span>
 <span class="n">data_list_opt</span> <span class="o">=</span> <span class="p">[</span>
@@ -614,9 +625,9 @@ and <code class="docutils literal notranslate"><span class="pre">num_neighbors</
 <span class="n">batch_opt</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list_opt</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Batch: </span><span class="si">{</span><span class="n">batch_opt</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2"> systems, </span><span class="si">{</span><span class="n">batch_opt</span><span class="o">.</span><span class="n">num_nodes</span><span class="si">}</span><span class="s2"> atoms total</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
 
-<span class="n">fire_opt</span> <span class="o">=</span> <span class="n">FIRE</span><span class="p">(</span>
+<span class="n">fire_opt</span> <span class="o">=</span> <span class="n">FIRE2</span><span class="p">(</span>
     <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-    <span class="n">dt</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span>
     <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="p">(</span>
         <span class="n">criteria</span><span class="o">=</span><span class="p">[</span>
@@ -641,15 +652,15 @@ and <code class="docutils literal notranslate"><span class="pre">num_neighbors</
     <span class="n">batch_opt</span> <span class="o">=</span> <span class="n">fire_opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch_opt</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span>
-    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Completed </span><span class="si">{</span><span class="n">fire_opt</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> FIRE steps. Log: 02_geometry_optimization_fire_log.csv&quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Completed </span><span class="si">{</span><span class="n">fire_opt</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> FIRE2 steps. Log: 02_geometry_optimization_fire_log.csv&quot;</span>
 <span class="p">)</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>=== FIRE Geometry Optimization ===
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>=== FIRE2 Geometry Optimization ===
 Batch: 2 systems, 16 atoms total
 
 
-Completed 67 FIRE steps. Log: 02_geometry_optimization_fire_log.csv
+Completed 300 FIRE2 steps. Log: 02_geometry_optimization_fire_log.csv
 </pre></div>
 </div>
 </section>
@@ -673,11 +684,11 @@ the total energy should be negative, with each atom contributing roughly
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Relaxed system summary:
-  sys0: E=-0.159023 eV  fmax=0.000989 eV/Å
-  sys1: E=-0.158955 eV  fmax=0.000891 eV/Å
+  sys0: E=-0.159909 eV  fmax=0.003039 eV/Å
+  sys1: E=-0.159371 eV  fmax=0.001968 eV/Å
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.802 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.928 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-basic-02-geometry-optimization-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/50eb206cd4b8fb9c500cd4a3ad3aa2aa/02_geometry_optimization.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">02_geometry_optimization.ipynb</span></code></a></p>
@@ -742,7 +753,7 @@ the total energy should be negative, with each atom contributing roughly
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lj-model-and-argon-parameters">LJ model and argon parameters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#system-builder-simple-cubic-lattice">System builder — simple cubic lattice</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#understanding-convergence">Understanding Convergence</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fire-geometry-optimization">FIRE Geometry Optimization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fire2-geometry-optimization">FIRE2 Geometry Optimization</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#final-energy-per-system">Final energy per system</a></li>
 </ul>
   </nav></div>

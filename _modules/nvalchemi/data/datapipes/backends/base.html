@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.data.datapipes.backends.base &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.data.datapipes.backends.base &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/data/datapipes/backends/base';</script>
-    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -430,9 +430,12 @@ document.write(`
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.level_storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">LevelSchema</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -494,6 +497,8 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span> <span class="o">=</span> <span class="n">pin_memory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">include_index_in_metadata</span> <span class="o">=</span> <span class="n">include_index_in_metadata</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">coordinated_subsampling</span> <span class="o">=</span> <span class="n">coordinated_subsampling</span>
+        <span class="c1"># Refreshable readers increment this only after replacing cached metadata.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata_revision</span> <span class="o">=</span> <span class="mi">0</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_load_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Load raw tensor data for a single sample.</span>
@@ -560,12 +565,13 @@ document.write(`
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">field_levels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Per-field level classification: ``&quot;atom&quot;``, ``&quot;edge&quot;``, or ``&quot;system&quot;``.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the level classification for each explicitly classified field.</span>
 
-<span class="sd">        Override in subclasses that store explicit level metadata (e.g.</span>
-<span class="sd">        Zarr stores).  The default returns an empty dict, which causes</span>
-<span class="sd">        downstream consumers to fall back to</span>
-<span class="sd">        :data:`AtomicData._default_*_keys` for classification.</span>
+<span class="sd">        Values may be the built-in ``&quot;atom&quot;``, ``&quot;edge&quot;``, or ``&quot;system&quot;``</span>
+<span class="sd">        aliases or names registered by :attr:`level_schema`. Override this</span>
+<span class="sd">        property in readers that store explicit level metadata, such as Zarr</span>
+<span class="sd">        readers. The default empty mapping lets downstream consumers fall back</span>
+<span class="sd">        to the standard :class:`~nvalchemi.data.AtomicData` classifications.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -573,6 +579,18 @@ document.write(`
 <span class="sd">            Mapping of field name to level string.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">level_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LevelSchema</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the optional custom-level schema carried by this reader.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        LevelSchema | None</span>
+<span class="sd">            An independent level schema, or ``None`` when the reader has no</span>
+<span class="sd">            explicit level metadata.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_field_names</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return field names by inspecting the first sample.</span>

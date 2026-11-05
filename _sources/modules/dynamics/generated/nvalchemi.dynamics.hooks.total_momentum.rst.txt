@@ -1,0 +1,6 @@
+﻿nvalchemi.dynamics.hooks.total\_momentum
+========================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autofunction:: total_momentum

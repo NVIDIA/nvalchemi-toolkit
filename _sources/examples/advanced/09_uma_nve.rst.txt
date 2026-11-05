@@ -63,8 +63,8 @@ To run this example end-to-end:
 1. Install the optional dependency (its torch pin conflicts with the
    ``mace`` / ``cuXX`` extras, so use a dedicated environment)::
 
-       uv venv .venv-uma && uv sync --extra uma
-       # or, with pip:  pip install 'nvalchemi-toolkit[uma]'
+       UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma-cu12 --no-group build
+       # or, with pip:  pip install 'nvalchemi-toolkit[uma-cu12]'
 
 2. Request access at https://huggingface.co/facebook/UMA (one-time
    approval).
@@ -85,7 +85,7 @@ subsequent runs reuse the cache.  If the checkpoint cannot be loaded
 example prints guidance and skips the trajectory so it stays safe to run
 in a documentation build.
 
-.. GENERATED FROM PYTHON SOURCE LINES 83-113
+.. GENERATED FROM PYTHON SOURCE LINES 83-111
 
 .. code-block:: Python
 
@@ -104,10 +104,8 @@ in a documentation build.
     from ase.data import atomic_masses as ASE_ATOMIC_MASSES
 
     from nvalchemi.data import AtomicData, Batch
+    from nvalchemi.dynamics import KB_EV
     from nvalchemi.dynamics.hooks import EnergyDriftMonitorHook, LoggingHook
-
-    # KB_EV is an internal helper used here only to set MB velocities.
-    from nvalchemi.dynamics.hooks._utils import KB_EV
     from nvalchemi.dynamics.integrators.npt import NPT
     from nvalchemi.dynamics.integrators.nve import NVE
     from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
@@ -120,7 +118,7 @@ in a documentation build.
     _GPA_TO_EV_PER_A3 = 6.241509074e-3
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 114-130
+.. GENERATED FROM PYTHON SOURCE LINES 112-128
 
 Configuration
 -------------
@@ -139,7 +137,7 @@ and ensembles.
   Replicas start from slightly perturbed positions + independent velocities,
   so their trajectories diverge while sharing a single batched forward pass.
 
-.. GENERATED FROM PYTHON SOURCE LINES 130-163
+.. GENERATED FROM PYTHON SOURCE LINES 128-161
 
 .. code-block:: Python
 
@@ -177,7 +175,7 @@ and ensembles.
             TASK = "omat"
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 164-171
+.. GENERATED FROM PYTHON SOURCE LINES 162-169
 
 Build the batch
 ---------------
@@ -187,7 +185,7 @@ reference; the rest get a small position jitter and an independent velocity
 seed, so the batched trajectories diverge. ``Batch.from_data_list`` packs
 them into one graph batch that shares a single model forward each step.
 
-.. GENERATED FROM PYTHON SOURCE LINES 171-270
+.. GENERATED FROM PYTHON SOURCE LINES 169-268
 
 .. code-block:: Python
 
@@ -291,7 +289,7 @@ them into one graph batch that shares a single model forward each step.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 271-278
+.. GENERATED FROM PYTHON SOURCE LINES 269-276
 
 Load the UMA model
 ------------------
@@ -301,7 +299,7 @@ head.  ``inference_settings="turbo"`` routes through fairchem's
 ``torch.compile`` path.  If the checkpoint can't be loaded we exit early with
 the setup hint, so the rest of the script needn't be guarded.
 
-.. GENERATED FROM PYTHON SOURCE LINES 278-298
+.. GENERATED FROM PYTHON SOURCE LINES 276-296
 
 .. code-block:: Python
 
@@ -326,7 +324,7 @@ the setup hint, so the rest of the script needn't be guarded.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 299-310
+.. GENERATED FROM PYTHON SOURCE LINES 297-308
 
 Run with built-in observation + drift-monitor hooks
 ---------------------------------------------------
@@ -340,7 +338,7 @@ Rather than hand-rolling observation, register two built-in hooks:
 No neighbor-list hook is needed (UMA builds its own graph). NPT couples the
 cell to the model's **stress** tensor, exercising the periodic stress path.
 
-.. GENERATED FROM PYTHON SOURCE LINES 310-373
+.. GENERATED FROM PYTHON SOURCE LINES 308-371
 
 .. code-block:: Python
 
@@ -408,12 +406,12 @@ cell to the model's **stress** tensor, exercising the periodic stress path.
     wall_s = time.perf_counter() - t0
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 374-376
+.. GENERATED FROM PYTHON SOURCE LINES 372-374
 
 Summary
 -------
 
-.. GENERATED FROM PYTHON SOURCE LINES 376-393
+.. GENERATED FROM PYTHON SOURCE LINES 374-391
 
 .. code-block:: Python
 

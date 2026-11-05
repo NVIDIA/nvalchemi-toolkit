@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Intermediate Examples &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Intermediate Examples &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,11 +55,11 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/intermediate/index';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Multi-Stage Dynamics Pipelines with FusedStage" href="01_multistage_pipeline.html" />
-    <link rel="prev" title="Canonical (NVT) Molecular Dynamics with Langevin Thermostat" href="../basic/05_nvt_langevin.html" />
+    <link rel="prev" title="L-BFGS Geometry Optimization with Lennard-Jones Argon" href="../basic/06_geometry_optimization_lbfgs.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Intermediate Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -488,7 +499,17 @@ selection.</p>
 <p><strong>07 — Rich Training Reporting</strong>: Live Rich dashboard driven by synthetic
 training losses, validation metrics, progress counters, and learning-rate
 scheduler values.</p>
-<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages."><img alt="" src="../../_images/sphx_glr_01_multistage_pipeline_thumb.png" />
+<p><strong>08 — LoRA Fine-Tuning</strong>: Download the LPSC dataset in EXTXYZ format, convert
+it to in-memory atomic data, create training and validation subsets, fit atomic
+reference energies, and fine-tune <code class="docutils literal notranslate"><span class="pre">medium-mpa-0</span></code> with LoRA adapters.</p>
+<p><strong>09 — Offline Distillation</strong>: Labeling a dataset with a frozen foundation
+teacher, streaming the labeled Zarr store, and distilling energy, force, and
+per-atom energy signals into a student with DistillationStrategy.</p>
+<p><strong>10 — On-Policy Distillation</strong>: Generate-label-train segments driven by the
+student’s own Langevin propagator, teacher labeling of visited frames, and a
+replay buffer mixed with a teacher-labeled reference dataset at a fixed replay
+ratio.</p>
+<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE2) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages."><img alt="" src="../../_images/sphx_glr_01_multistage_pipeline_thumb.png" />
 <p><a class="reference internal" href="01_multistage_pipeline.html"><span class="doc">Multi-Stage Dynamics Pipelines with FusedStage</span></a></p>
   <div class="sphx-glr-thumbnail-title">Multi-Stage Dynamics Pipelines with FusedStage</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Zarr is a chunked, compressed array format designed for large scientific datasets.  nvalchemi uses it as the on-disk representation for trajectories: each dynamics snapshot is serialised into a CSR-style layout (pointer arrays + concatenated fields) so that random-access reads and incremental appends are both efficient."><img alt="" src="../../_images/sphx_glr_02_trajectory_zarr_io_thumb.png" />
@@ -497,7 +518,7 @@ scheduler values.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="A clear test that the NPT barostat is working correctly: start two identical FCC argon crystals at different volumes — one compressed below equilibrium, one expanded above it — and run both under the same NPT conditions (T=10 K, P=0).  The barostat must drive both toward the same zero-pressure equilibrium volume, one by expanding and one by contracting."><img alt="" src="../../_images/sphx_glr_03_npt_barostat_validation_thumb.png" />
 <p><a class="reference internal" href="03_npt_barostat_validation.html"><span class="doc">NPT Barostat Validation: Expansion and Contraction</span></a></p>
   <div class="sphx-glr-thumbnail-title">NPT Barostat Validation: Expansion and Contraction</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput."><img alt="" src="../../_images/sphx_glr_04_inflight_batching_thumb.png" />
+</div><div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE2 → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput."><img alt="" src="../../_images/sphx_glr_04_inflight_batching_thumb.png" />
 <p><a class="reference internal" href="04_inflight_batching.html"><span class="doc">Processing Large Datasets with Inflight Batching</span></a></p>
   <div class="sphx-glr-thumbnail-title">Processing Large Datasets with Inflight Batching</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Numerical instabilities are a fact of life in machine-learning molecular dynamics.  ML potentials are trained on a finite region of configuration space; geometries outside that region can produce enormous forces, NaN gradients, or energy drift that silently corrupts a long trajectory."><img alt="" src="../../_images/sphx_glr_05_safety_and_monitoring_thumb.png" />
@@ -509,6 +530,18 @@ scheduler values.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="This example shows how the hook-native reporting API turns training state into Rich terminal dashboards. It uses synthetic losses instead of a real model so that the moving parts are visible: a workflow emits a TrainContext, a ReportingOrchestrator decides when reporting runs, and RichReporter renders the scalar snapshot."><img alt="" src="../../_images/sphx_glr_07_rich_training_reporting_thumb.png" />
 <p><a class="reference internal" href="07_rich_training_reporting.html"><span class="doc">Rich Training Reporting</span></a></p>
   <div class="sphx-glr-thumbnail-title">Rich Training Reporting</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example illustrates how to fine-tune a model with LoRA adapters using FineTuningStrategy with LoRAConfig. It fine-tunes the MACE medium-mpa-0 foundation model on the li/data/LPSC_600.extxyz subset from the public ev-tlt/MACE_finetuning_supplementary Hugging Face dataset. Dataset attribution: li/data/LPSC_600.extxyz comes from ev-tlt/MACE_finetuning_supplementary; the dataset lists li/data/ as CC BY 4.0, sourced from Zenodo 15686940 / Kim et al. See https://huggingface.co/datasets/ev-tlt/MACE_finetuning_supplementary and https://creativecommons.org/licenses/by/4.0/."><img alt="" src="../../_images/sphx_glr_08_lora_finetuning_thumb.png" />
+<p><a class="reference internal" href="08_lora_finetuning.html"><span class="doc">LoRA Fine-Tuning MACE on LPSC dataset</span></a></p>
+  <div class="sphx-glr-thumbnail-title">LoRA Fine-Tuning MACE on LPSC dataset</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="The generative driver runs any callable that matches the GeneratingFunction protocol: (inputs=None, , num_samples=1, rng=None, *kwargs) -&gt; Batch."><img alt="" src="../../_images/sphx_glr_09_generative_samplers_thumb.png" />
+<p><a class="reference internal" href="09_generative_samplers.html"><span class="doc">Generative workflows: model-owning samplers</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Generative workflows: model-owning samplers</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example distills a small student potential from a frozen foundation teacher, offline: the teacher scores the dataset once, label_dataset writes its signals into a Zarr store as ordinary teacher_* fields, and training then streams that store through the normal reader/dataset/loader path with no teacher forward passes at all."><img alt="" src="../../_images/sphx_glr_09_offline_distillation_thumb.png" />
+<p><a class="reference internal" href="09_offline_distillation.html"><span class="doc">Offline Knowledge Distillation</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Offline Knowledge Distillation</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Offline distillation (see 09_offline_distillation) trains a student on whatever structures the dataset happens to hold. On-policy distillation trains it on the structures the student itself visits. The student&#x27;s own propagator generates frames, the frozen teacher labels them, and the labeled frames accumulate in a replay buffer. Every training batch is a mixture of replay-buffer frames and samples from a reference dataset, a fixed teacher-labeled dataset."><img alt="" src="../../_images/sphx_glr_10_onpolicy_distillation_thumb.png" />
+<p><a class="reference internal" href="10_onpolicy_distillation.html"><span class="doc">On-Policy Knowledge Distillation</span></a></p>
+  <div class="sphx-glr-thumbnail-title">On-Policy Knowledge Distillation</div>
 </div></div><div class="toctree-wrapper compound">
 </div>
 </section>
@@ -524,12 +557,12 @@ scheduler values.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../basic/05_nvt_langevin.html"
+       href="../basic/06_geometry_optimization_lbfgs.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</p>
+        <p class="prev-next-title">L-BFGS Geometry Optimization with Lennard-Jones Argon</p>
       </div>
     </a>
     <a class="right-next"

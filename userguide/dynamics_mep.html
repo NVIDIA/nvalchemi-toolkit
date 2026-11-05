@@ -1,0 +1,1136 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Reaction Paths and NEB &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/dynamics_mep';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Data Sinks" href="dynamics_sinks.html" />
+    <link rel="prev" title="Optimization and Integrators" href="dynamics_simulations.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Reaction Paths and NEB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="dynamics.html" class="nav-link">Dynamics: Optimization and Molecular Dynamics</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Reaction...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="reaction-paths-and-neb">
+<span id="dynamics-mep-guide"></span><h1>Reaction Paths and NEB<a class="headerlink" href="#reaction-paths-and-neb" title="Link to this heading">#</a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">nvalchemi.dynamics.mep</span></code> subpackage provides tools for computing
+minimum-energy paths (MEPs), and therefore transition-state estimates, between
+reactant and product structures.
+Each path is represented as an ordered band of structures called images, and
+many paths can be optimized together: every image is one graph in a <code class="docutils literal notranslate"><span class="pre">Batch</span></code>,
+and the images of a path share a <code class="docutils literal notranslate"><span class="pre">group_layout</span></code> group.</p>
+<p>The subpackage currently provides batched nudged elastic band (NEB) methods.
+There are two ways to run NEB:</p>
+<ul class="simple">
+<li><p>The <strong><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.NEB.html#nvalchemi.dynamics.mep.NEB" title="nvalchemi.dynamics.mep.NEB"><code class="xref py py-class docutils literal notranslate"><span class="pre">NEB</span></code></a> strategy</strong>: a
+declarative, serializable wrapper that builds a correctly-ordered engine
+for you. Use this for standard regular or climbing-image NEB runs.</p></li>
+<li><p><strong>An optimizer (or <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>) with the NEB hooks attached directly</strong>:
+for full control over hook ordering, custom convergence criteria, or
+non-standard staging.</p></li>
+</ul>
+<section id="building-the-initial-path">
+<h2>Building the initial path<a class="headerlink" href="#building-the-initial-path" title="Link to this heading">#</a></h2>
+<p>Whether you use the high-level <code class="docutils literal notranslate"><span class="pre">NEB</span></code> strategy or the low-level <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>
+approach, the input is the same: a <code class="docutils literal notranslate"><span class="pre">Batch</span></code> of images with <code class="docutils literal notranslate"><span class="pre">group_layout</span></code>
+set, one group per path, at least three images each, matching atoms/cell
+across images (see <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.validate_paths.html#nvalchemi.dynamics.mep.validate_paths" title="nvalchemi.dynamics.mep.validate_paths"><code class="xref py py-func docutils literal notranslate"><span class="pre">validate_paths()</span></code></a>). You
+can build this batch yourself, or use the two basic interpolation utilities
+below to go from just reactant/product endpoints:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">IDPPModel</span><span class="p">,</span>
+    <span class="n">NEB</span><span class="p">,</span>
+    <span class="n">interpolate_paths</span><span class="p">,</span>
+    <span class="n">prepare_idpp_targets</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">paths</span> <span class="o">=</span> <span class="n">interpolate_paths</span><span class="p">(</span><span class="n">initial</span><span class="p">,</span> <span class="n">final</span><span class="p">,</span> <span class="n">num_images</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>  <span class="c1"># linear interpolation</span>
+
+<span class="c1"># optionally remove rigid endpoint displacement before interpolation</span>
+<span class="n">paths</span> <span class="o">=</span> <span class="n">interpolate_paths</span><span class="p">(</span>
+    <span class="n">initial</span><span class="p">,</span>
+    <span class="n">final</span><span class="p">,</span>
+    <span class="n">num_images</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span>
+    <span class="n">remove_translation_and_rotation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">fit_mask</span><span class="o">=</span><span class="n">initial</span><span class="o">.</span><span class="n">atomic_numbers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">,</span>  <span class="c1"># fit on corresponding heavy atoms</span>
+<span class="p">)</span>
+<span class="n">paths</span><span class="o">.</span><span class="n">velocities</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">paths</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>  <span class="c1"># dropped by interpolation</span>
+
+<span class="c1"># optional: refine with IDPP before switching to the real model</span>
+<span class="n">idpp_paths</span> <span class="o">=</span> <span class="n">paths</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="n">prepare_idpp_targets</span><span class="p">(</span><span class="n">idpp_paths</span><span class="p">)</span>
+<span class="n">idpp_paths</span> <span class="o">=</span> <span class="n">NEB</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">IDPPModel</span><span class="p">(),</span> <span class="n">fmax</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">idpp_paths</span><span class="p">)</span>
+<span class="n">paths</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">idpp_paths</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>IDPP runs on a separate clone. Copy only its relaxed positions back so model
+NEB starts without IDPP status, neighbor data, or optimizer state.</p>
+<p><code class="docutils literal notranslate"><span class="pre">interpolate_paths</span></code> linearly interpolates positions between index-matched
+endpoint graphs, retaining only structural/model-input fields. Neighbor data,
+outputs, stage counters, and custom fields are dropped, so reattach <code class="docutils literal notranslate"><span class="pre">velocities</span></code>
+and any custom model inputs before optimizing. Set
+<code class="docutils literal notranslate"><span class="pre">remove_translation_and_rotation=True</span></code> to align each final structure to its
+paired initial structure first. For periodic paths, this reconciles
+minimum-image positions and removes translation without rotating the cell. An
+optional Boolean <code class="docutils literal notranslate"><span class="pre">fit_mask</span></code>, following the flattened node layout of <code class="docutils literal notranslate"><span class="pre">initial</span></code>,
+restricts the corresponding atom pairs used to fit each transform without
+restricting which atoms are transformed. Every path must select at least one
+atom; for example, <code class="docutils literal notranslate"><span class="pre">initial.atomic_numbers</span> <span class="pre">&gt;</span> <span class="pre">1</span></code> fits molecular paths using only
+heavy atoms.</p>
+<p>For alignment without interpolation, call
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.align_batch_positions.html#nvalchemi.dynamics.mep.align_batch_positions" title="nvalchemi.dynamics.mep.align_batch_positions"><code class="xref py py-func docutils literal notranslate"><span class="pre">align_batch_positions()</span></code></a> directly on two
+<code class="docutils literal notranslate"><span class="pre">Batch</span></code>es with matching atom order (optionally passing <code class="docutils literal notranslate"><span class="pre">fit_mask</span></code>):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep</span><span class="w"> </span><span class="kn">import</span> <span class="n">align_batch_positions</span>
+
+<span class="n">alignment</span> <span class="o">=</span> <span class="n">align_batch_positions</span><span class="p">(</span>
+    <span class="n">initial</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span>
+    <span class="n">final</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span>
+    <span class="n">initial</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span>
+    <span class="n">initial</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">aligned_final</span> <span class="o">=</span> <span class="n">alignment</span><span class="o">.</span><span class="n">positions</span>
+</pre></div>
+</div>
+<p>The returned <a class="reference internal" href="../modules/dynamics/mep.html#nvalchemi.dynamics.mep.PositionAlignment" title="nvalchemi.dynamics.mep.PositionAlignment"><code class="xref py py-class docutils literal notranslate"><span class="pre">PositionAlignment</span></code></a> also holds
+the rotation and translation for each graph. Pass <code class="docutils literal notranslate"><span class="pre">cell</span></code> and <code class="docutils literal notranslate"><span class="pre">pbc</span></code> for periodic
+graphs; the function then uses minimum-image positions and translation without
+rotating the cell.</p>
+<p>For alignment at each NEB step, implement a custom hook using
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.align_batch_positions.html#nvalchemi.dynamics.mep.align_batch_positions" title="nvalchemi.dynamics.mep.align_batch_positions"><code class="xref py py-func docutils literal notranslate"><span class="pre">align_batch_positions()</span></code></a>.</p>
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.prepare_idpp_targets.html#nvalchemi.dynamics.mep.prepare_idpp_targets" title="nvalchemi.dynamics.mep.prepare_idpp_targets"><code class="xref py py-func docutils literal notranslate"><span class="pre">prepare_idpp_targets()</span></code></a> +
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.IDPPModel.html#nvalchemi.dynamics.mep.IDPPModel" title="nvalchemi.dynamics.mep.IDPPModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">IDPPModel</span></code></a> relax the path against target
+pairwise distances (IDPP,
+<a class="reference external" href="https://doi.org/10.1063/1.4878664">Smidstrup et al. 2014</a>) to avoid poor
+linear-interpolation guesses where atoms pass through each other.
+<code class="docutils literal notranslate"><span class="pre">IDPPModel</span></code> is just a <code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code> like any other, so running it through
+<code class="docutils literal notranslate"><span class="pre">NEB</span></code> (as above) is the normal way to do this refinement. It is a regular
+NEB optimization whose “physical” model happens to be the analytic IDPP
+potential instead of your real MLIP. See
+<code class="docutils literal notranslate"><span class="pre">examples/advanced/11_batched_neb.py</span></code> for the full IDPP-then-MLIP workflow.</p>
+</section>
+<section id="the-high-level-neb-strategy">
+<h2>The high-level <code class="docutils literal notranslate"><span class="pre">NEB</span></code> strategy<a class="headerlink" href="#the-high-level-neb-strategy" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep</span><span class="w"> </span><span class="kn">import</span> <span class="n">NEB</span><span class="p">,</span> <span class="n">ClimbingImageConfig</span>
+
+<span class="n">neb</span> <span class="o">=</span> <span class="n">NEB</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">spring</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>                  <span class="c1"># constant spring force (eV/Å); or a SpringConfig</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;improved_tangent&quot;</span><span class="p">,</span>   <span class="c1"># tangent + spring-force formulation</span>
+    <span class="n">climbing</span><span class="o">=</span><span class="n">ClimbingImageConfig</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after_regular&quot;</span><span class="p">,</span> <span class="n">regular_fmax</span><span class="o">=</span><span class="mf">0.1</span><span class="p">),</span>
+    <span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>                   <span class="c1"># force convergence threshold</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">diagnostics_log_path</span><span class="o">=</span><span class="s2">&quot;neb_diagnostics.csv&quot;</span><span class="p">,</span>  <span class="c1"># per-path fmax/barrier/length CSV</span>
+<span class="p">)</span>
+<span class="n">relaxed_paths</span> <span class="o">=</span> <span class="n">neb</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">paths</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Key fields:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">spring</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.1</span></code></p></td>
+<td><p>Constant spring force, or a custom <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.SpringConfig.html#nvalchemi.dynamics.mep.SpringConfig" title="nvalchemi.dynamics.mep.SpringConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">SpringConfig</span></code></a></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">method</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;improved_tangent&quot;</span></code></p></td>
+<td><p>Named method, custom Warp <code class="docutils literal notranslate"><span class="pre">NEBMethod</span></code>, or callable <code class="docutils literal notranslate"><span class="pre">TorchNEBMethod</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">climbing</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code> runs regular NEB only; set a <code class="docutils literal notranslate"><span class="pre">ClimbingImageConfig</span></code> to enable climbing-image NEB</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">optimizer</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FIRE2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> subclass supporting fixed-cell, group-aware updates, such as <code class="docutils literal notranslate"><span class="pre">FIRE2</span></code> or <code class="docutils literal notranslate"><span class="pre">LBFGS</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">optimizer_kwargs</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{}</span></code></p></td>
+<td><p>Arguments forwarded to each optimizer stage; unspecified parameters use NEB-tuned defaults for <code class="docutils literal notranslate"><span class="pre">FIRE2</span></code>, or the custom optimizer’s own defaults</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fmax</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.05</span></code></p></td>
+<td><p>Force threshold for the final (or only) stage</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">n_steps</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Limit on the total number of optimization steps; <code class="docutils literal notranslate"><span class="pre">None</span></code> for no fixed limit</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">convergence_hook</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Custom <code class="docutils literal notranslate"><span class="pre">ConvergenceHook</span></code> for the final (or only) stage; takes precedence over <code class="docutils literal notranslate"><span class="pre">fmax</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">regular_convergence_hook</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Custom <code class="docutils literal notranslate"><span class="pre">ConvergenceHook</span></code> for the regular stage of an <code class="docutils literal notranslate"><span class="pre">&quot;after_regular&quot;</span></code> run; takes precedence over <code class="docutils literal notranslate"><span class="pre">regular_fmax</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">endpoint_mode</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code> keeps endpoints static; <code class="docutils literal notranslate"><span class="pre">&quot;relaxed&quot;</span></code> lets them move</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fixed_atom_indices</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Per-path, image-local atom indices held fixed in every image</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">diagnostics_log_path</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>CSV path for per-path <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, <code class="docutils literal notranslate"><span class="pre">energy_barrier</span></code>, <code class="docutils literal notranslate"><span class="pre">highest_interior_image_idx</span></code>, <code class="docutils literal notranslate"><span class="pre">path_length</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">diagnostics_frequency</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+<td><p>Step frequency for computing and logging diagnostics</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">neighbor_hooks</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Override <code class="docutils literal notranslate"><span class="pre">model.make_neighbor_hooks()</span></code> with a custom neighbor-list hook list</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">compile</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Compile the fused NEB step with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">compile_kwargs</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{}</span></code></p></td>
+<td><p>Keyword arguments forwarded to <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> when compilation is enabled</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">optimizer</span></code> is fixed after construction. To select a different optimizer class,
+construct a new <code class="docutils literal notranslate"><span class="pre">NEB</span></code> strategy. <code class="docutils literal notranslate"><span class="pre">optimizer_kwargs</span></code> remains an editable dictionary.</p>
+<p><code class="docutils literal notranslate"><span class="pre">optimizer_kwargs</span></code> is forwarded to every internal optimizer stage, for
+settings such as <code class="docutils literal notranslate"><span class="pre">dt</span></code> or <code class="docutils literal notranslate"><span class="pre">maxstep</span></code>. <code class="docutils literal notranslate"><span class="pre">NEB</span></code> sets <code class="docutils literal notranslate"><span class="pre">model</span></code>, <code class="docutils literal notranslate"><span class="pre">hooks</span></code>, <code class="docutils literal notranslate"><span class="pre">by_group</span></code>,
+<code class="docutils literal notranslate"><span class="pre">convergence_hook</span></code>, and <code class="docutils literal notranslate"><span class="pre">n_steps</span></code> itself for each stage, so passing any of
+them in <code class="docutils literal notranslate"><span class="pre">optimizer_kwargs</span></code> raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>. Use the corresponding <code class="docutils literal notranslate"><span class="pre">NEB</span></code>
+fields instead. NEB rejects a non-<code class="docutils literal notranslate"><span class="pre">None</span></code> <code class="docutils literal notranslate"><span class="pre">engine</span></code> or nonempty <code class="docutils literal notranslate"><span class="pre">engine_kwargs</span></code>.
+Configure its optimizer stages through <code class="docutils literal notranslate"><span class="pre">optimizer</span></code> and <code class="docutils literal notranslate"><span class="pre">optimizer_kwargs</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">optimizer</span></code> accepts an optimizer class derived from
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a> that supports fixed-cell,
+group-aware updates through <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>.
+Each path is one update unit, and <code class="docutils literal notranslate"><span class="pre">pre_update</span></code> / <code class="docutils literal notranslate"><span class="pre">post_update</span></code> consume the
+projected NEB forces in <code class="docutils literal notranslate"><span class="pre">batch.forces</span></code>. Regular and climbing stages use
+separate optimizer instances and history.</p>
+<p>FIRE2 is the default. Its NEB-tuned parameters are applied to
+<code class="docutils literal notranslate"><span class="pre">optimizer_kwargs</span></code> during validation, with explicit values taking precedence.
+Other optimizer classes use their own defaults.
+Inspect <code class="docutils literal notranslate"><span class="pre">neb.optimizer_kwargs</span></code> to see the arguments forwarded to the optimizer.</p>
+<p><code class="docutils literal notranslate"><span class="pre">NEBForceHook</span></code> always publishes <code class="docutils literal notranslate"><span class="pre">neb_fixed_node_mask</span></code>, a Boolean node mask
+marking fixed endpoints and any <code class="docutils literal notranslate"><span class="pre">fixed_atom_indices</span></code>. It zeroes the physical
+and effective forces at those nodes. When <code class="docutils literal notranslate"><span class="pre">endpoint_mode=&quot;fixed&quot;</span></code> or a nonempty
+<code class="docutils literal notranslate"><span class="pre">fixed_atom_indices</span></code> mapping is provided, <code class="docutils literal notranslate"><span class="pre">NEB</span></code> also appends a
+<a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a> to clear velocities and
+restore positions across optimizer stages.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ClimbingImageConfig.mode=&quot;after_regular&quot;</span></code> runs regular NEB to
+<code class="docutils literal notranslate"><span class="pre">regular_fmax</span></code> (or <code class="docutils literal notranslate"><span class="pre">fmax</span></code> if unset) before promoting the highest-energy
+interior image to a climbing image and continuing to <code class="docutils literal notranslate"><span class="pre">fmax</span></code>;
+<code class="docutils literal notranslate"><span class="pre">mode=&quot;immediate&quot;</span></code> climbs from the first step.
+<code class="docutils literal notranslate"><span class="pre">selection=&quot;fixed&quot;</span></code> locks in the initial climbing image;
+<code class="docutils literal notranslate"><span class="pre">selection=&quot;dynamic&quot;</span></code> reselects it every evaluation.
+<code class="docutils literal notranslate"><span class="pre">max_regular_steps</span></code> and <code class="docutils literal notranslate"><span class="pre">max_climbing_steps</span></code> optionally limit each path’s steps
+in the respective stage. A path advances when its stage limit is reached even
+if it has not met the force threshold. <code class="docutils literal notranslate"><span class="pre">max_regular_steps</span></code> is only valid with
+<code class="docutils literal notranslate"><span class="pre">mode=&quot;after_regular&quot;</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">neb.run(paths)</span></code> builds a fresh engine via <code class="docutils literal notranslate"><span class="pre">neb.build_engine()</span></code> and calls
+<code class="docutils literal notranslate"><span class="pre">engine.run(paths)</span></code>. <code class="docutils literal notranslate"><span class="pre">NEB</span></code> is a Pydantic model, so it also serializes with
+<code class="docutils literal notranslate"><span class="pre">to_spec_dict()</span></code> / <code class="docutils literal notranslate"><span class="pre">from_spec_dict()</span></code> alongside other
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DynamicsStrategy.html#nvalchemi.dynamics.DynamicsStrategy" title="nvalchemi.dynamics.strategy.DynamicsStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStrategy</span></code></a> subclasses used for
+training and fine-tuning specs.</p>
+<p>NEB appends <code class="docutils literal notranslate"><span class="pre">build_hooks()</span></code> after its neighbor and path hooks. Subclasses can override
+<code class="docutils literal notranslate"><span class="pre">build_hooks()</span></code> to customize these additional hooks without replacing NEB’s
+engine construction.</p>
+<section id="neb-methods">
+<h3>NEB methods<a class="headerlink" href="#neb-methods" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">method=&quot;improved_tangent&quot;</span></code> (the default and only named method)
+implements the Henkelman–Jónsson improved tangent
+(<a class="reference external" href="https://doi.org/10.1063/1.1323224"><em>J. Chem. Phys.</em> 113, 9978 (2000)</a>).
+It corresponds to the default <code class="docutils literal notranslate"><span class="pre">NEBMethod()</span></code> without overrides.
+For an interior image with neighbor energies <span class="math notranslate nohighlight">\(E^-, E, E^+\)</span> and
+displacement vectors <span class="math notranslate nohighlight">\(\mathbf{d}^\pm\)</span> to the adjacent images:</p>
+<ul>
+<li><p><strong>Tangent</strong>: <span class="math notranslate nohighlight">\(\vec{\tau} = w^+\mathbf{d}^+ + w^-\mathbf{d}^-\)</span>
+(then normalized), where the weights <span class="math notranslate nohighlight">\(w^\pm\)</span> favor the higher-energy
+neighbor on monotonic sections of the path and blend both links at an
+extremum.</p></li>
+<li><p><strong>Effective (regular) force</strong>:</p>
+<div class="math notranslate nohighlight">
+\[
+  \mathbf{F}^{\mathrm{NEB}} = \mathbf{F}
+  - (\mathbf{F}\cdot\hat{\tau})\hat{\tau}
+  {}+ F^{\mathrm{s},\parallel}\hat{\tau}
+  \]</div>
+<p>That is the physical force projected perpendicular to the tangent, plus the
+parallel spring contribution</p>
+<div class="math notranslate nohighlight">
+\[
+  F^{\mathrm{s},\parallel}
+  = k^+\lVert\mathbf{d}^+\rVert - k^-\lVert\mathbf{d}^-\rVert.
+  \]</div>
+</li>
+<li><p><strong>Climbing-image force</strong>:</p>
+<div class="math notranslate nohighlight">
+\[
+  \mathbf{F}^{\mathrm{climb}} = \mathbf{F}
+  - 2(\mathbf{F}\cdot\hat{\tau})\hat{\tau}
+  \]</div>
+<p>The spring force is dropped and the parallel physical-force component is
+reversed, driving the image uphill along the path toward the saddle point.</p>
+</li>
+</ul>
+<p>To use a different formulation, pass a custom
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.NEBMethod.html#nvalchemi.dynamics.mep.NEBMethod" title="nvalchemi.dynamics.mep.NEBMethod"><code class="xref py py-class docutils literal notranslate"><span class="pre">NEBMethod</span></code></a> to <code class="docutils literal notranslate"><span class="pre">method</span></code>. It bundles three
+<code class="docutils literal notranslate"><span class="pre">warp.func</span></code>-decorated device functions, any of which can be overridden
+independently (unset ones fall back to the improved-tangent equations above):</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Inputs available</p></th>
+<th class="head"><p>Returns</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tangent_weights_fn</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">energy_prev</span></code>, <code class="docutils literal notranslate"><span class="pre">energy_curr</span></code>, <code class="docutils literal notranslate"><span class="pre">energy_next</span></code> (scalars)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(weight_plus,</span> <span class="pre">weight_minus)</span></code> link weights for the tangent</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">effective_force_fn</span></code></p></td>
+<td><p>One of the two ordered signatures below</p></td>
+<td><p>effective force vector for a regular (non-climbing) interior image</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">climbing_force_fn</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">physical_force</span></code>, <code class="docutils literal notranslate"><span class="pre">tangent</span></code>, <code class="docutils literal notranslate"><span class="pre">force_dot_tangent</span></code></p></td>
+<td><p>effective force vector for the climbing image</p></td>
+</tr>
+</tbody>
+</table>
+<p>The <code class="docutils literal notranslate"><span class="pre">effective_force_fn</span></code> parameter names and order must match one of these
+signatures exactly; they select the corresponding Warp kernel:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Stored tangent:
+(physical_force, tangent, force_dot_tangent, k_plus, k_minus,
+ norm_d_plus, norm_d_minus, energy_prev, energy_curr, energy_next,
+ path_energy_ref, path_energy_max)
+
+Gram statistics:
+(physical_force, tangent, d_plus, d_minus, force_dot_tangent,
+ dplus_dot_tangent, dminus_dot_tangent, norm_d_plus, norm_d_minus,
+ dplus_dot_dminus, force_dot_dplus, force_dot_dminus, force_squared_norm,
+ k_plus, k_minus, energy_prev, energy_curr, energy_next,
+ path_energy_ref, path_energy_max)
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">physical_force</span></code>, <code class="docutils literal notranslate"><span class="pre">tangent</span></code>, <code class="docutils literal notranslate"><span class="pre">d_plus</span></code>, and <code class="docutils literal notranslate"><span class="pre">d_minus</span></code> are vectors for the
+current atom. The dot products and link norms are scalars reduced over the
+current image; <code class="docutils literal notranslate"><span class="pre">k_plus</span></code> and <code class="docutils literal notranslate"><span class="pre">k_minus</span></code> are the adjacent link spring constants.
+<code class="docutils literal notranslate"><span class="pre">energy_prev</span></code>, <code class="docutils literal notranslate"><span class="pre">energy_curr</span></code>, and <code class="docutils literal notranslate"><span class="pre">energy_next</span></code> are image energies, while
+<code class="docutils literal notranslate"><span class="pre">path_energy_ref</span></code> and <code class="docutils literal notranslate"><span class="pre">path_energy_max</span></code> are path-wide energy statistics.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">warp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">wp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep</span><span class="w"> </span><span class="kn">import</span> <span class="n">NEB</span><span class="p">,</span> <span class="n">NEBMethod</span>
+
+<span class="nd">@wp</span><span class="o">.</span><span class="n">func</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">central_tangent_weights</span><span class="p">(</span><span class="n">energy_prev</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">energy_curr</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">energy_next</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span>  <span class="c1"># plain central-difference tangent instead of improved-tangent weighting</span>
+
+<span class="n">neb</span> <span class="o">=</span> <span class="n">NEB</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="n">NEBMethod</span><span class="p">(</span><span class="n">tangent_weights_fn</span><span class="o">=</span><span class="n">central_tangent_weights</span><span class="p">),</span> <span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Use the Gram-statistics signature when the force needs more than the tangent
+projection, for example the link vectors <code class="docutils literal notranslate"><span class="pre">d_plus</span></code> and <code class="docutils literal notranslate"><span class="pre">d_minus</span></code> and their dot
+products. The doubly nudged elastic band (DNEB,
+<a class="reference external" href="https://doi.org/10.1063/1.1636455">Trygubenko &amp; Wales 2004</a>) uses them to add
+a perpendicular spring correction. <code class="docutils literal notranslate"><span class="pre">examples/advanced/11_batched_neb.py</span></code> uses
+the improved-tangent method by default; set <code class="docutils literal notranslate"><span class="pre">method</span> <span class="pre">=</span> <span class="pre">&quot;dneb&quot;</span></code> there to run the
+<code class="docutils literal notranslate"><span class="pre">dneb_effective_force</span></code> equation from <code class="docutils literal notranslate"><span class="pre">_dneb_method.py</span></code>.</p>
+<p>Custom <code class="docutils literal notranslate"><span class="pre">NEBMethod</span></code> objects round-trip through <code class="docutils literal notranslate"><span class="pre">to_spec_dict()</span></code> and
+<code class="docutils literal notranslate"><span class="pre">from_spec_dict()</span></code>. The spec stores a stable method key with the kernel kind and
+dotted import paths for all three Warp equations. Restoring the spec imports
+those equations and rebuilds the <code class="docutils literal notranslate"><span class="pre">NEBMethod</span></code>; each equation must therefore be
+defined at module level in an importable module. The same key selects the kernel
+for compilation and CUDA graph capture.</p>
+<p>If you prefer to implement an NEB method entirely in PyTorch, pass a callable
+matching <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.TorchNEBMethod.html#nvalchemi.dynamics.mep.TorchNEBMethod" title="nvalchemi.dynamics.mep.TorchNEBMethod"><code class="xref py py-class docutils literal notranslate"><span class="pre">TorchNEBMethod</span></code></a> as <code class="docutils literal notranslate"><span class="pre">method</span></code>. It
+receives the current batch, link spring constants, path energy statistics, and
+prepared minimum-image geometry. It returns effective forces for every atom
+and one minimum-image length per forward image link. Importable classes whose
+constructor arguments are stored as attributes also round-trip through
+<code class="docutils literal notranslate"><span class="pre">to_spec_dict()</span></code> and <code class="docutils literal notranslate"><span class="pre">from_spec_dict()</span></code>. Other callables, such as lambdas or
+locally defined functions, still work with <code class="docutils literal notranslate"><span class="pre">NEB.run()</span></code>, but <code class="docutils literal notranslate"><span class="pre">to_spec_dict()</span></code>
+raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> for them.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep</span><span class="w"> </span><span class="kn">import</span> <span class="n">NEB</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep._geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">minimum_image_displacement</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyTorchNEBMethod</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span>  <span class="c1"># stored as an attribute, so the spec round-trips</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">spring_constants</span><span class="p">,</span> <span class="n">path_energy_ref</span><span class="p">,</span> <span class="n">path_energy_max</span><span class="p">,</span> <span class="n">mic</span><span class="p">):</span>
+        <span class="n">forces</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">physical_forces</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>  <span class="c1"># don&#39;t modify the batch in place</span>
+        <span class="c1"># ... apply your equations to regular, climbing, and endpoint images,</span>
+        <span class="c1"># using batch.positions, batch.energy, and batch.force_mode</span>
+        <span class="c1"># use minimum_image_displacement(..., prepared=mic) for link vectors</span>
+        <span class="n">link_lengths</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># one minimum-image length per forward link</span>
+        <span class="k">return</span> <span class="n">forces</span><span class="p">,</span> <span class="n">link_lengths</span>
+
+<span class="n">neb</span> <span class="o">=</span> <span class="n">NEB</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="n">MyTorchNEBMethod</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span> <span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">spring</span></code> follows the same pattern: pass a plain <code class="docutils literal notranslate"><span class="pre">float</span></code> for a constant spring
+constant, or a custom <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.SpringConfig.html#nvalchemi.dynamics.mep.SpringConfig" title="nvalchemi.dynamics.mep.SpringConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">SpringConfig</span></code></a>
+(<code class="docutils literal notranslate"><span class="pre">resolve(context)</span></code> returning one spring constant per link) for e.g.
+energy-dependent springs. Custom spring policies round-trip through
+<code class="docutils literal notranslate"><span class="pre">NEB.to_spec_dict()</span></code> when their class is importable and their constructor
+arguments are stored as attributes (or they provide a <code class="docutils literal notranslate"><span class="pre">checkpoint_spec()</span></code>
+constructor spec). Other custom spring policies can be used at runtime.
+Numeric springs and <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.ConstantSpringConfig.html#nvalchemi.dynamics.mep.ConstantSpringConfig" title="nvalchemi.dynamics.mep.ConstantSpringConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConstantSpringConfig</span></code></a>
+retain their existing spec representation.</p>
+</section>
+</section>
+<section id="building-neb-manually-with-hooks">
+<h2>Building NEB manually with hooks<a class="headerlink" href="#building-neb-manually-with-hooks" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">NEB</span></code> is a factory around a fixed hook order. Assembling it by hand gives you
+control over convergence criteria, staging, or optimizer choice beyond what
+the strategy exposes. For regular (non-climbing) NEB there is only one stage,
+so any <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a> subclass that
+accepts <code class="docutils literal notranslate"><span class="pre">by_group=True</span></code> and a <code class="docutils literal notranslate"><span class="pre">hooks</span></code> list is enough on its own; no
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a> wrapper is required. <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> is
+only needed once you have more than one stage, e.g. climbing-image NEB (see
+below). The example uses <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FIRE2.html#nvalchemi.dynamics.FIRE2" title="nvalchemi.dynamics.optimizers.fire2.FIRE2"><code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE2</span></code></a>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceHook</span><span class="p">,</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">FreezeAtomsHook</span><span class="p">,</span> <span class="n">LoggingHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.optimizers.fire2</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.mep.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ClimbingImageSelectionHook</span><span class="p">,</span>
+    <span class="n">NEBForceHook</span><span class="p">,</span>
+    <span class="n">PathDiagnosticsHook</span><span class="p">,</span>
+    <span class="n">PathEnergyStatsHook</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">energy_stats</span> <span class="o">=</span> <span class="n">PathEnergyStatsHook</span><span class="p">()</span>
+<span class="n">force_hook</span> <span class="o">=</span> <span class="n">NEBForceHook</span><span class="p">(</span>
+    <span class="n">energy_stats_hook</span><span class="o">=</span><span class="n">energy_stats</span><span class="p">,</span>
+    <span class="n">spring</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;improved_tangent&quot;</span><span class="p">,</span>
+    <span class="n">endpoint_mode</span><span class="o">=</span><span class="s2">&quot;fixed&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">freeze</span> <span class="o">=</span> <span class="n">FreezeAtomsHook</span><span class="p">(</span><span class="n">mask_key</span><span class="o">=</span><span class="s2">&quot;neb_fixed_node_mask&quot;</span><span class="p">)</span>
+<span class="n">diagnostics</span> <span class="o">=</span> <span class="n">PathDiagnosticsHook</span><span class="p">(</span><span class="n">energy_stats_hook</span><span class="o">=</span><span class="n">energy_stats</span><span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">LoggingHook</span><span class="p">(</span>
+    <span class="n">stage</span><span class="o">=</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span>
+    <span class="n">log_path</span><span class="o">=</span><span class="s2">&quot;neb_diagnostics.csv&quot;</span><span class="p">,</span>
+    <span class="n">by_group</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">custom_scalars</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;fmax&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">_ctx</span><span class="p">:</span> <span class="n">diagnostics</span><span class="o">.</span><span class="n">get_diagnostics</span><span class="p">()</span><span class="o">.</span><span class="n">fmax</span><span class="p">,</span>
+        <span class="s2">&quot;energy_barrier&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">_ctx</span><span class="p">:</span> <span class="n">diagnostics</span><span class="o">.</span><span class="n">get_diagnostics</span><span class="p">()</span><span class="o">.</span><span class="n">energy_barrier</span><span class="p">,</span>
+        <span class="s2">&quot;path_length&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">_ctx</span><span class="p">:</span> <span class="n">diagnostics</span><span class="o">.</span><span class="n">get_diagnostics</span><span class="p">()</span><span class="o">.</span><span class="n">path_length</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">FIRE2</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">by_group</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">by_group</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
+        <span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">make_neighbor_hooks</span><span class="p">(),</span>
+        <span class="n">energy_stats</span><span class="p">,</span>
+        <span class="n">force_hook</span><span class="p">,</span>
+        <span class="n">freeze</span><span class="p">,</span>
+        <span class="n">diagnostics</span><span class="p">,</span>
+        <span class="n">logger</span><span class="p">,</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+<span class="n">relaxed_paths</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">paths</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ClimbingImageSelectionHook</span></code>, <code class="docutils literal notranslate"><span class="pre">NEBForceHook</span></code>, and <code class="docutils literal notranslate"><span class="pre">PathDiagnosticsHook</span></code> must
+receive the same <code class="docutils literal notranslate"><span class="pre">PathEnergyStatsHook</span></code> instance registered in the hooks list.
+That hook refreshes its statistics first at <code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code>, before any of the
+three consumers reads them. <code class="docutils literal notranslate"><span class="pre">NEB.build_engine()</span></code> wires this shared instance and
+order automatically.</p>
+<p>The NEB path hooks, in the order they must be registered:</p>
+<ol class="arabic simple">
+<li><p><strong><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook.html#nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook" title="nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">PathEnergyStatsHook</span></code></a></strong>:
+always first. Computes per-path endpoint reference energy and the
+highest-energy interior image; the selection, force, and diagnostics hooks
+read its results via <code class="docutils literal notranslate"><span class="pre">get_stats()</span></code>.</p></li>
+<li><p><strong><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook.html#nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook" title="nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ClimbingImageSelectionHook</span></code></a></strong>
+(optional): flips the selected image’s <code class="docutils literal notranslate"><span class="pre">force_mode</span></code> to climbing before
+<code class="docutils literal notranslate"><span class="pre">NEBForceHook</span></code> runs. Needed only for climbing-image NEB.</p></li>
+<li><p><strong><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.NEBForceHook.html#nvalchemi.dynamics.mep.hooks.NEBForceHook" title="nvalchemi.dynamics.mep.hooks.NEBForceHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NEBForceHook</span></code></a></strong>: the
+core hook. It computes the local tangent and replaces <code class="docutils literal notranslate"><span class="pre">batch.forces</span></code> with the
+spring + perpendicular-physical-force NEB update, saving the raw model
+force to <code class="docutils literal notranslate"><span class="pre">batch.physical_forces</span></code>. When <code class="docutils literal notranslate"><span class="pre">endpoint_mode=&quot;fixed&quot;</span></code> or
+<code class="docutils literal notranslate"><span class="pre">fixed_atom_indices</span></code> is set, it populates <code class="docutils literal notranslate"><span class="pre">neb_fixed_node_mask</span></code> (present
+on every batch) with the constrained atoms and zeroes their forces. The mask
+alone does not keep their positions fixed during optimizer updates.</p></li>
+<li><p><strong><a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a></strong> (optional, needed
+whenever step 3 produces a fixed-atom mask): a general-purpose,
+non-NEB-specific hook (<code class="docutils literal notranslate"><span class="pre">nvalchemi.dynamics.hooks</span></code>) that zeroes forces and
+velocities and restores positions for masked atoms across every integrator
+stage. Pass <code class="docutils literal notranslate"><span class="pre">mask_key=&quot;neb_fixed_node_mask&quot;</span></code> to use the mask from
+<code class="docutils literal notranslate"><span class="pre">NEBForceHook</span></code> instead of the default <code class="docutils literal notranslate"><span class="pre">atom_categories</span></code>-based freezing.</p></li>
+<li><p><strong><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.hooks.PathDiagnosticsHook.html#nvalchemi.dynamics.mep.hooks.PathDiagnosticsHook" title="nvalchemi.dynamics.mep.hooks.PathDiagnosticsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">PathDiagnosticsHook</span></code></a></strong>
+(optional): exposes per-path <code class="docutils literal notranslate"><span class="pre">fmax</span></code>, <code class="docutils literal notranslate"><span class="pre">energy_barrier</span></code>,
+<code class="docutils literal notranslate"><span class="pre">highest_interior_image_idx</span></code>, and <code class="docutils literal notranslate"><span class="pre">path_length</span></code> via <code class="docutils literal notranslate"><span class="pre">get_diagnostics()</span></code>.
+Accepts a <code class="docutils literal notranslate"><span class="pre">frequency</span></code> to throttle recomputation on long runs.</p></li>
+<li><p><strong><a class="reference internal" href="../modules/dynamics/generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a></strong> (optional, pairs with
+step 5): reads <code class="docutils literal notranslate"><span class="pre">diagnostics.get_diagnostics()</span></code> through <code class="docutils literal notranslate"><span class="pre">custom_scalars</span></code>
+callbacks and writes per-path rows to CSV. This is how <code class="docutils literal notranslate"><span class="pre">NEB</span></code> wires
+<code class="docutils literal notranslate"><span class="pre">diagnostics_log_path</span></code>: both this hook and <code class="docutils literal notranslate"><span class="pre">PathDiagnosticsHook</span></code> should
+share the same <code class="docutils literal notranslate"><span class="pre">frequency</span></code>/<code class="docutils literal notranslate"><span class="pre">diagnostics_frequency</span></code> so the CSV rows line up
+with the diagnostics they log.</p></li>
+</ol>
+<p>The manual single-stage example logs at <code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code>. The <code class="docutils literal notranslate"><span class="pre">NEB</span></code> strategy
+logs at <code class="docutils literal notranslate"><span class="pre">ON_GRADUATE</span></code> so scheduled rows see status after stage-budget
+transitions. Both retain the configured frequency. Finishing between logging
+intervals does not produce an extra row.</p>
+<p>All of these hooks require the enclosing workflow to be constructed with
+<code class="docutils literal notranslate"><span class="pre">by_group=True</span></code> (each <code class="docutils literal notranslate"><span class="pre">group_layout</span></code> group is one path) and raise
+<code class="docutils literal notranslate"><span class="pre">ValueError</span></code> at registration otherwise. Convergence uses the standard
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.ConvergenceHook.html#nvalchemi.dynamics.ConvergenceHook" title="nvalchemi.dynamics.ConvergenceHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvergenceHook</span></code></a>, evaluated per path with
+<code class="docutils literal notranslate"><span class="pre">by_group=True</span></code>; there is no NEB-specific convergence criterion.</p>
+<p>Because you assemble the <code class="docutils literal notranslate"><span class="pre">hooks</span></code> list yourself, you are not limited to the
+built-in hooks above: any of them can be replaced with a custom
+implementation (e.g. a different <code class="docutils literal notranslate"><span class="pre">PathDiagnosticsHook</span></code>-like hook that logs
+extra scalars, or your own freezing hook instead of <code class="docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code>), and
+you can insert additional hooks anywhere in the stack, as long as you
+preserve the dependency order (<code class="docutils literal notranslate"><span class="pre">PathEnergyStatsHook</span></code> before anything that
+calls <code class="docutils literal notranslate"><span class="pre">get_stats()</span></code>, <code class="docutils literal notranslate"><span class="pre">NEBForceHook</span></code> before anything that reads
+<code class="docutils literal notranslate"><span class="pre">neb_fixed_node_mask</span></code> or the NEB force decomposition). See the
+<a class="reference internal" href="hooks.html#hooks-guide"><span class="std std-ref">Hooks guide</span></a> for the hook protocol used to write one.</p>
+<p>Climbing-image NEB needs two stages (regular, then climbing) and is
+therefore built on <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>, not a single optimizer. Rather than
+duplicating that construction here, read <code class="docutils literal notranslate"><span class="pre">NEB.build_engine()</span></code> in
+<code class="docutils literal notranslate"><span class="pre">nvalchemi/dynamics/mep/neb.py</span></code>. It is the reference
+implementation for a two-substage, <code class="docutils literal notranslate"><span class="pre">status</span></code>-gated <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> with
+<code class="docutils literal notranslate"><span class="pre">ClimbingImageSelectionHook(status_code=...)</span></code> scoped to the climbing stage.
+With <code class="docutils literal notranslate"><span class="pre">mode=&quot;after_regular&quot;</span></code> it creates the climbing optimizer with
+<code class="docutils literal notranslate"><span class="pre">reprime_on_entry=True</span></code>, so a path entering
+the climbing stage skips one optimizer update while the shared model evaluation
+and the climbing sub-stage’s <code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code> hooks refresh its forces. If you
+build the engine yourself, register the path hooks on the <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> and
+scope stage-specific ones with <code class="docutils literal notranslate"><span class="pre">status_code</span></code>, as <code class="docutils literal notranslate"><span class="pre">NEB.build_engine()</span></code> does. At
+<code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code>, sub-stage hooks run before fused-stage hooks, so a sub-stage
+hook would read stale <code class="docutils literal notranslate"><span class="pre">PathEnergyStatsHook</span></code> results.</p>
+</section>
+<section id="periodic-paths">
+<h2>Periodic paths<a class="headerlink" href="#periodic-paths" title="Link to this heading">#</a></h2>
+<p>Interpolation, IDPP, and NEB automatically apply the minimum-image convention
+(MIC): each displacement uses the nearest periodic copy of an atom. This works
+with orthogonal or skewed cells and with periodicity in only some directions.
+Each <code class="docutils literal notranslate"><span class="pre">pbc</span></code> entry enables the corresponding row of <code class="docutils literal notranslate"><span class="pre">cell</span></code> (a lattice vector),
+which need not align with the Cartesian x, y, or z axis. The enabled cell
+vectors must be linearly independent. Nonperiodic paths are left unchanged.</p>
+<p>Wrapped endpoints do not record whether a path is intended to cross one or more
+whole cells. For such winding paths, provide appropriately unwrapped images.</p>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Example</strong>: <code class="docutils literal notranslate"><span class="pre">examples/advanced/11_batched_neb.py</span></code> runs a full
+climbing-image NEB workflow (IDPP initialization, AIMNet2-rxn, diagnostics
+CSV, and a comparison against DFT reference paths) on eight batched
+reactions.</p></li>
+<li><p><strong>Optimization</strong>: <a class="reference internal" href="dynamics_simulations.html"><span class="doc std std-doc">Optimization and Integrators</span></a>
+covers the <code class="docutils literal notranslate"><span class="pre">FIRE2</span></code> optimizer driving each NEB image.</p></li>
+<li><p><strong>Hooks</strong>: The <a class="reference internal" href="hooks.html#hooks-guide"><span class="std std-ref">Hooks guide</span></a> covers the hook protocol and
+<code class="docutils literal notranslate"><span class="pre">ConvergenceHook</span></code>.</p></li>
+<li><p><strong>Overview</strong>: The <a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics overview</span></a> describes the shared
+execution loop and <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> composition.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="dynamics_simulations.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Optimization and Integrators</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="dynamics_sinks.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Data Sinks</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-the-initial-path">Building the initial path</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-high-level-neb-strategy">The high-level <code class="docutils literal notranslate"><span class="pre">NEB</span></code> strategy</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#neb-methods">NEB methods</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-neb-manually-with-hooks">Building NEB manually with hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#periodic-paths">Periodic paths</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/dynamics_mep.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

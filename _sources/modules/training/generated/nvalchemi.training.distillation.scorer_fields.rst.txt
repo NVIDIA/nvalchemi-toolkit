@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.scorer\_fields
+==============================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autofunction:: scorer_fields

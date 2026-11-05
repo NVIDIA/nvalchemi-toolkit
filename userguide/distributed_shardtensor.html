@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>ShardTensor: How Per-Atom Fields Flow Across Ranks &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>ShardTensor: How Per-Atom Fields Flow Across Ranks &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/distributed_shardtensor';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Bring Your Own Model: Authoring a Distribution Spec" href="distributed_byo.html" />
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="current nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="nav bd-sidenav">
@@ -470,7 +478,7 @@ document.write(`
 — but without further machinery, every operation on those tensors
 would be a regular per-rank op with no knowledge of the partition.
 <code class="xref py py-class docutils literal notranslate"><span class="pre">ShardTensor</span></code> is the
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> subclass that carries the partition’s
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> subclass that carries the partition’s
 metadata along with the data, and routes select operations through
 distribution-aware handlers via PyTorch’s <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code>
 protocol.</p>
@@ -547,8 +555,7 @@ predicate <code class="docutils literal notranslate"><span class="pre">(func,</s
 first matching handler runs; if none match, the op falls back to
 the default <code class="docutils literal notranslate"><span class="pre">torch.Tensor.__torch_function__</span></code>.</p>
 <figure class="align-default" id="id1">
-<div class="graphviz"><object data="../_images/graphviz-e6590d652a07b50b51630399d14e031705875e90.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">digraph dispatch {
+digraph dispatch {
     rankdir=TB
     fontname=&quot;Helvetica&quot;
     node [fontname=&quot;Helvetica&quot; fontsize=11 shape=box style=&quot;rounded,filled&quot;]
@@ -563,8 +570,7 @@ the default <code class="docutils literal notranslate"><span class="pre">torch.T
     Op -&gt; Pred
     Pred -&gt; Handler [label=&quot;yes&quot;]
     Pred -&gt; Fallback [label=&quot;no&quot;]
-}</p></object></div>
-<figcaption>
+}<figcaption>
 <p><span class="caption-text">Dispatch decision tree for an op called on a ShardTensor.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
@@ -594,8 +600,7 @@ op + predicate so multiple handlers can coexist for the same op
 <section id="halo-storage-in-detail">
 <h2>Halo storage in detail<a class="headerlink" href="#halo-storage-in-detail" title="Link to this heading">#</a></h2>
 <figure class="align-default" id="id2">
-<div class="graphviz"><object data="../_images/graphviz-65240b0d676ce4a74d2d9ee78fe3ddd0774b130f.svg" type="image/svg+xml" class="graphviz">
-<p class="warning">digraph halo_storage {
+digraph halo_storage {
     rankdir=LR
     fontname=&quot;Helvetica&quot;
     node [fontname=&quot;Helvetica&quot; fontsize=10 shape=box style=&quot;filled,rounded&quot;]
@@ -603,8 +608,7 @@ op + predicate so multiple handlers can coexist for the same op
            fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;]
     rank1 [label=&quot;rank 1\\nowned: {3,4,5}\\nhalo: {1, 2}\\n(copies of rank 0's owned)&quot;
            fillcolor=&quot;#dce6f1&quot; fontcolor=&quot;#111111&quot;]
-}</p></object></div>
-<figcaption>
+}<figcaption>
 <p><span class="caption-text">Halo-storage layout across two ranks for a 6-atom system.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
 </figcaption>
 </figure>

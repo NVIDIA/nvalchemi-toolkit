@@ -1,0 +1,1109 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.dynamics.structure_sampler &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/structure_sampler';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.dy...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.dynamics.structure_sampler</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Ordered structure sampling for a propagator that admits structures over time.</span>
+
+<span class="sd">A propagator run with in-flight batching reads structures at two points. It</span>
+<span class="sd">reads them once to build the batch its first step propagates from. It reads</span>
+<span class="sd">them again whenever a structure graduates and a fresh structure backfills the</span>
+<span class="sd">room it frees. This module serves both reads from a single position over the</span>
+<span class="sd">rows one rank owns. Each structure is therefore propagated once, and a restart</span>
+<span class="sd">resumes where the run stopped. Whether a structure fits a batch is decided by</span>
+<span class="sd">one :class:`FitPolicy` predicate rather than by a fixed set of budget</span>
+<span class="sd">arguments.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">runtime_checkable</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.samplers</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributed_shard</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchDatasetProtocol</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;FitPolicy&quot;</span><span class="p">,</span> <span class="s2">&quot;OrderedStructureSampler&quot;</span><span class="p">,</span> <span class="s2">&quot;StructureSource&quot;</span><span class="p">,</span> <span class="s2">&quot;WithinBudget&quot;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="FitPolicy">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.FitPolicy.html#nvalchemi.dynamics.FitPolicy">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FitPolicy</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decide whether the batch being drawn still fits once a candidate joins it.</span>
+
+<span class="sd">    :meth:`OrderedStructureSampler.draw` calls the policy with the atom and</span>
+<span class="sd">    edge totals the drawn structures would hold with the candidate included.</span>
+<span class="sd">    A policy is therefore a stateless predicate over running totals.</span>
+<span class="sd">    :class:`WithinBudget` bounds the totals. A policy that bounds a memory</span>
+<span class="sd">    estimate, or any other quantity, is another class with the same call</span>
+<span class="sd">    signature.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_atoms</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">num_edges</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether a drawn batch totaling *num_atoms* and *num_edges* fits.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+
+<div class="viewcode-block" id="WithinBudget">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.WithinBudget.html#nvalchemi.dynamics.WithinBudget">[docs]</a>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">WithinBudget</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fit policy that admits a batch while its totals stay within the given bounds.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    atoms : int | None, optional</span>
+<span class="sd">        Total atoms the drawn batch may hold. Default ``None`` (unbounded).</span>
+<span class="sd">    edges : int | None, optional</span>
+<span class="sd">        Total stored edges the drawn batch may hold. A dataset reports the edge</span>
+<span class="sd">        count it stored, not the size of the neighbor list a propagator</span>
+<span class="sd">        rebuilds every step, so set this bound only when the stored count is</span>
+<span class="sd">        the one that matters. Default ``None`` (unbounded).</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.dynamics import WithinBudget</span>
+<span class="sd">    &gt;&gt;&gt; WithinBudget(atoms=10)(num_atoms=8, num_edges=0)</span>
+<span class="sd">    True</span>
+<span class="sd">    &gt;&gt;&gt; WithinBudget(atoms=10)(num_atoms=12, num_edges=0)</span>
+<span class="sd">    False</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">atoms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">edges</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_atoms</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">num_edges</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether *num_atoms* and *num_edges* both stay within the bounds.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">atoms</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">num_atoms</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">atoms</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">edges</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">num_edges</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">edges</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="StructureSource">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.StructureSource.html#nvalchemi.dynamics.StructureSource">[docs]</a>
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">StructureSource</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Structures a propagator starts from, served in order from one position.</span>
+
+<span class="sd">    The protocol lists the members an in-flight batching driver reads, so any</span>
+<span class="sd">    object that provides them can stand in for a dataset-backed sampler.</span>
+<span class="sd">    :meth:`probe` returns one row for checks that run at construction.</span>
+<span class="sd">    :meth:`shard` narrows the source to the rows one rank owns and resets the</span>
+<span class="sd">    position. :meth:`initial_batch` builds the batch the first step</span>
+<span class="sd">    propagates from. :meth:`draw` serves the fresh structures a backfill</span>
+<span class="sd">    adds. :attr:`exhausted` reports whether any structure is left.</span>
+<span class="sd">    :meth:`state_dict` and :meth:`load_state_dict` carry the position through</span>
+<span class="sd">    a restart. :class:`OrderedStructureSampler` is the reference</span>
+<span class="sd">    implementation, backed by a dataset.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.dynamics import OrderedStructureSampler, StructureSource</span>
+<span class="sd">    &gt;&gt;&gt; isinstance(OrderedStructureSampler(dataset), StructureSource)  # doctest: +SKIP</span>
+<span class="sd">    True</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exhausted</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the source has no structure left to hand out.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+<div class="viewcode-block" id="StructureSource.shard">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.StructureSource.html#nvalchemi.dynamics.StructureSource.shard">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Narrow the source to the rows *rank* of *world_size* owns and reset it.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="StructureSource.probe">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.StructureSource.html#nvalchemi.dynamics.StructureSource.probe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return one row, collated as the one-graph batch a propagator receives.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="StructureSource.initial_batch">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.StructureSource.html#nvalchemi.dynamics.StructureSource.initial_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the batch the first step propagates from, advancing the position.</span>
+
+<span class="sd">        A source that feeds a trajectory lifecycle stamps every structure with a</span>
+<span class="sd">        ``status`` of ``0`` and its own ``system_id``, as</span>
+<span class="sd">        :class:`OrderedStructureSampler` does.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="StructureSource.draw">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.StructureSource.html#nvalchemi.dynamics.StructureSource.draw">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">draw</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">fits</span><span class="p">:</span> <span class="n">FitPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">on_miss</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">,</span> <span class="s2">&quot;skip&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;stop&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serve the next structures while they pass *fits*.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="StructureSource.state_dict">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.StructureSource.html#nvalchemi.dynamics.StructureSource.state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the position a restart resumes this source from.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="StructureSource.load_state_dict">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.StructureSource.html#nvalchemi.dynamics.StructureSource.load_state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resume this source at the position *state* recorded.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="OrderedStructureSampler">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">OrderedStructureSampler</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Structures served in dataset order from one position, for in-flight batching.</span>
+
+<span class="sd">    The reference :class:`StructureSource`, backed by a dataset. A run reads</span>
+<span class="sd">    the sampler once to build the batch the first step propagates from. A</span>
+<span class="sd">    driver layered on top then draws from it again to backfill each structure</span>
+<span class="sd">    it graduates. Both reads advance the same position, so no structure is</span>
+<span class="sd">    propagated twice within one pass over the rows. An *unbudgeted* sampler</span>
+<span class="sd">    serves every row it owns as one batch, so the run has one trajectory per</span>
+<span class="sd">    row. A *budgeted* sampler packs the initial batch while structures fit</span>
+<span class="sd">    and leaves the remaining rows, in order, for :meth:`draw`. Either way, the</span>
+<span class="sd">    initial batch is packed as one :meth:`draw` call with a</span>
+<span class="sd">    :class:`WithinBudget` policy and ``on_miss=&quot;stop&quot;`` would pack it. A</span>
+<span class="sd">    backfill that fills the room a graduation freed passes its own policy</span>
+<span class="sd">    with ``on_miss=&quot;skip&quot;``.</span>
+
+<span class="sd">    :meth:`shard` narrows the sampler to the rows one rank owns. The rows are</span>
+<span class="sd">    dealt strided and unpadded, so the shards are disjoint and no structure is</span>
+<span class="sd">    propagated twice. :attr:`next_row` counts positions in :attr:`rows`. A</span>
+<span class="sd">    ``system_id`` is not a position: ids count only the structures the run</span>
+<span class="sd">    has started, not the rows a policy passed over. :attr:`next_system_id` is</span>
+<span class="sd">    therefore tracked separately from :attr:`next_row`.</span>
+
+<span class="sd">    A sampler built with ``recycle=True`` never reports itself exhausted.</span>
+<span class="sd">    When its position reaches the end of the shard, it wraps to the front, and</span>
+<span class="sd">    :attr:`wraps` counts how often that happened. The ``system_id`` numbers</span>
+<span class="sd">    keep increasing across a wrap. One :meth:`draw` reaches every row at most</span>
+<span class="sd">    once, so a single call never serves two copies of one structure. Across</span>
+<span class="sd">    calls there is no such guarantee: a trajectory that outlives a full pass</span>
+<span class="sd">    over the shard shares the batch with a second copy of its structure.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dataset : BatchDatasetProtocol</span>
+<span class="sd">        Structures, indexed in the order they are served.</span>
+<span class="sd">    max_atoms : int | None, optional</span>
+<span class="sd">        Total atoms the initial batch may hold. Default ``None`` puts no atom</span>
+<span class="sd">        bound on it.</span>
+<span class="sd">    max_edges : int | None, optional</span>
+<span class="sd">        Total stored edges the initial batch may hold. Default ``None`` puts no</span>
+<span class="sd">        edge bound on it.</span>
+<span class="sd">    max_batch_size : int | None, optional</span>
+<span class="sd">        Total structures the initial batch may hold. Default ``None`` puts no</span>
+<span class="sd">        bound on the count. With all three ``None``, the sampler is unbudgeted</span>
+<span class="sd">        and serves every row it owns as one batch.</span>
+<span class="sd">    recycle : bool, optional</span>
+<span class="sd">        Whether the position wraps to the front of the shard when it reaches</span>
+<span class="sd">        the end, instead of the sampler reporting itself exhausted. Default</span>
+<span class="sd">        ``False``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a budget is set and not positive.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.dynamics import OrderedStructureSampler, WithinBudget</span>
+<span class="sd">    &gt;&gt;&gt; sampler = OrderedStructureSampler(dataset, max_atoms=10_000)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; batch = sampler.initial_batch()  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; fresh = sampler.draw(limit=2, fits=WithinBudget(atoms=64))  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; sampler.next_row  # doctest: +SKIP</span>
+<span class="sd">    6</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="n">BatchDatasetProtocol</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">max_atoms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_edges</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">recycle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Open the sampler at the first row of *dataset*.&quot;&quot;&quot;</span>
+        <span class="n">declared</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;max_atoms&quot;</span><span class="p">:</span> <span class="n">max_atoms</span><span class="p">,</span>
+            <span class="s2">&quot;max_edges&quot;</span><span class="p">:</span> <span class="n">max_edges</span><span class="p">,</span>
+            <span class="s2">&quot;max_batch_size&quot;</span><span class="p">:</span> <span class="n">max_batch_size</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">declared</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">value</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> bounds the initial batch, so &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;it must be positive when set; got </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">. Leave &quot;</span>
+                    <span class="s2">&quot;it None to lift that bound.&quot;</span>
+                <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_atoms</span> <span class="o">=</span> <span class="n">max_atoms</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_edges</span> <span class="o">=</span> <span class="n">max_edges</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_batch_size</span> <span class="o">=</span> <span class="n">max_batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">recycle</span> <span class="o">=</span> <span class="n">recycle</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_wraps</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rank</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_world_size</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of rows this sampler owns.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rows</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dataset rows this sampler serves, in the order it serves them.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rows</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rank</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rank whose shard :attr:`rows` holds; ``0`` until :meth:`shard` runs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rank</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">world_size</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ranks the dataset was dealt across; ``1`` until :meth:`shard` runs.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_world_size</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">next_row</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Position in :attr:`rows` of the next structure served.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">next_system_id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;``system_id`` stamped on the next structure handed out.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wraps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;How often a recycling position has wrapped to the front of the shard.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wraps</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exhausted</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the shard has no structure left to hand out.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recycle</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OrderedStructureSampler.shard">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler.shard">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Narrow this sampler to the rows that rank *rank* of *world_size* owns.</span>
+
+<span class="sd">        :func:`~nvalchemi.data.datapipes.distributed_shard` deals the rows</span>
+<span class="sd">        strided: rank ``r`` takes every ``world_size``-th structure, starting</span>
+<span class="sd">        at offset ``r``. The shards are disjoint, cover the dataset, and differ</span>
+<span class="sd">        by at most one structure. The deal balances the number of structures,</span>
+<span class="sd">        not the work, so sort the dataset by atom count when structure sizes</span>
+<span class="sd">        differ widely. The shards are not padded, because a padded structure</span>
+<span class="sd">        would be propagated twice. Sharding resets the position, its wrap</span>
+<span class="sd">        count, and the next ``system_id``, so a sampler that has already run</span>
+<span class="sd">        restarts from its first row instead of resuming.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rank : int</span>
+<span class="sd">            Global rank claiming a shard.</span>
+<span class="sd">        world_size : int</span>
+<span class="sd">            Number of ranks the dataset is dealt across. A single-rank run</span>
+<span class="sd">            keeps the whole dataset, unchanged.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If *world_size* is not positive or *rank* falls outside it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">world_size</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">rank</span> <span class="o">&lt;</span> <span class="n">world_size</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;A shard needs a positive world_size and a rank within it, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;0 &lt;= rank &lt; world_size; got rank=</span><span class="si">{</span><span class="n">rank</span><span class="si">!r}</span><span class="s2"> of &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;world_size=</span><span class="si">{</span><span class="n">world_size</span><span class="si">!r}</span><span class="s2">. Pass the launcher&#39;s global rank &quot;</span>
+                <span class="s2">&quot;and world size.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rank</span> <span class="o">=</span> <span class="n">rank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_world_size</span> <span class="o">=</span> <span class="n">world_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rows</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">distributed_shard</span><span class="p">(</span>
+                <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">))),</span>
+                <span class="n">num_replicas</span><span class="o">=</span><span class="n">world_size</span><span class="p">,</span>
+                <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span>
+                <span class="n">drop_last</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">pad</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_wraps</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span> <span class="o">=</span> <span class="mi">0</span></div>
+
+
+<div class="viewcode-block" id="OrderedStructureSampler.probe">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler.probe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the first row of the shard as a one-graph batch.</span>
+
+<span class="sd">        The row is loaded through the dataset&#39;s own collation rather than read</span>
+<span class="sd">        as an :class:`~nvalchemi.data.AtomicData`. The collation fills in the</span>
+<span class="sd">        ``velocities`` and ``atomic_masses`` that a propagator reads but a</span>
+<span class="sd">        store may not have kept.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Batch</span>
+<span class="sd">            One-graph batch, for checks that must run before any compute is</span>
+<span class="sd">            spent on the run.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If this sampler owns no rows at all.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> owns no row to probe: a &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> of length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;dealt across world_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_world_size</span><span class="si">!r}</span><span class="s2"> leaves &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;rank=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">!r}</span><span class="s2"> empty. Provide at least as many structures &quot;</span>
+                <span class="s2">&quot;as ranks.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([[</span><span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">[</span><span class="mi">0</span><span class="p">]]])[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="OrderedStructureSampler.initial_batch">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler.initial_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the batch the first step propagates from, advancing the position.</span>
+
+<span class="sd">        Any propagator bookkeeping the loaded structures carry is dropped, and</span>
+<span class="sd">        this sampler installs fresh bookkeeping. A structure loaded from a</span>
+<span class="sd">        store that a dynamics sink filled arrives with the ``status`` it</span>
+<span class="sd">        graduated with. :meth:`~nvalchemi.dynamics.base.BaseDynamics.step`</span>
+<span class="sd">        would keep such a structure frozen at ``exit_status``, so its steps</span>
+<span class="sd">        would move nothing.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Batch</span>
+<span class="sd">            Initial batch, stamped with clean bookkeeping and numbered from</span>
+<span class="sd">            :attr:`next_system_id`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the sampler has nothing left to serve, or if the structure at</span>
+<span class="sd">            :attr:`next_row` is larger than the declared budget.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">budget</span> <span class="o">=</span> <span class="n">WithinBudget</span><span class="p">(</span><span class="n">atoms</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_atoms</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_edges</span><span class="p">)</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan_rows</span><span class="p">(</span>
+            <span class="n">limit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_batch_size</span><span class="p">,</span>
+            <span class="n">fits</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">budget</span> <span class="o">==</span> <span class="n">WithinBudget</span><span class="p">()</span> <span class="k">else</span> <span class="n">budget</span><span class="p">,</span>
+            <span class="n">on_miss</span><span class="o">=</span><span class="s2">&quot;stop&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;A run has to propagate something; got no structure at row &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span><span class="si">!r}</span><span class="s2"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> fitting &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;max_atoms=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_atoms</span><span class="si">!r}</span><span class="s2">, max_edges=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_edges</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;and max_batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_batch_size</span><span class="si">!r}</span><span class="s2">. Widen the budget, &quot;</span>
+                <span class="s2">&quot;or pass a dataset holding a structure that fits it.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">load_batches</span><span class="p">([</span><span class="n">rows</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">BaseDynamics</span><span class="o">.</span><span class="n">_bookkeeping_keys</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">state</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">state</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stamp_bookkeeping</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">state</span></div>
+
+
+<div class="viewcode-block" id="OrderedStructureSampler.draw">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler.draw">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">draw</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">fits</span><span class="p">:</span> <span class="n">FitPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">on_miss</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">,</span> <span class="s2">&quot;skip&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;stop&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serve the next structures while they pass *fits*.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        limit : int | None, optional</span>
+<span class="sd">            Maximum number of structures to serve. Default ``None`` (the rest</span>
+<span class="sd">            of the shard).</span>
+<span class="sd">        fits : FitPolicy | None, optional</span>
+<span class="sd">            Policy called with the atom and edge totals the drawn structures</span>
+<span class="sd">            would hold with each candidate included. Default ``None`` (every</span>
+<span class="sd">            structure fits).</span>
+<span class="sd">        on_miss : {&quot;stop&quot;, &quot;skip&quot;}, optional</span>
+<span class="sd">            How the scan treats a candidate that does not fit. ``&quot;stop&quot;`` ends</span>
+<span class="sd">            the draw and leaves :attr:`next_row` on the candidate; an initial</span>
+<span class="sd">            batch is packed this way. ``&quot;skip&quot;`` passes over the candidate and</span>
+<span class="sd">            continues. A backfill uses ``&quot;skip&quot;`` to fill the room a graduation</span>
+<span class="sd">            freed, so one oversized structure cannot block every refill behind</span>
+<span class="sd">            it. Default ``&quot;stop&quot;``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[AtomicData]</span>
+<span class="sd">            Structures in row order, each stamped with its own ``system_id``.</span>
+<span class="sd">            Empty once the shard is exhausted, or once the first candidate</span>
+<span class="sd">            misses under ``on_miss=&quot;stop&quot;``. A recycling sampler wraps to the</span>
+<span class="sd">            front of the shard instead of running out. One call still reaches</span>
+<span class="sd">            every row at most once.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">drawn</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan_rows</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">,</span> <span class="n">fits</span><span class="o">=</span><span class="n">fits</span><span class="p">,</span> <span class="n">on_miss</span><span class="o">=</span><span class="n">on_miss</span><span class="p">):</span>
+            <span class="n">data</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">add_system_property</span><span class="p">(</span>
+                <span class="s2">&quot;system_id&quot;</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">drawn</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">drawn</span></div>
+
+
+<div class="viewcode-block" id="OrderedStructureSampler.state_dict">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler.state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the position a restart resumes this sampler from.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, int]</span>
+<span class="sd">            ``next_row``, ``wraps`` (how often the position has wrapped),</span>
+<span class="sd">            ``next_system_id``, and the ``rank`` and ``world_size`` of the</span>
+<span class="sd">            shard they count in. The dataset, the declared budgets, and</span>
+<span class="sd">            ``recycle`` are configuration, not state, so they are left out.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;next_row&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span><span class="p">,</span>
+            <span class="s2">&quot;wraps&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wraps</span><span class="p">,</span>
+            <span class="s2">&quot;next_system_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span><span class="p">,</span>
+            <span class="s2">&quot;rank&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">,</span>
+            <span class="s2">&quot;world_size&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_world_size</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="OrderedStructureSampler.load_state_dict">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.OrderedStructureSampler.html#nvalchemi.dynamics.OrderedStructureSampler.load_state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resume this sampler at the position *state* recorded.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state : Mapping[str, int]</span>
+<span class="sd">            Bundle written by :meth:`state_dict` for the shard this sampler is</span>
+<span class="sd">            already narrowed to.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If *state* lacks any of ``next_row``, ``wraps``, ``next_system_id``,</span>
+<span class="sd">            ``rank``, or ``world_size``. One error names every missing key. A</span>
+<span class="sd">            bundle written under the former ``cursor`` key is not read, so it</span>
+<span class="sd">            raises too.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If *state* was written for another rank or another world size. Its</span>
+<span class="sd">            position counts rows in a different shard.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next_row&quot;</span><span class="p">,</span> <span class="s2">&quot;wraps&quot;</span><span class="p">,</span> <span class="s2">&quot;next_system_id&quot;</span><span class="p">,</span> <span class="s2">&quot;rank&quot;</span><span class="p">,</span> <span class="s2">&quot;world_size&quot;</span><span class="p">)</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">required</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> state is resumed from the keys &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">required</span><span class="p">)</span><span class="si">!r}</span><span class="s2">; got </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">state</span><span class="p">)</span><span class="si">!r}</span><span class="s2">, missing </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;Pass a bundle written by state_dict().&quot;</span>
+            <span class="p">)</span>
+        <span class="n">rank</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;rank&quot;</span><span class="p">])</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;world_size&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_world_size</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The restart bundle&#39;s position was written for rank &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">rank</span><span class="si">!r}</span><span class="s2"> of </span><span class="si">{</span><span class="n">world_size</span><span class="si">!r}</span><span class="s2">; this rank is </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rank</span><span class="si">!r}</span><span class="s2"> of &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_world_size</span><span class="si">!r}</span><span class="s2">. Restart on the world that wrote it, or &quot;</span>
+                <span class="s2">&quot;start over from the first row.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;next_row&quot;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_wraps</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;wraps&quot;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;next_system_id&quot;</span><span class="p">])</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_scan_rows</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">fits</span><span class="p">:</span> <span class="n">FitPolicy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">on_miss</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">,</span> <span class="s2">&quot;skip&quot;</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Advance the position and return the rows the policy admitted.</span>
+
+<span class="sd">        The scan reaches every row of the shard at most once. A recycling</span>
+<span class="sd">        position that wraps during the scan therefore never serves a structure</span>
+<span class="sd">        twice in the same call.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">atoms</span> <span class="o">=</span> <span class="n">edges</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">scanned</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">scanned</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">limit</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">limit</span><span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recycle</span><span class="p">:</span>
+                    <span class="k">break</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_wraps</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rows</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span><span class="p">]</span>
+            <span class="n">scanned</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">fits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">num_atoms</span><span class="p">,</span> <span class="n">num_edges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">fits</span><span class="p">(</span><span class="n">atoms</span> <span class="o">+</span> <span class="n">num_atoms</span><span class="p">,</span> <span class="n">edges</span> <span class="o">+</span> <span class="n">num_edges</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">on_miss</span> <span class="o">==</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span>
+                        <span class="k">break</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="k">continue</span>
+                <span class="n">atoms</span> <span class="o">+=</span> <span class="n">num_atoms</span>
+                <span class="n">edges</span> <span class="o">+=</span> <span class="n">num_edges</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_next_row</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">rows</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_stamp_bookkeeping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Give *state* the graph-level fields an in-flight run maintains.</span>
+
+<span class="sd">        ``status`` is the field a status-migrating</span>
+<span class="sd">        :class:`~nvalchemi.dynamics.base.ConvergenceHook` writes and a driver</span>
+<span class="sd">        graduates structures on. ``system_id`` numbers the structures in the</span>
+<span class="sd">        same sequence a backfill continues.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;system_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span> <span class="o">+</span> <span class="n">state</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span> <span class="o">+=</span> <span class="n">state</span><span class="o">.</span><span class="n">num_graphs</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,1850 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Crystal structure prediction &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/csp';</script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Distributed Training" href="distributed_training.html" />
+    <link rel="prev" title="Distributed ML Potentials: Design Overview" href="distributed_design.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/conventions.html">Conventions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="training_finetuning.html">Training &amp; Fine-tuning</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Crystal structure prediction</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="distributed_training.html">Distributed Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Crystal...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="crystal-structure-prediction">
+<span id="csp-guide"></span><h1>Crystal structure prediction<a class="headerlink" href="#crystal-structure-prediction" title="Link to this heading">#</a></h1>
+<p>Crystal structure prediction (CSP) explores possible arrangements of molecules
+in a crystal. The <code class="docutils literal notranslate"><span class="pre">nvalchemi.csp</span></code> package provides four parts of this search:</p>
+<ul class="simple">
+<li><p><strong>Prepare the search:</strong> assemble molecular conformers into a formula unit,
+estimate starting cell volumes, and choose compatible space groups. The
+molecule helpers use RDKit when available; raw tensor inputs are also supported.</p></li>
+<li><p><strong>Generate starting structures:</strong> <code class="docutils literal notranslate"><span class="pre">OverlapReliefPacker</span></code> chooses input
+conformers and adjusts rigid molecular placements and cells to reduce
+overlaps. <code class="docutils literal notranslate"><span class="pre">CSPGenerator</span></code> also accepts user-defined packers that return rigid
+ASU data or explicit atomistic coordinates in a <code class="docutils literal notranslate"><span class="pre">Batch</span></code>.</p></li>
+<li><p><strong>Save and expand structures:</strong> the rigid packer returns an asymmetric-unit
+(ASU) representation containing independent molecule placements, a cell, and
+symmetry information. Zarr storage retains these data without writing every
+atom in the cell. Selected structures can be expanded to full-cell Toolkit
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> objects for physical optimization. Here
+“compact” describes the storage representation, regardless of cell volume.</p></li>
+<li><p><strong>Screen similar structures:</strong> <code class="docutils literal notranslate"><span class="pre">RadialComparisonIndex</span></code> compares local atom
+environments to find possible duplicates after optimization. It also accepts
+fully periodic, partially periodic, and nonperiodic structures from other
+sources. See <a class="reference internal" href="#csp-comparison">comparison</a> for its limits and examples.</p></li>
+</ul>
+<div class="note admonition">
+<p class="admonition-title">Packing does not rank crystals</p>
+<p>Packing produces starting geometries with intermolecular clashes resolved to
+the specified overlap tolerance. Physical energies and polymorph ranking
+require a suitable model and further optimization.</p>
+</div>
+<p>For API signatures and parameter details, see the <a class="reference internal" href="../modules/csp.html"><span class="doc">CSP API reference</span></a>. See also the <a class="reference internal" href="data.html#data-guide"><span class="std std-ref">AtomicData and Batch</span></a> for Toolkit batches and the
+<a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics: Optimization and Molecular Dynamics</span></a> for optimization with a physical model.</p>
+<section id="generate-starting-structures">
+<span id="csp-water-example"></span><h2>Generate starting structures<a class="headerlink" href="#generate-starting-structures" title="Link to this heading">#</a></h2>
+<p>Prepare water with the optional RDKit helpers, request 200 structures on one
+GPU, and expand two accepted structures. Install <code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit[rdkit]</span></code>
+and use an environment with CUDA support.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <span class="math notranslate nohighlight">\((1000\text{-}1200)\,\mathrm{\AA}^3\)</span> starting cells are deliberately
+oversized for one water molecule so the example completes quickly. They are
+unsuitable starting volumes for an ice search.</p>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SpaceGroupPolicy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.chem</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">RDKitConformerConfig</span><span class="p">,</span>
+    <span class="n">build_molecular_packing_input</span><span class="p">,</span>
+    <span class="n">generate_conformers_from_smiles</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.packer</span><span class="w"> </span><span class="kn">import</span> <span class="n">OverlapReliefPacker</span><span class="p">,</span> <span class="n">OverlapReliefConfig</span>
+
+<span class="c1"># Generate one water conformer with RDKit.</span>
+<span class="n">molecule</span> <span class="o">=</span> <span class="n">generate_conformers_from_smiles</span><span class="p">(</span>
+    <span class="s2">&quot;O&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">RDKitConformerConfig</span><span class="p">(</span><span class="n">num_conformers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">random_seed</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="c1"># Assemble the molecules and contact distances for one formula unit.</span>
+<span class="n">packing_input</span> <span class="o">=</span> <span class="n">build_molecular_packing_input</span><span class="p">([</span><span class="n">molecule</span><span class="p">])</span>
+<span class="c1"># Configure the starting cells, symmetry, and finite trial budget.</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">OverlapReliefConfig</span><span class="p">(</span>
+    <span class="n">z</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">z_prime</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+    <span class="n">max_candidates</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">cell_volume_range</span><span class="o">=</span><span class="p">(</span><span class="mf">1000.0</span><span class="p">,</span> <span class="mf">1200.0</span><span class="p">),</span>
+    <span class="n">space_groups</span><span class="o">=</span><span class="n">SpaceGroupPolicy</span><span class="o">.</span><span class="n">fixed</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="c1"># Bind the packer to the selected GPU.</span>
+<span class="n">packer</span> <span class="o">=</span> <span class="n">OverlapReliefPacker</span><span class="p">(</span>
+    <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># Generate accepted starting structures and inspect any shortfall.</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">packer</span><span class="p">(</span>
+    <span class="n">packing_input</span><span class="p">,</span>
+    <span class="n">num_samples</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">7</span><span class="p">),</span>
+    <span class="n">run_id</span><span class="o">=</span><span class="mi">77</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;accepted:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">),</span> <span class="s2">&quot;trials:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">generated_count</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;stopped:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">stop_reason</span><span class="p">)</span>
+<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Fewer than two candidates were accepted&quot;</span><span class="p">)</span>
+
+<span class="c1"># Expand two accepted ASU structures into full-cell atomistic data.</span>
+<span class="n">selected</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="o">.</span><span class="n">to_batch</span><span class="p">(</span><span class="n">indices</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]))</span>
+<span class="k">assert</span> <span class="n">selected</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">==</span> <span class="mi">2</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">num_samples</span></code> requests accepted structures. <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> limits the trials
+active at once. By default, <code class="docutils literal notranslate"><span class="pre">max_candidates=&quot;auto&quot;</span></code> limits all initialized
+trials to <code class="docutils literal notranslate"><span class="pre">1000</span> <span class="pre">*</span> <span class="pre">num_samples</span></code> for each call. A positive integer sets a fixed
+budget; explicit <code class="docutils literal notranslate"><span class="pre">None</span></code> leaves the trial budget unlimited. Rejected trials
+consume that budget, so a finite search may return fewer structures than
+requested. Inspect the accepted count and stop reason before continuing.</p>
+<p><code class="docutils literal notranslate"><span class="pre">selected</span></code> contains full-cell atom coordinates for two candidates.</p>
+<p>The automatic cap is a safety limit, not an acceptance guarantee or a
+wall-clock timeout. At an acceptance rate of about 0.1%, this budget yields the
+requested count on average and can still return a shortfall. A bounded
+pre-flight remains useful before scaling up.</p>
+<div class="warning admonition">
+<p class="admonition-title">Pre-flight large packing searches</p>
+<p>With explicit <code class="docutils literal notranslate"><span class="pre">max_candidates=None</span></code>, the trial budget is unlimited. Unreachable
+acceptance criteria can keep the search running without useful progress. Before
+a large or unlimited search, run a short pre-flight with a finite candidate
+budget, using the intended starting-volume range and per-candidate relaxation
+limit. Inspect accepted structures versus generated
+trials. An overly small starting volume can produce low or zero acceptance, and
+packing does not expand the cell volume. Revisit the volume settings and repeat
+the pre-flight before scaling up.</p>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">preflight</span> <span class="o">=</span> <span class="n">packer</span><span class="p">(</span>
+    <span class="n">packing_input</span><span class="p">,</span>
+    <span class="n">num_samples</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+    <span class="n">max_candidates</span><span class="o">=</span><span class="mi">32000</span><span class="p">,</span>
+    <span class="n">run_id</span><span class="o">=</span><span class="mi">76</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="s2">&quot;pre-flight accepted:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">preflight</span><span class="p">),</span>
+    <span class="s2">&quot;trials:&quot;</span><span class="p">,</span> <span class="n">preflight</span><span class="o">.</span><span class="n">generated_count</span><span class="p">,</span>
+    <span class="s2">&quot;stopped:&quot;</span><span class="p">,</span> <span class="n">preflight</span><span class="o">.</span><span class="n">stop_reason</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>This pre-flight permits at most 32000 initialized trials and retains the configured
+per-candidate relaxation limit. Use the settings intended for the search. Accepted
+and generated counts are diagnostic: there is no universal acceptance
+threshold or automatic decision to continue. Restrictive settings can prevent
+cell initialization and raise an error. These controls bound work rather than
+impose a wall-clock timeout.</p>
+</section>
+<section id="set-up-a-molecular-and-crystallographic-search">
+<h2>Set up a molecular and crystallographic search<a class="headerlink" href="#set-up-a-molecular-and-crystallographic-search" title="Link to this heading">#</a></h2>
+<p>A <strong>formula unit</strong> is the ordered collection of molecules defining the
+composition. A 1:1 hydrate, for example, has one solute and one water molecule
+per formula unit. Pass those molecules in a fixed order, for example
+<code class="docutils literal notranslate"><span class="pre">build_molecular_packing_input([solute,</span> <span class="pre">water])</span></code>.</p>
+<p>Each molecule can have several input conformers. For a flexible molecule,
+these represent alternative internal geometries that may pack differently.
+The <code class="docutils literal notranslate"><span class="pre">OverlapReliefPacker</span></code> chooses one conformer for each independently placed
+molecule, then keeps its internal coordinates fixed while translating and
+rotating the molecule and changing the cell. With <code class="docutils literal notranslate"><span class="pre">Z'</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, it can choose
+different conformers for the symmetry-independent copies of a molecule.
+The conformer pool does not rank molecular energies. RDKit can generate the
+conformers, or callers can supply coordinates prepared by another method.</p>
+<section id="choose-z-z-and-a-space-group">
+<h3>Choose Z, Z’, and a space group<a class="headerlink" href="#choose-z-z-and-a-space-group" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">Z</span></code> counts formula units in the full conventional cell. <code class="docutils literal notranslate"><span class="pre">Z'</span></code> counts symmetry-independent
+formula units in its asymmetric unit (ASU). For molecules in general positions,
+the space group must have <code class="docutils literal notranslate"><span class="pre">Z</span> <span class="pre">/</span> <span class="pre">Z'</span></code> operations. For <code class="docutils literal notranslate"><span class="pre">Z=2</span></code> and <code class="docutils literal notranslate"><span class="pre">Z'=1</span></code>, familiar
+choices include P-1 (group 2) and P2_1 (group 4), each with two operations.
+For <code class="docutils literal notranslate"><span class="pre">Z=4</span></code> and <code class="docutils literal notranslate"><span class="pre">Z'=1</span></code>, four-operation choices include P2_1/c (group 14),
+P2_1 2_1 2_1 (group 19), and Cc (group 9). With <code class="docutils literal notranslate"><span class="pre">Z'=2</span></code>, two formula units are
+placed independently, so the <code class="docutils literal notranslate"><span class="pre">OverlapReliefPacker</span></code> can choose different
+conformers for their corresponding molecules. The bundled operations use the
+standard P2_1/c setting
+for group 14; P2_1/n is an alternative cell setting of the same group.</p>
+<p>Molecules on <strong>special positions</strong> are not supported. Some symmetry operations
+map such a molecule onto itself, so expanding every independent molecule by
+all operations would create duplicate copies. For example, a crystal with one
+centrosymmetric molecule per P-1 cell has <code class="docutils literal notranslate"><span class="pre">Z=1</span></code> and <code class="docutils literal notranslate"><span class="pre">Z'=1/2</span></code>, which this
+integer-<code class="docutils literal notranslate"><span class="pre">Z'</span></code> representation cannot express. To search for such an arrangement,
+use a subgroup in which the molecule occupies a general position and choose
+<code class="docutils literal notranslate"><span class="pre">Z</span></code> and <code class="docutils literal notranslate"><span class="pre">Z'</span></code> for that subgroup. P1 with <code class="docutils literal notranslate"><span class="pre">Z=Z'=1</span></code> represents this example; its
+centrosymmetric conformer retains inversion under periodic repetition. In
+general, a subgroup search does not enforce the omitted symmetry operations.</p>
+<p>P-1 illustrates the two-operation case: identity leaves fractional coordinates
+unchanged, and inversion maps <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code> to <code class="docutils literal notranslate"><span class="pre">(-x,</span> <span class="pre">-y,</span> <span class="pre">-z)</span></code> periodically.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SpaceGroupPolicy</span><span class="p">,</span>
+    <span class="n">get_space_group_candidates</span><span class="p">,</span>
+    <span class="n">get_space_group_operations</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">assert</span> <span class="mi">2</span> <span class="ow">in</span> <span class="n">get_space_group_candidates</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="n">p_minus_1_operations</span> <span class="o">=</span> <span class="n">get_space_group_operations</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">p_minus_1_operations</span><span class="p">)</span>  <span class="c1"># Identity and inversion.</span>
+
+<span class="c1"># Reuse the water input with P-1 for a small second run.</span>
+<span class="n">p_minus_1_result</span> <span class="o">=</span> <span class="n">packer</span><span class="p">(</span>
+    <span class="n">packing_input</span><span class="p">,</span>
+    <span class="n">num_samples</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">8</span><span class="p">),</span>
+    <span class="n">z</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">z_prime</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">space_groups</span><span class="o">=</span><span class="n">SpaceGroupPolicy</span><span class="o">.</span><span class="n">fixed</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="choose-starting-volume">
+<h3>Choose starting volume<a class="headerlink" href="#choose-starting-volume" title="Link to this heading">#</a></h3>
+<p>Choose starting volumes from molecular size and an expected crystal density.
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.estimate_formula_unit_volume.html#nvalchemi.csp.estimate_formula_unit_volume" title="nvalchemi.csp.estimate_formula_unit_volume"><code class="xref py py-func docutils literal notranslate"><span class="pre">estimate_formula_unit_volume()</span></code></a> returns an estimate
+<code class="docutils literal notranslate"><span class="pre">V_fu</span></code> for one formula unit in <span class="math notranslate nohighlight">\(\mathrm{\AA}^3\)</span>.
+<code class="docutils literal notranslate"><span class="pre">cell_volume_range=(low,</span> <span class="pre">high)</span></code> specifies absolute <strong>cell</strong> volumes in
+<span class="math notranslate nohighlight">\(\mathrm{\AA}^3\)</span>. Alternatively,
+<code class="docutils literal notranslate"><span class="pre">cell_volume_scale_range=(low,</span> <span class="pre">high)</span></code> uses <code class="docutils literal notranslate"><span class="pre">(low</span> <span class="pre">*</span> <span class="pre">Z</span> <span class="pre">*</span> <span class="pre">V_fu,</span> <span class="pre">high</span> <span class="pre">*</span> <span class="pre">Z</span> <span class="pre">*</span> <span class="pre">V_fu)</span></code>.
+Supply exactly one range. Both control initial cells. Packing can shrink a
+sampled cell but does not expand its volume; later physical optimization can
+change the volume in either direction.</p>
+</section>
+<section id="choose-a-space-group-policy">
+<h3>Choose a space-group policy<a class="headerlink" href="#choose-a-space-group-policy" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">SpaceGroupPolicy</span></code> describes which groups to use and how to choose between
+them. Use <code class="docutils literal notranslate"><span class="pre">SpaceGroupPolicy.fixed(number)</span></code> for one group, or
+<code class="docutils literal notranslate"><span class="pre">SpaceGroupPolicy.sampled()</span></code> for compatible groups weighted by the bundled
+Cambridge Structural Database (CSD) prior. Omitting <code class="docutils literal notranslate"><span class="pre">space_groups</span></code> from
+<code class="docutils literal notranslate"><span class="pre">OverlapReliefConfig</span></code> selects the sampled policy. The bundled weights come
+from the
+<a class="reference external" href="https://www.ccdc.cam.ac.uk/media/CSD-Space-Group-Statistics-Space-Group-Number-Ordering-2026.pdf">CCDC space-group statistics report dated 1 January 2026</a>.</p>
+<p>A sampled policy can restrict the crystal system and molecular handedness:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CrystalSystem</span><span class="p">,</span> <span class="n">SpaceGroupPolicy</span>
+
+<span class="n">monoclinic_policy</span> <span class="o">=</span> <span class="n">SpaceGroupPolicy</span><span class="o">.</span><span class="n">sampled</span><span class="p">(</span>
+    <span class="n">crystal_system</span><span class="o">=</span><span class="n">CrystalSystem</span><span class="o">.</span><span class="n">MONOCLINIC</span><span class="p">,</span>
+    <span class="n">sohncke_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Sohncke groups have symmetry operations that preserve molecular handedness.
+Set <code class="docutils literal notranslate"><span class="pre">sohncke_only=True</span></code> when copies of a chiral molecule must keep their
+handedness. The same requirement can be checked for a fixed choice with
+<code class="docutils literal notranslate"><span class="pre">SpaceGroupPolicy.fixed(number,</span> <span class="pre">sohncke_only=True)</span></code>.</p>
+<p>Supply relative weights to restrict sampling to selected groups:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">policy</span> <span class="o">=</span> <span class="n">SpaceGroupPolicy</span><span class="o">.</span><span class="n">sampled</span><span class="p">(</span><span class="n">probabilities</span><span class="o">=</span><span class="p">{</span><span class="mi">14</span><span class="p">:</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mi">19</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">})</span>
+<span class="c1"># Inspect a four-operation distribution before using it for packing.</span>
+<span class="n">groups</span> <span class="o">=</span> <span class="n">policy</span><span class="o">.</span><span class="n">draw</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_operations</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">groups</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+
+<span class="c1"># Reuse the policy with the packing settings from the water example.</span>
+<span class="n">weighted_config</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">effective</span><span class="p">(</span><span class="n">z</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">z_prime</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">space_groups</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A custom mapping replaces the CSD weights. Omitted groups have zero weight.
+After compatibility filtering, positive weights are normalized; they need not
+sum to one. In this example, group 14 has three times the selection weight of
+group 19. These weights control initial group selection. Cell initialization
+and acceptance can change the proportions in returned structures, and
+weighted sampling does not guarantee coverage of every group.</p>
+<p><code class="docutils literal notranslate"><span class="pre">OverlapReliefConfig</span></code> checks the policy against <code class="docutils literal notranslate"><span class="pre">z</span> <span class="pre">/</span> <span class="pre">z_prime</span></code> when it is
+constructed
+or updated. A fixed group must provide that many operations; a sampled policy
+must retain at least one compatible group with positive weight. For example,
+group 2 has two operations and is incompatible with <code class="docutils literal notranslate"><span class="pre">z=4,</span> <span class="pre">z_prime=1</span></code>. The
+configuration reports this mismatch before packing starts. A policy retains
+its supplied weights, so using it in one configuration does not discard
+groups needed by another.</p>
+<p>You can save a space-group policy or packing configuration and reload it for
+another search. Reloading preserves all supplied weights, including groups
+excluded by the current filters. The example below shows the supported
+save/reload methods.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">restored_json</span> <span class="o">=</span> <span class="n">OverlapReliefConfig</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">weighted_config</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">())</span>
+<span class="n">restored_json_dict</span> <span class="o">=</span> <span class="n">OverlapReliefConfig</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">weighted_config</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">))</span>
+<span class="n">restored_python_dict</span> <span class="o">=</span> <span class="n">OverlapReliefConfig</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">weighted_config</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;python&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>The same methods work on <code class="docutils literal notranslate"><span class="pre">SpaceGroupPolicy</span></code> directly. Saved weights may use
+group numbers written as decimal strings, such as <code class="docutils literal notranslate"><span class="pre">&quot;14&quot;</span></code>, without signs,
+spaces, or leading zeros. Model validation also accepts crystal-system names,
+such as <code class="docutils literal notranslate"><span class="pre">&quot;monoclinic&quot;</span></code>. Fixed group numbers still require integers. Use integer
+weight keys and <code class="docutils literal notranslate"><span class="pre">CrystalSystem</span></code> members when calling sampling helpers directly.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">config.effective(space_groups=...)</span></code> or a call-level <code class="docutils literal notranslate"><span class="pre">space_groups=...</span></code>
+override to replace the policy without changing the base configuration.
+Switching between fixed and sampled selection replaces one object. When
+switching volume modes, continue to clear <code class="docutils literal notranslate"><span class="pre">cell_volume_range</span></code> before supplying
+<code class="docutils literal notranslate"><span class="pre">cell_volume_scale_range</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">draw()</span></code> returns an int32 tensor and samples with replacement. Supply
+<code class="docutils literal notranslate"><span class="pre">num_operations</span></code> explicitly because a standalone policy has no packing
+configuration from which to infer it. A nonnegative seed uses a local CPU
+random generator; without a seed, sampled draws use the global CPU generator.
+The optional <code class="docutils literal notranslate"><span class="pre">device</span></code> sets the output device. Fixed-policy draws repeat the
+fixed group without advancing the random generator. Standalone drawing and
+packing use the same selection rules and relative weights, but their random
+samplers and numerical precision differ, so matching seeds need not produce
+matching sequences.</p>
+<p><code class="docutils literal notranslate"><span class="pre">get_space_group_candidates()</span></code> remains available for listing compatible
+groups. The existing <code class="docutils literal notranslate"><span class="pre">sample_space_groups()</span></code> helper forwards to a sampled
+policy and <code class="docutils literal notranslate"><span class="pre">draw()</span></code> with the same arguments.</p>
+</section>
+<section id="understand-acceptance-and-shortfall">
+<h3>Understand acceptance and shortfall<a class="headerlink" href="#understand-acceptance-and-shortfall" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">OverlapReliefPacker</span></code> checks contacts between different molecular copies,
+including periodic copies. An <strong>overlap</strong> is the positive difference between a
+contact cutoff and an atom-pair distance, in <span class="math notranslate nohighlight">\(\mathrm{\AA}\)</span>. Small residual
+overlap can remain: a trial is accepted when its largest overlap is at most
+<code class="docutils literal notranslate"><span class="pre">overlap_tolerance</span></code>.
+The accepted structures carry <code class="docutils literal notranslate"><span class="pre">steps</span></code>, <code class="docutils literal notranslate"><span class="pre">total_overlap</span></code>, and <code class="docutils literal notranslate"><span class="pre">max_overlap</span></code> in
+<code class="docutils literal notranslate"><span class="pre">result.structures.properties</span></code>. These are clash diagnostics, not physical
+energies.</p>
+<p>Contacts are checked at iteration zero, at each
+<code class="docutils literal notranslate"><span class="pre">convergence_check_interval</span></code>, and when a trial expires after
+<code class="docutils literal notranslate"><span class="pre">max_steps_per_candidate</span></code> updates. An optional progress callback reports
+active-trial diagnostics. If the finite candidate budget ends first, the
+result can contain fewer accepted structures than requested. Restrictive
+cell-shape or volume limits can instead prevent initialization and raise
+<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. See
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.packer.OverlapReliefConfig.html#nvalchemi.csp.packer.OverlapReliefConfig" title="nvalchemi.csp.packer.OverlapReliefConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">OverlapReliefConfig</span></code></a> for the
+movement, cell-shape, and progress controls.</p>
+</section>
+</section>
+<section id="distribute-candidate-generation">
+<h2>Distribute candidate generation<a class="headerlink" href="#distribute-candidate-generation" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">CSPGenerator</span></code> allocates independent packing work across an existing process
+group. The application owns process launch and group lifetime. Each process
+supplies the same prepared formula-unit input; scientific settings such as <code class="docutils literal notranslate"><span class="pre">Z</span></code>, <code class="docutils literal notranslate"><span class="pre">Z'</span></code>,
+and space-group policy may differ between ranks. Gloo supports CPU packers;
+NCCL supports CUDA packers, usually with one process per GPU.</p>
+<p>Before packing, the generator automatically compares
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.MolecularPackingInput.html#nvalchemi.csp.MolecularPackingInput.sha256" title="nvalchemi.csp.MolecularPackingInput.sha256"><code class="xref py py-attr docutils literal notranslate"><span class="pre">sha256</span></code></a> across processes to check
+that they received the same prepared input. The comparison includes conformer
+coordinates, contact distances, metadata, and the formula-unit volume estimate.
+It requires exact data: even small coordinate differences cause a mismatch.</p>
+<p><code class="docutils literal notranslate"><span class="pre">packer.device</span></code> selects where packing runs; the configuration describes the
+scientific search settings. <code class="docutils literal notranslate"><span class="pre">CSPGenerator</span></code> takes its execution device from the
+packer. Each rank can use the same settings on its own device. An input Batch
+or a downstream model does not select the CSP generator’s device.</p>
+<p>This fragment assumes a <code class="docutils literal notranslate"><span class="pre">torchrun</span></code> launch and an initialized NCCL group. Prepare
+the <a class="reference internal" href="#csp-water-example">input and config</a> on each process:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSPGenerator</span>
+
+<span class="n">local_rank</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;LOCAL_RANK&quot;</span><span class="p">])</span>
+<span class="n">device</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;cuda:</span><span class="si">{</span><span class="n">local_rank</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="n">rank_packer</span> <span class="o">=</span> <span class="n">OverlapReliefPacker</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+<span class="n">generator</span> <span class="o">=</span> <span class="n">CSPGenerator</span><span class="p">(</span>
+    <span class="n">rank_packer</span><span class="p">,</span>
+    <span class="n">process_group</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">group</span><span class="o">.</span><span class="n">WORLD</span><span class="p">,</span>
+    <span class="n">gather_to_rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">expand</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">rank_result</span> <span class="o">=</span> <span class="n">generator</span><span class="p">(</span>
+    <span class="n">packing_input</span><span class="p">,</span>
+    <span class="n">num_samples</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">7</span><span class="p">),</span>
+    <span class="n">run_id</span><span class="o">=</span><span class="mi">78</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">assert</span> <span class="n">rank_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="k">assert</span> <span class="n">rank_result</span> <span class="ow">is</span> <span class="kc">None</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">num_samples</span></code> is the global accepted-output target. Default quotas divide it
+by quotient and remainder. For budget-capable packers, the driver resolves the
+global candidate cap before allocating it. Custom <code class="docutils literal notranslate"><span class="pre">rank_targets</span></code> must sum to
+the positive global target. When <code class="docutils literal notranslate"><span class="pre">rank_candidate_budgets</span></code> is omitted, each rank
+gets a share of a finite cap proportional to its target. Shares are rounded
+down; leftover trials go to the largest fractional shares, with lower
+group-local ranks winning ties. A zero-target rank receives zero trials. For
+example, targets <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">2]</span></code> receive budgets <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">2000]</span></code> under automatic mode.
+Explicit budgets take precedence and must sum to the global cap. Default
+targets retain quotient/remainder budget allocation; unlimited caps remain
+unlimited on each rank. Unused budgets are not redistributed. Packers without
+candidate budgets need no trial counting and reject explicit rank-budget
+vectors.</p>
+<p><code class="docutils literal notranslate"><span class="pre">gather_to_rank</span></code> uses group-local ranks. With a destination, the native result
+contains rank-major structures and every rank’s completion report. Without a
+destination, each rank keeps its local result. Gathering requires one native
+representation and matching property or Batch schemas on all ranks, including
+empty results; mixing rigid and atomistic output in one gather is rejected.</p>
+<p>Ranks agree on the input, execution contract, and run ID at startup, then pack
+locally to completion. Rank-local output has no terminal rendezvous: errors
+and completion are local. Gathered output exchanges terminal status before
+payload transfer and assembly status afterward. Early, failed, and zero-quota
+ranks may wait for the slowest peer. Set the process-group timeout to cover
+that skew; unlimited searches may never finish. There is no periodic
+coordination or peer cancellation. Hard process/device failures and transport
+failures are outside ordinary Python error agreement.</p>
+<p>The generator scopes NCCL communication to the packer’s CUDA device and
+restores the caller’s current device. Constructor/session failures and
+collectives inside user callbacks remain caller-owned. Later distributed
+optimization is a separate Toolkit workflow (see <a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics: Optimization and Molecular Dynamics</span></a>).</p>
+<p>Distributed setup remains caller-owned. Internally, each grouped generation
+call uses <a class="reference internal" href="../modules/generated/nvalchemi.distributed.ProcessGroupContext.html#nvalchemi.distributed.ProcessGroupContext" title="nvalchemi.distributed.ProcessGroupContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProcessGroupContext</span></code></a> for the supplied
+group’s topology and communication device, and
+<a class="reference internal" href="../modules/generated/nvalchemi.distributed.collective_error_sync.html#nvalchemi.distributed.collective_error_sync" title="nvalchemi.distributed.collective_error_sync"><code class="xref py py-func docutils literal notranslate"><span class="pre">collective_error_sync()</span></code></a> for startup, packing
+metadata, and assembly error agreement. Rank-local calls exchange startup
+metadata and broadcast the run ID, then finish independently. Gathered calls
+also exchange packing metadata before typed transfers and assembly status
+afterward. Callbacks, expansion, and <code class="docutils literal notranslate"><span class="pre">AFTER_GENERATE</span></code> run after these phases;
+their exceptions remain local.</p>
+<p>As an alternative to external PyTorch initialization, use a named Manager
+group. This setup starts before a process group has been initialized and reuses
+<code class="docutils literal notranslate"><span class="pre">config</span></code> from the water example above:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSPGenerator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.packer</span><span class="w"> </span><span class="kn">import</span> <span class="n">OverlapReliefPacker</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DistributedManager</span>
+
+<span class="n">DistributedManager</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+<span class="n">manager</span> <span class="o">=</span> <span class="n">DistributedManager</span><span class="p">()</span>
+<span class="n">process_group</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+    <span class="n">DistributedManager</span><span class="o">.</span><span class="n">create_process_subgroup</span><span class="p">(</span><span class="s2">&quot;packing&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">manager</span><span class="o">.</span><span class="n">world_size</span><span class="p">)</span>
+    <span class="n">process_group</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s2">&quot;packing&quot;</span><span class="p">)</span>
+
+<span class="n">packer</span> <span class="o">=</span> <span class="n">OverlapReliefPacker</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">manager</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+<span class="n">generator</span> <span class="o">=</span> <span class="n">CSPGenerator</span><span class="p">(</span>
+    <span class="n">packer</span><span class="p">,</span>
+    <span class="n">process_group</span><span class="o">=</span><span class="n">process_group</span><span class="p">,</span>
+    <span class="n">gather_to_rank</span><span class="o">=</span><span class="mi">0</span> <span class="k">if</span> <span class="n">process_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">manager.group()</span></code> returns <code class="docutils literal notranslate"><span class="pre">None</span></code> for the default group, while <code class="docutils literal notranslate"><span class="pre">CSPGenerator</span></code>
+interprets <code class="docutils literal notranslate"><span class="pre">None</span></code> as local execution. Select <code class="docutils literal notranslate"><span class="pre">dist.group.WORLD</span></code> explicitly or
+pass an actual named group. Manager initialization in a single-process run may
+leave PyTorch distributed uninitialized; the example selects local CSP
+execution in that case. The caller keeps the group alive until generation and
+any later communication finish. See <a class="reference internal" href="../modules/distributed_runtime.html#distributed-runtime"><span class="std std-ref">Distributed runtime utilities</span></a> for shared
+runtime helpers and their ordinary-failure boundaries.</p>
+</section>
+<section id="store-and-relax-selected-candidates">
+<h2>Store and relax selected candidates<a class="headerlink" href="#store-and-relax-selected-candidates" title="Link to this heading">#</a></h2>
+<p>The examples below continue from the <a class="reference internal" href="#csp-water-example">single-GPU result</a>.
+For a distributed run, save on the gather destination using its non-<code class="docutils literal notranslate"><span class="pre">None</span></code>
+<code class="docutils literal notranslate"><span class="pre">rank_result</span></code>.</p>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.csp.RigidMoleculeASUBatch.html#nvalchemi.csp.RigidMoleculeASUBatch" title="nvalchemi.csp.RigidMoleculeASUBatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMoleculeASUBatch</span></code></a> stores independent molecule
+placements, shared conformers, cell, and space-group information instead of
+all full-cell atom coordinates. Save accepted ASU representations first, then
+expand only the candidates chosen for expensive physical optimization.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp</span><span class="w"> </span><span class="kn">import</span> <span class="n">RigidMoleculeASUZarrReader</span><span class="p">,</span> <span class="n">RigidMoleculeASUZarrWriter</span>
+
+<span class="k">with</span> <span class="n">RigidMoleculeASUZarrWriter</span><span class="p">(</span><span class="s2">&quot;water-candidates.zarr&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">writer</span><span class="p">:</span>
+    <span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="p">)</span>
+
+<span class="k">with</span> <span class="n">RigidMoleculeASUZarrReader</span><span class="p">(</span><span class="s2">&quot;water-candidates.zarr&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">reader</span><span class="p">:</span>
+    <span class="n">asu_rows</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">indices</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]))</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">read_batch</span><span class="p">(</span><span class="n">indices</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">asu_rows</span><span class="o">.</span><span class="n">num_structures</span> <span class="o">==</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">==</span> <span class="mi">2</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">write()</span></code> creates a new store and refuses to replace an existing path. Use a
+fresh path when rerunning the example. <code class="docutils literal notranslate"><span class="pre">append()</span></code> adds compatible rows; an
+identical active structure ID is skipped, while conflicting data for that ID
+raises an error. <code class="docutils literal notranslate"><span class="pre">read_batch()</span></code> requires explicit row indices so a large store
+is not expanded accidentally. An empty <code class="docutils literal notranslate"><span class="pre">OverlapReliefPacker</span></code> result is a
+valid ASU batch, but handle it before passing data to an optimizer.</p>
+<section id="check-externally-prepared-compact-data">
+<h3>Check externally prepared compact data<a class="headerlink" href="#check-externally-prepared-compact-data" title="Link to this heading">#</a></h3>
+<p>Before expanding compact data prepared by another program, call
+<code class="docutils literal notranslate"><span class="pre">check_integrity()</span></code> explicitly on the selected structures:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">RigidMoleculeASUZarrReader</span><span class="p">(</span><span class="s2">&quot;water-candidates.zarr&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">reader</span><span class="p">:</span>
+    <span class="n">compact</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">indices</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+    <span class="n">compact</span><span class="o">.</span><span class="n">check_integrity</span><span class="p">()</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">compact</span><span class="o">.</span><span class="n">to_batch</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Let <code class="docutils literal notranslate"><span class="pre">F</span></code> be the number of molecules in one formula unit and <code class="docutils literal notranslate"><span class="pre">Q</span></code> the total ASU
+molecule rows. <code class="docutils literal notranslate"><span class="pre">structure_molecule_ptr</span></code> must start at zero, never decrease,
+end at <code class="docutils literal notranslate"><span class="pre">Q</span></code>, and assign <code class="docutils literal notranslate"><span class="pre">F</span> <span class="pre">*</span> <span class="pre">z_prime</span></code> rows to each structure. <code class="docutils literal notranslate"><span class="pre">z</span></code> and <code class="docutils literal notranslate"><span class="pre">z_prime</span></code>
+must be positive, <code class="docutils literal notranslate"><span class="pre">z_prime</span></code> must divide <code class="docutils literal notranslate"><span class="pre">z</span></code>, and the space group must be in
+1-230 with <code class="docutils literal notranslate"><span class="pre">z</span> <span class="pre">/</span> <span class="pre">z_prime</span></code> bundled operations. Rows repeat the formula-molecule
+order for each independent copy; every conformer index must belong to that
+molecule’s pool. The checker verifies these index relationships and raises
+<code class="docutils literal notranslate"><span class="pre">ValueError</span></code> when they fail.</p>
+<p>Geometry still needs to be valid: fractional centers must be finite, but may
+lie outside <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">1)</span></code>. Cartesian rotations must be finite proper rotations,
+applied as <code class="docutils literal notranslate"><span class="pre">local_positions</span> <span class="pre">&#64;</span> <span class="pre">rotation.T</span></code>. Cells must be finite nonsingular
+row-vector lattices in angstroms with positive volume; the selected fractional
+symmetry operations must preserve the cell metric. Index checking does not
+certify these conditions. Invalid geometry can produce incorrect or nonfinite
+expanded coordinates even when index checking passes.</p>
+<p>Construction checks tensor shapes, dtypes, device consistency, and property
+names. Construction, storage reads, packing, and expansion do not automatically
+run the index checker. Skipping it on malformed data can select another
+structure’s rows or another group’s operations. Storage-layout checks do not
+establish these relationships or geometry validity. Checking on CPU before
+expansion avoids additional GPU readbacks; checking device-resident data may
+synchronize. The checker scans integer metadata in proportion to the selected
+data, and its overhead has not been measured.</p>
+<p>The expanded <code class="docutils literal notranslate"><span class="pre">batch</span></code> can enter Toolkit dynamics. This one-step demonstration
+shows the handoff; <code class="docutils literal notranslate"><span class="pre">DemoModel</span></code> is not a physical crystal potential and its
+output has no CSP ranking value. For a search, use a model suitable for the
+composition and intermolecular interactions, configure its required neighbor
+data, and relax to an appropriate convergence criterion (see
+<a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics: Optimization and Molecular Dynamics</span></a>).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE2</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.demo</span><span class="w"> </span><span class="kn">import</span> <span class="n">DemoModel</span><span class="p">,</span> <span class="n">DemoModelWrapper</span>
+
+<span class="n">demo_model</span> <span class="o">=</span> <span class="n">DemoModelWrapper</span><span class="p">(</span><span class="n">DemoModel</span><span class="p">())</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">demo_model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">optimizer</span><span class="p">:</span>
+    <span class="n">demo_relaxed</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="warning admonition">
+<p class="admonition-title">Space-group symmetry during optimization</p>
+<p>Atomistic optimization does not enforce the generated space group. The stored
+space-group field records the source packing; it does not describe the symmetry
+of the optimized coordinates. See <a class="reference internal" href="#csp-source-metadata"><span class="std std-ref">source metadata</span></a>
+for the retained provenance fields.</p>
+</div>
+<p>In a single-process run, each accepted structure has a stable
+<code class="docutils literal notranslate"><span class="pre">[run_id,</span> <span class="pre">accepted_structure_number]</span></code> ID, with the second number starting at
+zero. Distributed runs use rank-strided numbers to keep IDs unique. Expansion
+carries these IDs and the source space group into the atomistic Batch.</p>
+</section>
+<section id="run-packing-in-a-generation-pipeline">
+<h3>Run packing in a generation pipeline<a class="headerlink" href="#run-packing-in-a-generation-pipeline" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">CSPGenerator</span></code> subclasses <code class="docutils literal notranslate"><span class="pre">AtomisticGenerator</span></code> and reuses its RNG, conditioning,
+hooks, sessions, streaming, and pipeline lifecycle. By default it expands rigid
+ASU results to full-cell <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> objects; native Batch
+results pass through unchanged. This example reuses <code class="docutils literal notranslate"><span class="pre">packer</span></code>, <code class="docutils literal notranslate"><span class="pre">packing_input</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">demo_model</span></code> above:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSPGenerator</span>
+
+<span class="n">generator</span> <span class="o">=</span> <span class="n">CSPGenerator</span><span class="p">(</span><span class="n">packer</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">79</span><span class="p">)</span>
+<span class="n">pipeline</span> <span class="o">=</span> <span class="n">generator</span> <span class="o">|</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">demo_model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">pipeline</span><span class="p">:</span>
+    <span class="n">relaxed</span> <span class="o">=</span> <span class="n">pipeline</span><span class="p">(</span><span class="n">packing_input</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A finite budget may produce fewer structures than requested. An empty Batch
+skips downstream stages. <code class="docutils literal notranslate"><span class="pre">AFTER_GENERATE</span></code> hooks see the atomistic output;
+native results and their reports describe packing before those hooks filter
+or modify it. Collective dynamics need a separate integration when ranks have
+unequal outputs or gathered non-destination ranks have no output.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">on_result</span></code> to inspect or persist native results before expansion, hooks,
+or dynamics. For rigid results, the existing ASU writer can persist candidates
+even if later optimization fails:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">make_persistence_callback</span><span class="p">(</span><span class="n">writer</span><span class="p">):</span>
+    <span class="n">initialized</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">persist</span><span class="p">(</span><span class="n">result</span><span class="p">):</span>
+        <span class="k">nonlocal</span> <span class="n">initialized</span>
+        <span class="k">if</span> <span class="n">initialized</span><span class="p">:</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">structures</span><span class="p">)</span>
+            <span class="n">initialized</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">return</span> <span class="n">persist</span>
+
+
+<span class="k">with</span> <span class="n">RigidMoleculeASUZarrWriter</span><span class="p">(</span><span class="s2">&quot;pipeline-candidates.zarr&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">writer</span><span class="p">:</span>
+    <span class="n">generator</span> <span class="o">=</span> <span class="n">CSPGenerator</span><span class="p">(</span>
+        <span class="n">packer</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+        <span class="n">seed</span><span class="o">=</span><span class="mi">79</span><span class="p">,</span>
+        <span class="n">on_result</span><span class="o">=</span><span class="n">make_persistence_callback</span><span class="p">(</span><span class="n">writer</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">with</span> <span class="n">generator</span> <span class="o">|</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">demo_model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">pipeline</span><span class="p">:</span>
+        <span class="n">relaxed</span> <span class="o">=</span> <span class="n">pipeline</span><span class="p">(</span><span class="n">packing_input</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Use a fresh destination owned by this callback. The first successful call
+creates the store with <code class="docutils literal notranslate"><span class="pre">write()</span></code>; later calls use <code class="docutils literal notranslate"><span class="pre">append()</span></code>. An empty first
+result also creates a valid store. Later results must have the same formula
+input and compatible property names, dtypes, and trailing dimensions. Completed
+writes survive a later optimization failure.</p>
+<p>An existing path raises <code class="docutils literal notranslate"><span class="pre">FileExistsError</span></code>; this callback does not resume an
+existing search or overwrite data. Its state belongs to this writer and
+callback lifetime. Failed creation leaves the flag unset, but partial I/O may
+leave an existing path, so retry and interrupted-write recovery are not
+guaranteed. It provides no concurrent-writer coordination.</p>
+<p>The callback runs once per result owner, including empty results: each rank
+in rank-local mode or only the destination in gather mode, after
+communication completes. Callback exceptions are local and callbacks must
+not require a peer collective. Native Batch payloads alias downstream
+output, so copy the payload explicitly to retain an unchanged snapshot.
+ASU storage remains for rigid representations; this change does not make
+the ASU writer a Batch store.</p>
+<p><code class="docutils literal notranslate"><span class="pre">expand=False</span></code> returns a raw <code class="docutils literal notranslate"><span class="pre">PackingResult</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> on non-destination ranks
+in gather mode. Raw results bypass Batch hooks and cannot feed dynamics.
+Expanded non-destination ranks receive an empty Batch. Driver compilation is
+unsupported: <code class="docutils literal notranslate"><span class="pre">CSPGenerator.compile()</span></code> and pipeline compilation through a CSP
+stage raise; compiled scientific internals inside a packer remain possible.</p>
+</section>
+<section id="save-a-generation-recipe">
+<h3>Save a generation recipe<a class="headerlink" href="#save-a-generation-recipe" title="Link to this heading">#</a></h3>
+<p>Local CSP generators can be saved as JSON construction recipes. The recipe
+includes the packer’s configuration and device, generator options, output
+declaration, and supported hooks and callbacks. Loading reconstructs the packer
+and CSP generator.</p>
+<p>A pipeline can be saved only when every stage supports serialization. Save the
+CSP generator separately here, then construct the dynamics stage after loading:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSPGenerator</span>
+
+<span class="n">recipe_generator</span> <span class="o">=</span> <span class="n">CSPGenerator</span><span class="p">(</span><span class="n">packer</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">79</span><span class="p">)</span>
+<span class="n">recipe</span> <span class="o">=</span> <span class="n">recipe_generator</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">()</span>
+<span class="n">restored_generator</span> <span class="o">=</span> <span class="n">CSPGenerator</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">recipe</span><span class="p">)</span>
+
+<span class="k">with</span> <span class="n">restored_generator</span> <span class="o">|</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">demo_model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">restored_pipeline</span><span class="p">:</span>
+    <span class="n">relaxed</span> <span class="o">=</span> <span class="n">restored_pipeline</span><span class="p">(</span><span class="n">packing_input</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A restored recipe starts a fresh generation session. It preserves the configured
+seed, but not a consumed random-number state, call counters, or run identifiers.
+Molecular inputs and per-call options are supplied again when running the
+restored pipeline.</p>
+<p>Custom packers must provide <code class="docutils literal notranslate"><span class="pre">to_spec()</span></code> returning a <code class="docutils literal notranslate"><span class="pre">BaseSpec</span></code> to support
+serialization. Callback functions must be importable, or callable objects must
+provide their own construction spec. Ordinary instance-bound methods are not
+serializable by import path alone. A live distributed process group cannot be
+saved in this recipe; its lifetime and binding remain caller-owned.</p>
+</section>
+<section id="supply-another-packing-algorithm">
+<h3>Supply another packing algorithm<a class="headerlink" href="#supply-another-packing-algorithm" title="Link to this heading">#</a></h3>
+<p>Implement <code class="docutils literal notranslate"><span class="pre">CrystalPacker</span></code> structurally: expose <code class="docutils literal notranslate"><span class="pre">device</span></code> and a local <code class="docutils literal notranslate"><span class="pre">pack</span></code>
+method; no Toolkit inheritance or common configuration base is required.
+The driver supplies a <code class="docutils literal notranslate"><span class="pre">PackingContext</span></code> for identity and never supplies a
+process group to the algorithm. A zero-target call returns a typed empty
+result with the same schema as a positive call and consumes no sampling RNG.</p>
+<p>The following small example repeats supplied geometry to demonstrate the
+atomistic result contract. It does not search for packings:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">secrets</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.packer</span><span class="w"> </span><span class="kn">import</span> <span class="n">PackingContext</span><span class="p">,</span> <span class="n">PackingReport</span><span class="p">,</span> <span class="n">PackingResult</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">FixedGeometryPacker</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">template</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">template</span><span class="o">.</span><span class="n">add_system_property</span><span class="p">(</span>
+            <span class="s2">&quot;csp_source_structure_id&quot;</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">pack</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">options</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown packing options: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">options</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="n">context</span> <span class="ow">or</span> <span class="n">PackingContext</span><span class="p">(</span><span class="n">secrets</span><span class="o">.</span><span class="n">randbits</span><span class="p">(</span><span class="mi">63</span><span class="p">))</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">structure_ids</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_samples</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+                <span class="n">num_systems</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_nodes</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_edges</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">template</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">template</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">ordinal</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">):</span>
+                <span class="n">row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">template</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="n">row</span><span class="p">[</span><span class="s2">&quot;csp_source_structure_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ids</span><span class="p">[</span><span class="n">ordinal</span><span class="p">:</span><span class="n">ordinal</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+                <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">report</span> <span class="o">=</span> <span class="n">PackingReport</span><span class="p">(</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">rank</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">,</span> <span class="s2">&quot;target_reached&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">PackingResult</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">run_id</span><span class="p">,</span> <span class="p">(</span><span class="n">report</span><span class="p">,))</span>
+</pre></div>
+</div>
+<p>Supply an <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> template with positions, atomic numbers, cell, and PBC,
+then use <code class="docutils literal notranslate"><span class="pre">CSPGenerator(FixedGeometryPacker(template))</span></code>. Scientific packers also
+provide any fields required by subsequent dynamics. Native Batch results carry
+system-level <code class="docutils literal notranslate"><span class="pre">csp_source_structure_id</span></code> as int64 <code class="docutils literal notranslate"><span class="pre">[P,</span> <span class="pre">2]</span></code>; rigid packers use the
+same IDs in <code class="docutils literal notranslate"><span class="pre">RigidMoleculeASUBatch.structure_ids</span></code>. IDs remain
+<code class="docutils literal notranslate"><span class="pre">[run_id,</span> <span class="pre">rank</span> <span class="pre">+</span> <span class="pre">world_size</span> <span class="pre">*</span> <span class="pre">local_accepted_ordinal]</span></code>, independent of
+sampling RNG.</p>
+<p><code class="docutils literal notranslate"><span class="pre">PackingResult</span></code> exposes <code class="docutils literal notranslate"><span class="pre">requested_count</span></code>, <code class="docutils literal notranslate"><span class="pre">accepted_count</span></code>, <code class="docutils literal notranslate"><span class="pre">complete</span></code>, and
+ordered <code class="docutils literal notranslate"><span class="pre">reports</span></code>. <code class="docutils literal notranslate"><span class="pre">generated_count</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code> when an algorithm does not count
+candidates. Incomplete reports may use algorithm-specific stop reasons;
+gathered results preserve these rather than attributing every shortfall to
+candidate-budget exhaustion. A rigid result must retain equivalent formula
+data, including conformer coordinates. Algorithms that change internal
+geometry beyond that library return Batch.</p>
+<p>Candidate-budget support is optional. Implement
+<code class="docutils literal notranslate"><span class="pre">resolve_candidate_budget(num_samples=...,</span> <span class="pre">**pack_options)</span></code> without sampling
+and accept an allocated <code class="docutils literal notranslate"><span class="pre">candidate_budget</span></code> in <code class="docutils literal notranslate"><span class="pre">pack</span></code> when that capability
+is useful. A zero allocated cap produces an empty result without sampling.
+The scientific candidate loop stays in the algorithm; overlap relief retains
+its private resumable core. Public rounds and a shared candidate controller
+are deferred until a second implementation demonstrates a common lifecycle.
+These choices follow the extensibility goal of
+<a class="reference external" href="https://github.com/NVIDIA/nvalchemi-toolkit/pull/207#discussion_r4128056444">the API design discussion</a>
+while supporting both rigid and explicit-coordinate output.</p>
+<section id="optional-deduplication-for-custom-packers">
+<h4>Optional deduplication for custom packers<a class="headerlink" href="#optional-deduplication-for-custom-packers" title="Link to this heading">#</a></h4>
+<p>Custom packers, including those based on generative models, may propose
+repeated crystal candidates. <code class="docutils literal notranslate"><span class="pre">DeduplicateHook</span></code> provides optional filtering of
+their generated structures before downstream processing.</p>
+<p>The bundled <code class="docutils literal notranslate"><span class="pre">radial</span></code> engine compares expanded atomic structures within each
+generated Batch using approximate similarity. It keeps no reference set between
+calls.</p>
+<p>The following example uses <code class="docutils literal notranslate"><span class="pre">FixedGeometryPacker</span></code> from above, which deliberately
+repeats the supplied geometry:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DeduplicateHook</span>
+
+<span class="n">custom_packer</span> <span class="o">=</span> <span class="n">FixedGeometryPacker</span><span class="p">(</span><span class="n">template</span><span class="p">)</span>
+<span class="n">generator</span> <span class="o">=</span> <span class="n">CSPGenerator</span><span class="p">(</span>
+    <span class="n">custom_packer</span><span class="p">,</span>
+    <span class="n">num_samples</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">79</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">DeduplicateHook</span><span class="o">.</span><span class="n">radial</span><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)],</span>
+<span class="p">)</span>
+<span class="k">with</span> <span class="n">generator</span> <span class="o">|</span> <span class="n">FIRE2</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">demo_model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">pipeline</span><span class="p">:</span>
+    <span class="n">relaxed</span> <span class="o">=</span> <span class="n">pipeline</span><span class="p">(</span><span class="n">packing_input</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Choose the cutoff and threshold for your application. See
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.hooks.DeduplicateHook.html#nvalchemi.csp.hooks.DeduplicateHook.radial" title="nvalchemi.csp.hooks.DeduplicateHook.radial"><code class="xref py py-meth docutils literal notranslate"><span class="pre">radial()</span></code></a> for confirmation options
+and <a class="reference internal" href="../modules/generated/nvalchemi.csp.hooks.DeduplicationEngine.html#nvalchemi.csp.hooks.DeduplicationEngine" title="nvalchemi.csp.hooks.DeduplicationEngine"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeduplicationEngine</span></code></a> for custom engines.</p>
+</section>
+</section>
+</section>
+<section id="screen-similar-and-duplicate-structures">
+<span id="csp-comparison"></span><h2>Screen similar and duplicate structures<a class="headerlink" href="#screen-similar-and-duplicate-structures" title="Link to this heading">#</a></h2>
+<p>A CSP campaign can generate and optimize <span class="math notranslate nohighlight">\(10^4\)</span> to <span class="math notranslate nohighlight">\(10^6\)</span> trial structures,
+many of which may converge to similar geometries. A pool of <span class="math notranslate nohighlight">\(N\)</span> structures
+has <span class="math notranslate nohighlight">\(N(N-1)/2\)</span> possible unordered pairs: about 50 million for <span class="math notranslate nohighlight">\(10^4\)</span>
+structures and 500 billion for <span class="math notranslate nohighlight">\(10^6\)</span>. The comparison API makes each
+first-pass comparison fast; exhaustive pair enumeration still grows
+quadratically. For very large pools, select plausible pairs or work in chunks.</p>
+<section id="what-the-radial-mismatch-score-means">
+<h3>What the radial mismatch score means<a class="headerlink" href="#what-the-radial-mismatch-score-means" title="Link to this heading">#</a></h3>
+<p>For each atom, the index sorts distances to neighbors within <code class="docutils literal notranslate"><span class="pre">cutoff</span></code>, in
+<span class="math notranslate nohighlight">\(\mathrm{\AA}\)</span>;
+shorter lists are padded with the cutoff distance. It finds the most similar
+compatible atom environment in the other structure by comparing those
+distance patterns, regardless of the atoms’ coordinates in a common frame.
+Every atom environment must find a match in the other structure, and the
+comparison runs in both directions. Several atoms may match the same
+environment: this is not a one-to-one atom assignment.</p>
+<p>The <strong>radial mismatch score</strong> is the largest relative mismatch remaining
+after these matches. For two positive distances, the mismatch is
+<code class="docutils literal notranslate"><span class="pre">max(d1,</span> <span class="pre">d2)</span> <span class="pre">/</span> <span class="pre">min(d1,</span> <span class="pre">d2)</span> <span class="pre">-</span> <span class="pre">1</span></code>. At <code class="docutils literal notranslate"><span class="pre">threshold=0.1</span></code>, the larger distance may
+be at most 10% above the smaller one. For example, <span class="math notranslate nohighlight">\(2.0\,\mathrm{\AA}\)</span> and
+<span class="math notranslate nohighlight">\(2.1\,\mathrm{\AA}\)</span> have a score of 0.05. The threshold is dimensionless, not
+a tolerance in <span class="math notranslate nohighlight">\(\mathrm{\AA}\)</span>. Lower scores mean closer local distance
+patterns.</p>
+<p>The score ignores angles, chirality, energy, and distances beyond <code class="docutils literal notranslate"><span class="pre">cutoff</span></code>.
+Distinct crystals can therefore have low mismatch scores: <strong>matches can be false
+positives</strong>. For molecular crystals, <a class="reference external" href="https://github.com/OXtal/oxtalign">OXtalign</a>
+compares molecular packing; <a class="reference external" href="https://pymatgen.org/pymatgen.core.html#pymatgen.core.structure_matcher.StructureMatcher">pymatgen’s StructureMatcher</a>
+offers general crystal-structure matching. These are external options for
+confirming important matches. With <code class="docutils literal notranslate"><span class="pre">deduplicate(confirm=...)</span></code>, the caller
+supplies a more detailed comparison function. CSP passes it the pairs that
+survive the radial screen and uses the confirmed subset to choose retained
+representatives. No final crystallographic comparator is bundled here.
+The index honors fully periodic, partially periodic, or nonperiodic coordinates
+according to the Batch cell and PBC flags. Periodic directions require both a
+cell and PBC flags; a cell alone does not enable periodic comparison.</p>
+</section>
+<section id="choose-how-atom-types-restrict-matches">
+<h3>Choose how atom types restrict matches<a class="headerlink" href="#choose-how-atom-types-restrict-matches" title="Link to this heading">#</a></h3>
+<p>Each distance list belongs to a <strong>central atom</strong> and describes its neighbors.
+An untyped first screen lets any central atoms match based on distances alone;
+it avoids type preparation and uses the simplest descriptor, but can leave
+more false positives. Supplying <code class="docutils literal notranslate"><span class="pre">atom_types</span></code> restricts which central atoms may
+match. Setting <code class="docutils literal notranslate"><span class="pre">typed_neighbors=True</span></code> also separates their neighbor distances
+by atom type. Callers can choose the level of chemical selectivity:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Settings</p></th>
+<th class="head"><p>Which atoms may match?</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atom_types=None</span></code></p></td>
+<td><p>Any central atoms; elements are not inferred.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atom_types=batch.atomic_numbers</span></code>, <code class="docutils literal notranslate"><span class="pre">typed_neighbors=False</span></code></p></td>
+<td><p>Central atoms of the same element; all neighbor distances remain in one list.</p></td>
+</tr>
+<tr class="row-even"><td><p>Topological <code class="docutils literal notranslate"><span class="pre">atom_types</span></code>, <code class="docutils literal notranslate"><span class="pre">typed_neighbors=False</span></code></p></td>
+<td><p>Central atoms with the same molecular connectivity role; neighbor distances remain in one list.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Types with <code class="docutils literal notranslate"><span class="pre">typed_neighbors=True</span></code></p></td>
+<td><p>Central atoms of the same type, with neighbor distances compared separately by neighbor type.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Atomic numbers alone do not identify an atom’s role within a molecule. In
+ethanol, both the methyl and methylene carbons have atomic number 6 but
+different bond connections. <strong>Topological atom types</strong> distinguish those
+roles. With explicit hydrogens, the three methyl hydrogens share one type,
+the two methylene hydrogens another, and the hydroxyl hydrogen has its own.
+The helpers group atoms that can be exchanged by relabeling a molecule while
+preserving elements and bond connections.</p>
+<p>Topological type numbers are local labels. Build one
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.chem.TopologicalAtomTypeMap.html#nvalchemi.csp.chem.TopologicalAtomTypeMap" title="nvalchemi.csp.chem.TopologicalAtomTypeMap"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologicalAtomTypeMap</span></code></a> from the formula unit’s
+ordered atomic numbers and bonds, then use it to label both relaxed candidates
+and any experimental structures compared with them. The labels ignore bond
+order, charge, isotope labels, stereochemistry, geometry, and implicit
+hydrogens. For a single graph, use
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.chem.topological_atom_types_from_connectivity.html#nvalchemi.csp.chem.topological_atom_types_from_connectivity" title="nvalchemi.csp.chem.topological_atom_types_from_connectivity"><code class="xref py py-func docutils literal notranslate"><span class="pre">topological_atom_types_from_connectivity()</span></code></a> with
+tensors or <a class="reference internal" href="../modules/generated/nvalchemi.csp.chem.topological_atom_types_from_mol.html#nvalchemi.csp.chem.topological_atom_types_from_mol" title="nvalchemi.csp.chem.topological_atom_types_from_mol"><code class="xref py py-func docutils literal notranslate"><span class="pre">topological_atom_types_from_mol()</span></code></a> with
+RDKit. The default <code class="docutils literal notranslate"><span class="pre">typed_neighbors=True</span></code> separates neighbor lists when types
+are supplied. Callers can run successive typing screens on surviving pairs;
+the Toolkit does not perform that sequence automatically.</p>
+</section>
+<section id="deduplicate-a-relaxed-structure-pool">
+<h3>Deduplicate a relaxed structure pool<a class="headerlink" href="#deduplicate-a-relaxed-structure-pool" title="Link to this heading">#</a></h3>
+<p>After the generate -&gt; optimize workflow above, collect relaxed structures
+generated from the same molecular input into a standard Toolkit <code class="docutils literal notranslate"><span class="pre">Batch</span></code>,
+called <code class="docutils literal notranslate"><span class="pre">batch</span></code> below.
+Assume optimization has preserved molecular connectivity: the structures may
+have different geometries, but they share the same molecular topology. Retain
+the molecular-bond matrix as <code class="docutils literal notranslate"><span class="pre">template_adjacency</span></code>, using the <strong>same atom order</strong>
+as <code class="docutils literal notranslate"><span class="pre">packing_input.atomic_numbers</span></code>. ASU expansion records each atom’s source
+index, which the type map uses to label relaxed structures even when they have
+different <code class="docutils literal notranslate"><span class="pre">Z</span></code> or <code class="docutils literal notranslate"><span class="pre">Z'</span></code>. Keep that index aligned with its atom during optimization
+and storage. The map checks indices and elements, but cannot establish that a
+loaded Batch came from this particular formula unit. See
+<a class="reference internal" href="#csp-source-metadata"><span class="std std-ref">Source metadata after geometry changes</span></a> for the provenance field.</p>
+<p>Topological types are optional for approximate matching. An index without
+types compares local distances regardless of atom identity; using atomic
+numbers as types restricts central atoms to the same element. Either may leave
+more false-positive matches than topology-based screening, because atoms of
+the same element can play different roles in a molecule.</p>
+<p>For a pool with a manageable number of possible pairs, refine matches in three
+steps: distances alone, then the molecular role of the central atom, then the
+roles of both the central atom and its neighbors. Each step keeps only pairs
+that passed the preceding one. Release each index before building the next.
+Replace the <code class="docutils literal notranslate"><span class="pre">...</span></code> placeholders with your formula-unit input, its bond matrix,
+and a relaxed Toolkit <code class="docutils literal notranslate"><span class="pre">Batch</span></code> from the same search:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.chem</span><span class="w"> </span><span class="kn">import</span> <span class="n">TopologicalAtomTypeMap</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.comparison</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadialComparisonIndex</span>
+
+<span class="n">packing_input</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># Formula-unit input used to generate this search pool.</span>
+<span class="n">template_adjacency</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># Boolean bonds in packing_input.atomic_numbers order.</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># Toolkit Batch of optimized trial crystals with ASU source fields.</span>
+
+<span class="n">cutoff</span> <span class="o">=</span> <span class="mf">15.0</span>  <span class="c1"># angstroms</span>
+<span class="n">threshold</span> <span class="o">=</span> <span class="mf">0.05</span>  <span class="c1"># maximum relative distance mismatch</span>
+
+<span class="c1"># 1. Compare local distances without atom types.</span>
+<span class="n">untyped_index</span> <span class="o">=</span> <span class="n">RadialComparisonIndex</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="n">cutoff</span><span class="p">)</span>
+<span class="n">pairs</span> <span class="o">=</span> <span class="n">untyped_index</span><span class="o">.</span><span class="n">find_matches</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">)</span>
+<span class="k">del</span> <span class="n">untyped_index</span>
+
+<span class="c1"># 2. For pairs marked as possible duplicates by step 1, require the</span>
+<span class="c1">#    central atoms to have the same molecular role.</span>
+<span class="n">type_map</span> <span class="o">=</span> <span class="n">TopologicalAtomTypeMap</span><span class="p">(</span>
+    <span class="n">packing_input</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="p">,</span> <span class="n">template_adjacency</span>
+<span class="p">)</span>
+<span class="n">topology_types</span> <span class="o">=</span> <span class="n">type_map</span><span class="o">.</span><span class="n">for_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+<span class="n">center_index</span> <span class="o">=</span> <span class="n">RadialComparisonIndex</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="n">cutoff</span><span class="p">,</span> <span class="n">atom_types</span><span class="o">=</span><span class="n">topology_types</span><span class="p">,</span> <span class="n">typed_neighbors</span><span class="o">=</span><span class="kc">False</span>
+<span class="p">)</span>
+<span class="n">pairs</span> <span class="o">=</span> <span class="n">center_index</span><span class="o">.</span><span class="n">find_matches</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span> <span class="n">pair_indices</span><span class="o">=</span><span class="n">pairs</span><span class="p">)</span>
+<span class="k">del</span> <span class="n">center_index</span>
+
+<span class="c1"># 3. For pairs marked as possible duplicates by step 2, also compare</span>
+<span class="c1">#    neighbors by their molecular roles.</span>
+<span class="n">typed_index</span> <span class="o">=</span> <span class="n">RadialComparisonIndex</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="n">cutoff</span><span class="p">,</span> <span class="n">atom_types</span><span class="o">=</span><span class="n">topology_types</span><span class="p">,</span> <span class="n">typed_neighbors</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+<span class="n">approx_duplicates</span> <span class="o">=</span> <span class="n">typed_index</span><span class="o">.</span><span class="n">find_matches</span><span class="p">(</span>
+    <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span> <span class="n">pair_indices</span><span class="o">=</span><span class="n">pairs</span>
+<span class="p">)</span>
+<span class="n">approx_scores</span> <span class="o">=</span> <span class="n">typed_index</span><span class="o">.</span><span class="n">score_pairs</span><span class="p">(</span><span class="n">approx_duplicates</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Each row of <code class="docutils literal notranslate"><span class="pre">approx_duplicates</span></code> identifies two structures with similar
+local distance patterns; <code class="docutils literal notranslate"><span class="pre">approx_scores</span></code> is aligned with those rows. These
+are approximate matches, not confirmed duplicate crystals. This example
+collects the pairs from each stage, so the pair tensor itself can grow large.
+If you only need representatives, build just the <code class="docutils literal notranslate"><span class="pre">typed_index</span></code> from step 3
+and skip the first two indices and pair lists:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">typed_index</span><span class="o">.</span><span class="n">deduplicate</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">)</span>
+<span class="n">unique_indices</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">retained_indices</span>
+<span class="n">deduplicated_batch</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">unique_indices</span><span class="p">]</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">deduplicated_batch</span></code> contains the provisional representatives; the other
+structures are assigned to them in <code class="docutils literal notranslate"><span class="pre">result.representative_indices</span></code>. If you
+need confirmed structural equivalence before discarding a candidate, pass a
+more specific comparison as <code class="docutils literal notranslate"><span class="pre">deduplicate(confirm=...)</span></code>. The callback receives
+proposed pairs and returns only confirmed ones in their original pair order.
+Confirming after deduplication cannot recover a structure already skipped by
+its greedy pass. Within each typed screen, type IDs must have the same meaning
+for every structure.</p>
+<p><code class="docutils literal notranslate"><span class="pre">deduplicate()</span></code> is greedy: it visits structures in input order and assigns each
+candidate to the first earlier <strong>retained</strong> representative that matches it. A
+match at the chosen threshold is not necessarily transitive: A may match B and
+B may match C even though A does not match C. In the order A, B, C, the
+algorithm retains A, assigns B to A, then retains C because it compares C with
+A, not with discarded B. In the order B, A, C, it retains B and assigns both A
+and C to B. The chosen representatives therefore depend on input order.
+Structures assigned to the same representative need not match one another. To
+favor low-energy representatives, order the input Batch by energy before
+building an index; the returned indices then refer to that order. For a larger
+pool, process chunks in input order: combine previously retained
+representatives with the next chunk, deduplicate that combined Batch, and carry
+its representatives forward. Preserve representative order and carry original
+pool indices alongside each combined Batch; each result’s indices refer to that
+combined Batch. Use the same threshold and confirmation rule at every step.
+This limits the resident index to retained structures plus one chunk, at the
+cost of rebuilding it each time. If nearly every structure is unique, the
+retained set can still grow large. Deduplicating chunks independently and
+merging their survivors can change the result because similarity need not be
+transitive. Build new indices after geometry or atom labels change. See the
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.comparison.RadialComparisonIndex.html#nvalchemi.csp.comparison.RadialComparisonIndex" title="nvalchemi.csp.comparison.RadialComparisonIndex"><code class="xref py py-class docutils literal notranslate"><span class="pre">RadialComparisonIndex</span></code></a> reference for score
+dtype and CUDA memory settings.</p>
+<p>For a single in-memory pool, use
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.comparison.deduplicate_batch.html#nvalchemi.csp.comparison.deduplicate_batch" title="nvalchemi.csp.comparison.deduplicate_batch"><code class="xref py py-func docutils literal notranslate"><span class="pre">deduplicate_batch()</span></code></a>. It tiles descriptor
+construction by total atom count and uses the same greedy representative order
+as <code class="docutils literal notranslate"><span class="pre">RadialComparisonIndex.deduplicate</span></code>. Set <code class="docutils literal notranslate"><span class="pre">atom_types</span></code> only when generic
+caller-defined labels should constrain matching; atomic numbers are never
+inferred as types.</p>
+<p>For a pool loaded in pieces, use
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.comparison.deduplicate_stream.html#nvalchemi.csp.comparison.deduplicate_stream" title="nvalchemi.csp.comparison.deduplicate_stream"><code class="xref py py-func docutils literal notranslate"><span class="pre">deduplicate_stream()</span></code></a>. Its loader receives
+CPU int64 logical row IDs and returns <code class="docutils literal notranslate"><span class="pre">(Batch,</span> <span class="pre">atom_types)</span></code>. The int32 or int64
+type vector aligns with the atoms in that Batch, or is <code class="docutils literal notranslate"><span class="pre">None</span></code> on every call
+for untyped matching. Typed loaders must use one fixed <code class="docutils literal notranslate"><span class="pre">type_vocabulary</span></code> whose
+labels keep the same meaning in every batch. Loader values must remain stable
+for repeated row IDs. <code class="docutils literal notranslate"><span class="pre">priority_order</span></code> is a permutation of logical row IDs;
+when omitted, logical order is used. The first retained representative that
+passes every requested screen in that order receives each candidate, so
+changing the priority can change the result.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.comparison</span><span class="w"> </span><span class="kn">import</span> <span class="n">deduplicate_stream</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">deduplicate_stream</span><span class="p">(</span>
+    <span class="n">count</span><span class="p">,</span>
+    <span class="n">read_typed_batch</span><span class="p">,</span>  <span class="c1"># row IDs -&gt; (Batch, aligned atom_types or None)</span>
+    <span class="n">type_vocabulary</span><span class="o">=</span><span class="n">type_vocabulary</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span>
+    <span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">priority_order</span><span class="o">=</span><span class="n">priority_order</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+    <span class="n">max_batch_atoms</span><span class="o">=</span><span class="mi">200_000</span><span class="p">,</span>
+    <span class="n">max_memory_fraction</span><span class="o">=</span><span class="mf">0.85</span><span class="p">,</span>
+    <span class="n">summary_coordinate_count</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>  <span class="c1"># default; use 0 to disable the preliminary check</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>When types are supplied, every proposed pair passes untyped, center-typed, and
+center-and-neighbor-typed screens in that order. An untyped loader uses only
+the untyped screen. In both cases, each same pair advances through the screens
+before the candidate is assigned. The result contains retained original row
+IDs in priority order, <code class="docutils literal notranslate"><span class="pre">representative_indices</span></code> indexed by original logical ID,
+and multiplicities aligned with retained IDs.</p>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">confirm</span></code> to <code class="docutils literal notranslate"><span class="pre">deduplicate_batch</span></code> or <code class="docutils literal notranslate"><span class="pre">deduplicate_stream</span></code> when a stronger
+comparison must accept a radial proposal before a structure is discarded. The
+callback receives <code class="docutils literal notranslate"><span class="pre">(candidate_id,</span> <span class="pre">retained_representative_id)</span></code> pairs and
+returns an ordered subset on the same device. Rejecting a proposal makes the
+candidate try later retained representatives; if none is confirmed, it is
+kept. Confirmation runs only against representatives already retained by the
+greedy pass. Match enumeration remains separate: callers can consume and
+filter chunks from <code class="docutils literal notranslate"><span class="pre">iter_matches_stream</span></code> without discarding any structures.</p>
+<p>Here, <code class="docutils literal notranslate"><span class="pre">confirm_pairs</span></code> is your stronger comparison function; it returns the
+accepted input pairs in their original order. For an in-memory pool:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.comparison</span><span class="w"> </span><span class="kn">import</span> <span class="n">deduplicate_batch</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">deduplicate_batch</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">,</span>
+    <span class="n">atom_types</span><span class="o">=</span><span class="n">topology_types</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="n">cutoff</span><span class="p">,</span>
+    <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span>
+    <span class="n">priority_order</span><span class="o">=</span><span class="n">priority_order</span><span class="p">,</span>
+    <span class="n">confirm</span><span class="o">=</span><span class="n">confirm_pairs</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">deduplicated_batch</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">result</span><span class="o">.</span><span class="n">retained_indices</span><span class="p">]</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">input_batch_size</span></code> and <code class="docutils literal notranslate"><span class="pre">pair_block_size</span></code> default to 1024 and 256 on CUDA, and
+64 and 32 on CPU. <code class="docutils literal notranslate"><span class="pre">input_batch_size</span></code> bounds candidate chunks; <code class="docutils literal notranslate"><span class="pre">pair_block_size</span></code>
+bounds how many earlier representatives are considered together. Candidate
+tiles can therefore be larger than representative blocks, subject to
+<code class="docutils literal notranslate"><span class="pre">max_batch_atoms</span></code> and the shared CUDA memory budget. <code class="docutils literal notranslate"><span class="pre">max_batch_atoms</span></code> defaults
+to 200,000 total atoms in one descriptor tile. A single structure larger than
+this limit raises <code class="docutils literal notranslate"><span class="pre">MemoryError</span></code>. CUDA descriptor construction and scoring
+budget their estimated buffers and workspaces to 85% of the memory currently
+available to PyTorch by default, including reusable caching-allocator bytes.
+This is an estimate, not a memory reservation. A single structure or pair
+that still cannot fit raises <code class="docutils literal notranslate"><span class="pre">MemoryError</span></code>.</p>
+<p>By default, streaming deduplication uses a preliminary check selected by a
+deterministic pilot. The pilot selects up to 32 summary coordinates; it may
+select fewer. A pair that fails this conservative check is skipped. A pair
+that passes enters the radial index matcher, which may use its own conservative
+bounds before scoring full descriptors. The pilot summary never declares a
+duplicate on its own. Set <code class="docutils literal notranslate"><span class="pre">summary_coordinate_count=0</span></code> to disable the pilot
+and its preliminary check; the index matcher’s built-in bounds still apply.
+The same option is available on <code class="docutils literal notranslate"><span class="pre">deduplicate_batch</span></code> and
+<code class="docutils literal notranslate"><span class="pre">iter_matches_stream</span></code>.</p>
+<p>The summaries and sorted search columns are call-local and grow linearly with
+pool size and selected coordinate count. Compact summaries and sorted search
+columns reside on the comparison device. Full descriptors exist only for
+active atom-bounded tiles. Call state is released on return; the function
+creates no disk checkpoint or resume state.</p>
+<p>To enumerate matches without supplying a pair list, use
+<a class="reference internal" href="../modules/generated/nvalchemi.csp.comparison.iter_matches_stream.html#nvalchemi.csp.comparison.iter_matches_stream" title="nvalchemi.csp.comparison.iter_matches_stream"><code class="xref py py-func docutils literal notranslate"><span class="pre">iter_matches_stream()</span></code></a>. It accepts one loader
+for self-comparison or two loaders for a cross-pool comparison. The iterator
+starts reading on the first <code class="docutils literal notranslate"><span class="pre">next()</span></code> call, then yields nonempty int32 <code class="docutils literal notranslate"><span class="pre">[K,</span> <span class="pre">2]</span></code>
+chunks no larger than <code class="docutils literal notranslate"><span class="pre">pair_chunk_size</span></code>. Self-comparison emits each
+<code class="docutils literal notranslate"><span class="pre">left</span> <span class="pre">&lt;</span> <span class="pre">right</span></code> pair once; cross-pool comparison emits <code class="docutils literal notranslate"><span class="pre">(left_row,</span> <span class="pre">right_row)</span></code>.
+Both orders are lexicographic. Closing the iterator releases its compact
+call-local state and leaves both caller-owned loaders open. <code class="docutils literal notranslate"><span class="pre">max_batch_atoms</span></code>
+bounds each live left or right descriptor tile independently; their combined
+CUDA descriptor residency remains within one shared memory allowance.</p>
+</section>
+<section id="compare-without-hydrogens">
+<h3>Compare without hydrogens<a class="headerlink" href="#compare-without-hydrogens" title="Link to this heading">#</a></h3>
+<p>Hydrogens can be omitted from comparison by passing <code class="docutils literal notranslate"><span class="pre">include_hydrogens=False</span></code>
+when building an index or calling a batch or streaming comparison helper. The
+library removes every atom with atomic number 1 from the internal comparison
+geometry before constructing neighbor lists and descriptors. Both centers and
+neighbors exclude hydrogens. The input structures remain unchanged.</p>
+<p>Supply <code class="docutils literal notranslate"><span class="pre">atom_types</span></code> for the original, unfiltered atoms. Retained atoms keep
+their supplied types; chemical typing is not recomputed after removing
+hydrogens. Returned indices and confirmation-callback pairs refer to the
+original structure rows, so selecting retained rows preserves their
+hydrogens and other data.</p>
+<p>An index fixes its hydrogen setting at construction. Indexes compared with each
+other must use the same setting; rebuild an index to change it. In streamed
+cross-pool matching, <code class="docutils literal notranslate"><span class="pre">include_hydrogens</span></code> applies to both pools.</p>
+<p>Hydrogen-free comparison follows the existing empty-structure behavior of each
+API. Index construction rejects a row with no remaining atoms. Streaming
+matching treats empty rows as matching each other and separate from nonempty
+rows. An empty pool still returns empty results.</p>
+<p>All-atom and hydrogen-free scores compare different geometries; removing
+hydrogens does not guarantee a smaller score. The radial comparison remains
+approximate and does not establish crystal equivalence.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.comparison</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">RadialComparisonIndex</span><span class="p">,</span>
+    <span class="n">deduplicate_batch</span><span class="p">,</span>
+    <span class="n">deduplicate_stream</span><span class="p">,</span>
+    <span class="n">iter_matches_stream</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">index</span> <span class="o">=</span> <span class="n">RadialComparisonIndex</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span>
+    <span class="n">atom_types</span><span class="o">=</span><span class="n">topology_types</span><span class="p">,</span>  <span class="c1"># Labels for every original atom, including H.</span>
+    <span class="n">include_hydrogens</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">scores</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">score_pairs</span><span class="p">(</span><span class="n">pair_indices</span><span class="p">)</span>  <span class="c1"># Pair IDs remain original Batch rows.</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">deduplicate_batch</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">,</span>
+    <span class="n">atom_types</span><span class="o">=</span><span class="n">topology_types</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span>
+    <span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">include_hydrogens</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">retained_with_hydrogens</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">result</span><span class="o">.</span><span class="n">retained_indices</span><span class="p">]</span>
+
+<span class="n">stream_result</span> <span class="o">=</span> <span class="n">deduplicate_stream</span><span class="p">(</span>
+    <span class="n">count</span><span class="p">,</span>
+    <span class="n">read_typed_batch</span><span class="p">,</span>
+    <span class="n">type_vocabulary</span><span class="o">=</span><span class="n">type_vocabulary</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span>
+    <span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">include_hydrogens</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">match_chunks</span> <span class="o">=</span> <span class="n">iter_matches_stream</span><span class="p">(</span>
+    <span class="n">left_count</span><span class="p">,</span>
+    <span class="n">read_left_typed_batch</span><span class="p">,</span>
+    <span class="n">other_count</span><span class="o">=</span><span class="n">right_count</span><span class="p">,</span>
+    <span class="n">read_other_typed_batch</span><span class="o">=</span><span class="n">read_right_typed_batch</span><span class="p">,</span>
+    <span class="n">type_vocabulary</span><span class="o">=</span><span class="n">type_vocabulary</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span>
+    <span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">include_hydrogens</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="compare-with-an-experimental-structure">
+<h3>Compare with an experimental structure<a class="headerlink" href="#compare-with-an-experimental-structure" title="Link to this heading">#</a></h3>
+<p>Here, <code class="docutils literal notranslate"><span class="pre">batch</span></code> contains relaxed <code class="docutils literal notranslate"><span class="pre">OverlapReliefPacker</span></code> structures from
+<code class="docutils literal notranslate"><span class="pre">packing_input</span></code>, and <code class="docutils literal notranslate"><span class="pre">template_adjacency</span></code> contains formula-unit bonds in
+<code class="docutils literal notranslate"><span class="pre">packing_input.atomic_numbers</span></code> order.</p>
+<p>An experimental CIF supplies cell and coordinates, but molecular bonds still
+need to be established. Resolve disorder or partial occupancy, use the same
+hydrogen choices as the candidate pool, and check that ASE reads a complete
+unit cell. Also check that the proportions of molecular components match the
+formula unit: a 1:1 two-component formula may appear as 2:2 in a cell, but
+not 2:1. Install <code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit[ase]</span></code> for CIF loading.
+Toolkit does not provide <code class="docutils literal notranslate"><span class="pre">connectivity_from_reference</span></code>; implement it for your
+CIF preparation workflow. It must return two Torch tensors in ASE atom order:
+integral atomic numbers <code class="docutils literal notranslate"><span class="pre">[N]</span></code> and a symmetric boolean molecular-bond matrix
+<code class="docutils literal notranslate"><span class="pre">[N,</span> <span class="pre">N]</span></code> with a zero diagonal. Bonds across cell boundaries must be included;
+nearby atoms are not necessarily bonded.</p>
+<p>Build the type map from the <strong>same ordered formula unit</strong> used for the search.
+It matches complete molecular bond graphs to the formula unit, assigning the
+same numeric type labels even when the CIF lists atoms in a different order.
+Unknown molecular components are rejected. Typing does not check component
+proportions or infer missing bonds. If you ran the preceding deduplication
+example, reuse its <code class="docutils literal notranslate"><span class="pre">type_map</span></code> and <code class="docutils literal notranslate"><span class="pre">typed_index</span></code> instead of rebuilding them.
+For this standalone snippet, replace the <code class="docutils literal notranslate"><span class="pre">...</span></code> placeholders with the same
+formula-unit input, bond matrix, and relaxed Batch.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.chem</span><span class="w"> </span><span class="kn">import</span> <span class="n">TopologicalAtomTypeMap</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp.comparison</span><span class="w"> </span><span class="kn">import</span> <span class="n">RadialComparisonIndex</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+
+<span class="n">packing_input</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># The same formula-unit input used for the candidate pool.</span>
+<span class="n">template_adjacency</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># Its bonds in packing_input.atomic_numbers order.</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># Toolkit Batch of optimized trial crystals with ASU source fields.</span>
+
+<span class="n">cutoff</span> <span class="o">=</span> <span class="mf">15.0</span>  <span class="c1"># angstroms</span>
+<span class="n">threshold</span> <span class="o">=</span> <span class="mf">0.05</span>
+<span class="n">type_map</span> <span class="o">=</span> <span class="n">TopologicalAtomTypeMap</span><span class="p">(</span>
+    <span class="n">packing_input</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="p">,</span> <span class="n">template_adjacency</span>
+<span class="p">)</span>
+<span class="n">typed_index</span> <span class="o">=</span> <span class="n">RadialComparisonIndex</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="n">cutoff</span><span class="p">,</span> <span class="n">atom_types</span><span class="o">=</span><span class="n">type_map</span><span class="o">.</span><span class="n">for_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">),</span> <span class="n">typed_neighbors</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+
+<span class="n">reference_atoms</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="s2">&quot;experimental.cif&quot;</span><span class="p">)</span>
+<span class="n">reference_numbers</span><span class="p">,</span> <span class="n">reference_adjacency</span> <span class="o">=</span> <span class="n">connectivity_from_reference</span><span class="p">(</span>
+    <span class="n">reference_atoms</span>
+<span class="p">)</span>
+<span class="n">reference_types</span> <span class="o">=</span> <span class="n">type_map</span><span class="o">.</span><span class="n">for_connectivity</span><span class="p">(</span>
+    <span class="n">reference_numbers</span><span class="p">,</span> <span class="n">reference_adjacency</span>
+<span class="p">)</span>
+<span class="n">reference_batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">from_atoms</span><span class="p">(</span><span class="n">reference_atoms</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">typed_index</span><span class="o">.</span><span class="n">device</span><span class="p">)]</span>
+<span class="p">)</span>
+<span class="n">reference_index</span> <span class="o">=</span> <span class="n">RadialComparisonIndex</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+    <span class="n">reference_batch</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="n">cutoff</span><span class="p">,</span>
+    <span class="n">atom_types</span><span class="o">=</span><span class="n">reference_types</span><span class="p">,</span>
+    <span class="n">typed_neighbors</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">experimental_matches</span> <span class="o">=</span> <span class="n">typed_index</span><span class="o">.</span><span class="n">find_matches</span><span class="p">(</span>
+    <span class="n">other</span><span class="o">=</span><span class="n">reference_index</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span>
+<span class="p">)</span>
+<span class="n">experimental_scores</span> <span class="o">=</span> <span class="n">typed_index</span><span class="o">.</span><span class="n">score_pairs</span><span class="p">(</span>
+    <span class="n">experimental_matches</span><span class="p">,</span> <span class="n">other</span><span class="o">=</span><span class="n">reference_index</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Each row of <code class="docutils literal notranslate"><span class="pre">experimental_matches</span></code> is <code class="docutils literal notranslate"><span class="pre">[candidate_index,</span> <span class="pre">0]</span></code>: column zero
+identifies a structure in the original search pool, and zero identifies the
+single experimental reference. <code class="docutils literal notranslate"><span class="pre">experimental_scores</span></code> has one mismatch score
+per returned pair. A low score proposes a match for more detailed structural
+comparison; it does not establish that the structures are crystallographically
+equivalent. For additional CIFs, repeat the reference preparation and matching
+block with the same <code class="docutils literal notranslate"><span class="pre">type_map</span></code> and <code class="docutils literal notranslate"><span class="pre">typed_index</span></code>.</p>
+</section>
+</section>
+<section id="advanced-data-and-storage-details">
+<h2>Advanced data and storage details<a class="headerlink" href="#advanced-data-and-storage-details" title="Link to this heading">#</a></h2>
+<p>The formula-unit input owns its conformer pool, contact distances in
+<span class="math notranslate nohighlight">\(\mathrm{\AA}\)</span>, component IDs, and volume estimate in <span class="math notranslate nohighlight">\(\mathrm{\AA}^3\)</span>. An
+ASU batch shares that input and stores each candidate’s cell, space group, and
+independent placements. Cell vectors are rows of a 3 x 3 matrix in
+<span class="math notranslate nohighlight">\(\mathrm{\AA}\)</span>. Fractional molecular centers are dimensionless and become
+Cartesian through <code class="docutils literal notranslate"><span class="pre">fractional</span> <span class="pre">&#64;</span> <span class="pre">cell</span></code>; rigid
+rotations act on Cartesian molecular displacements. Expansion emits
+<code class="docutils literal notranslate"><span class="pre">A_fu</span> <span class="pre">*</span> <span class="pre">Z</span></code> atoms per cell, where <code class="docutils literal notranslate"><span class="pre">A_fu</span></code> is the atom count of one formula unit.
+Molecular centers are wrapped; atom coordinates are not wrapped separately.</p>
+<p>Tensor-only callers can construct <a class="reference internal" href="../modules/generated/nvalchemi.csp.MolecularPackingInput.html#nvalchemi.csp.MolecularPackingInput" title="nvalchemi.csp.MolecularPackingInput"><code class="xref py py-class docutils literal notranslate"><span class="pre">MolecularPackingInput</span></code></a>
+and <a class="reference internal" href="../modules/generated/nvalchemi.csp.RigidMoleculeASUBatch.html#nvalchemi.csp.RigidMoleculeASUBatch" title="nvalchemi.csp.RigidMoleculeASUBatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMoleculeASUBatch</span></code></a> directly. Pointer arrays
+mark spans in the next array; <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">2]</span></code> means the first item occupies indices
+0 and 1. See their API pages for shapes and validation rules. Direct callers
+must supply valid rotation matrices and cells compatible with the selected
+space groups.</p>
+<section id="source-metadata-after-geometry-changes">
+<span id="csp-source-metadata"></span><h3>Source metadata after geometry changes<a class="headerlink" href="#source-metadata-after-geometry-changes" title="Link to this heading">#</a></h3>
+<p>Full-cell expansion records where every atom and structure came from. These
+fields are provenance, even if subsequent optimization breaks source
+symmetry:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Alignment</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">csp_source_asu_atom_index</span></code></p></td>
+<td><p>Atom</p></td>
+<td><p>Atom in the repeated ASU order</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">csp_source_molecule_index</span></code></p></td>
+<td><p>Atom</p></td>
+<td><p>Molecule in the repeated ASU order</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">csp_source_component_index</span></code></p></td>
+<td><p>Atom</p></td>
+<td><p>Component from the formula unit</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">csp_source_conformer_index</span></code></p></td>
+<td><p>Atom</p></td>
+<td><p>Conformer in the shared input</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">csp_source_symmetry_operation_index</span></code></p></td>
+<td><p>Atom</p></td>
+<td><p>Operation that generated the copy</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">csp_source_space_group</span></code></p></td>
+<td><p>System</p></td>
+<td><p>Source International group number</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">csp_source_z</span></code></p></td>
+<td><p>System</p></td>
+<td><p>Source formula units in the cell</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">csp_source_z_prime</span></code></p></td>
+<td><p>System</p></td>
+<td><p>Source formula units in the ASU</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">csp_source_structure_id</span></code></p></td>
+<td><p>System</p></td>
+<td><p>int64 <code class="docutils literal notranslate"><span class="pre">[run_id,</span> <span class="pre">accepted_structure_number]</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>For <code class="docutils literal notranslate"><span class="pre">Z'</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, ASU atom and molecule indices include every repeated independent
+formula unit. Toolkit Batch selection and cloning preserve aligned fields.
+To type a saved relaxed Batch later, retain the ordered formula-unit atomic
+numbers and bond matrix once alongside the search results and rebuild its
+<code class="docutils literal notranslate"><span class="pre">TopologicalAtomTypeMap</span></code>. Source indices alone do not identify the molecular
+graph. Keep pools from different formula-unit inputs separate when assigning
+or comparing type IDs.</p>
+</section>
+<section id="store-maintenance-and-reproducibility">
+<h3>Store maintenance and reproducibility<a class="headerlink" href="#store-maintenance-and-reproducibility" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">read()</span></code> and <code class="docutils literal notranslate"><span class="pre">delete()</span></code> address the current undeleted row order; deleting row
+0 makes old row 1 the new row 0 without changing IDs. Existing readers must
+<code class="docutils literal notranslate"><span class="pre">refresh()</span></code> after writes. Use one active writer per store and reopen it if
+another writer changes the store. <code class="docutils literal notranslate"><span class="pre">defragment()</span></code> reclaims deleted-row space
+and needs exclusive access. If local-directory replacement is interrupted
+after moving the original, restore the sibling <code class="docutils literal notranslate"><span class="pre">.NAME.csp-backup-*</span></code> directory
+before reopening. Custom property names cannot contain <code class="docutils literal notranslate"><span class="pre">/</span></code> or be <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">..</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code>.</p>
+<p>Without an explicit run ID, a direct <code class="docutils literal notranslate"><span class="pre">OverlapReliefPacker</span></code> call or
+<code class="docutils literal notranslate"><span class="pre">CSPGenerator</span></code> generates one independently of the Torch RNG. Distributed IDs
+are <code class="docutils literal notranslate"><span class="pre">[run_id,</span> <span class="pre">group_rank</span> <span class="pre">+</span> <span class="pre">group_size</span> <span class="pre">*</span> <span class="pre">local_accepted_number]</span></code>; gathered rows follow rank order. For replay, retain
+the run ID, each rank’s seed and settings, formula input, group size, and rank
+mapping. Changing group membership can change candidates. Startup validation
+is coordinated on live ranks; packing errors are local in rank-local mode and
+exchanged at terminal gathering. Process termination cannot be coordinated by
+<code class="docutils literal notranslate"><span class="pre">CSPGenerator</span></code>.</p>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="distributed_design.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Distributed ML Potentials: Design Overview</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="distributed_training.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Distributed Training</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-starting-structures">Generate starting structures</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#set-up-a-molecular-and-crystallographic-search">Set up a molecular and crystallographic search</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choose-z-z-and-a-space-group">Choose Z, Z’, and a space group</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choose-starting-volume">Choose starting volume</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choose-a-space-group-policy">Choose a space-group policy</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#understand-acceptance-and-shortfall">Understand acceptance and shortfall</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#distribute-candidate-generation">Distribute candidate generation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#store-and-relax-selected-candidates">Store and relax selected candidates</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#check-externally-prepared-compact-data">Check externally prepared compact data</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#run-packing-in-a-generation-pipeline">Run packing in a generation pipeline</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#save-a-generation-recipe">Save a generation recipe</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#supply-another-packing-algorithm">Supply another packing algorithm</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-deduplication-for-custom-packers">Optional deduplication for custom packers</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#screen-similar-and-duplicate-structures">Screen similar and duplicate structures</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-radial-mismatch-score-means">What the radial mismatch score means</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choose-how-atom-types-restrict-matches">Choose how atom types restrict matches</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#deduplicate-a-relaxed-structure-pool">Deduplicate a relaxed structure pool</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-without-hydrogens">Compare without hydrogens</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-with-an-experimental-structure">Compare with an experimental structure</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-data-and-storage-details">Advanced data and storage details</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#source-metadata-after-geometry-changes">Source metadata after geometry changes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#store-maintenance-and-reproducibility">Store maintenance and reproducibility</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/csp.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

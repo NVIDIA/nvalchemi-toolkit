@@ -267,7 +267,7 @@ For a one-shot energy evaluation, build the neighbor list manually using
  .. code-block:: none
 
 
-    Ewald energy: -285.5505 eV
+    Ewald energy: -285.5504 eV
     Max force magnitude: 0.0000 eV/Å
 
 
@@ -316,8 +316,8 @@ limit to within the accuracy set in the model (1e-6 here).
 
 
     Analytical Madelung energy (32 f.u.): -285.5573 eV
-    Ewald energy:                                    -285.5505 eV
-    Relative error:                                  2.39e-05
+    Ewald energy:                                    -285.5504 eV
+    Relative error:                                  2.45e-05
 
 
 
@@ -349,7 +349,7 @@ numerical accuracy leave a small residual.
  .. code-block:: none
 
 
-    Mean force magnitude at ideal geometry: 5.2749e-07 eV/Å  (should be ≈0)
+    Mean force magnitude at ideal geometry: 5.5897e-07 eV/Å  (should be ≈0)
 
 
 
@@ -407,7 +407,7 @@ cell changes between evaluations (here the cell is unchanged, so not required).
 
 
     Perturbed geometry:
-      Ewald energy:         -285.5374 eV
+      Ewald energy:         -285.5373 eV
       Max force magnitude:  0.4427 eV/Å
 
 
@@ -416,7 +416,7 @@ cell changes between evaluations (here the cell is unchanged, so not required).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.497 seconds)
+   **Total running time of the script:** (0 minutes 1.905 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_06_ewald_electrostatics.py:

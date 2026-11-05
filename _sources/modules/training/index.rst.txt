@@ -10,6 +10,7 @@ Training module
    checkpoints
    strategy
    finetuning
+   distillation
    hooks
    losses
    validation

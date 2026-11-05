@@ -70,14 +70,6 @@ split.
 
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /home/kelvin/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/torch/jit/_script.py:1488: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
-      warnings.warn(
-    GPU information: NVIDIA GB10, 12, 1, 128, 48, 140, 1700
-
 
 
 
@@ -203,7 +195,7 @@ paths, batch sizes, and optional stress scaling transforms.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 299-328
+.. GENERATED FROM PYTHON SOURCE LINES 299-330
 
 Building the MACE model
 -----------------------
@@ -227,7 +219,9 @@ training split.
    from nvalchemi.models.mace import MACEWrapper
 
    mace_model = ScaleShiftMACE(...)
-   model = MACEWrapper(mace_model.to(device=device, dtype=torch.float32))
+   model = MACEWrapper(
+       mace_model.to(device=device, dtype=torch.float32), train=True
+   )
    model.model_config.active_outputs = {"energy", "forces", "stress"}
 
 The runnable script reads architecture hyperparameters from Hydra and builds
@@ -235,7 +229,7 @@ the wrapped model through ``_build_model(cfg, device)``, which calls
 :func:`~examples.advanced._mace_models.build_training_mace_model` to set
 ``active_outputs`` and attach a checkpointable model spec.
 
-.. GENERATED FROM PYTHON SOURCE LINES 328-330
+.. GENERATED FROM PYTHON SOURCE LINES 330-332
 
 .. code-block:: Python
    :dedent: 1
@@ -249,7 +243,7 @@ the wrapped model through ``_build_model(cfg, device)``, which calls
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 358-403
+.. GENERATED FROM PYTHON SOURCE LINES 360-405
 
 Defining the loss
 -----------------
@@ -297,7 +291,7 @@ step 54,400 of 68,000).
 The runnable script builds the same composition from ``cfg.training.loss``
 through ``_build_mace_huber_loss(cfg.training.loss)``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 403-405
+.. GENERATED FROM PYTHON SOURCE LINES 405-407
 
 .. code-block:: Python
    :dedent: 1
@@ -311,7 +305,7 @@ through ``_build_mace_huber_loss(cfg.training.loss)``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 482-513
+.. GENERATED FROM PYTHON SOURCE LINES 484-515
 
 Configuring the optimizer and scheduler
 ---------------------------------------
@@ -345,7 +339,7 @@ cosine annealing for stage one, then a constant stage-two learning rate; any
 Hydra supplies learning-rate and schedule values; ``_optimizer(cfg)`` maps them
 onto :class:`~nvalchemi.training.OptimizerConfig`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 513-515
+.. GENERATED FROM PYTHON SOURCE LINES 515-517
 
 .. code-block:: Python
    :dedent: 1
@@ -359,7 +353,7 @@ onto :class:`~nvalchemi.training.OptimizerConfig`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 543-589
+.. GENERATED FROM PYTHON SOURCE LINES 545-591
 
 Adding runtime hooks
 --------------------
@@ -408,7 +402,7 @@ the interaction graph at ``BEFORE_FORWARD`` before every forward pass.
 helper module. The other hooks shown above are public ALCHEMI training APIs. The runnable
 script assembles the full hook list from Hydra through ``_hooks(cfg, model)``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 589-591
+.. GENERATED FROM PYTHON SOURCE LINES 591-593
 
 .. code-block:: Python
    :dedent: 1
@@ -422,7 +416,7 @@ script assembles the full hook list from Hydra through ``_hooks(cfg, model)``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 673-700
+.. GENERATED FROM PYTHON SOURCE LINES 675-702
 
 Configuring validation
 ----------------------
@@ -452,7 +446,7 @@ have been constructed.
        name="validation",
    )
 
-.. GENERATED FROM PYTHON SOURCE LINES 700-702
+.. GENERATED FROM PYTHON SOURCE LINES 702-704
 
 .. code-block:: Python
    :dedent: 1
@@ -466,7 +460,7 @@ have been constructed.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 739-797
+.. GENERATED FROM PYTHON SOURCE LINES 741-799
 
 Running TrainingStrategy
 ------------------------
@@ -527,7 +521,7 @@ your NVIDIA driver / CUDA toolkit availability (for example, ``cu13`` on CUDA 13
 Note that ``training.batch_size`` is the per-process batch size. The global batch size
 is therefore ``training.batch_size * nproc_per_node``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 797-799
+.. GENERATED FROM PYTHON SOURCE LINES 799-801
 
 .. code-block:: Python
    :dedent: 1
@@ -549,7 +543,7 @@ is therefore ``training.batch_size * nproc_per_node``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 896-914
+.. GENERATED FROM PYTHON SOURCE LINES 898-916
 
 Validation curves and reference results
 ---------------------------------------
@@ -559,7 +553,7 @@ differ depending on system configuration, hardware, and software stack.
 The sharp transition near step 54,400 marks the stage-two loss-weight schedule
 configured by ``training.loss.stage_two.start_step``.
 
-.. image:: ../_static/vanilla_mace_validation_metrics_260701.png
+.. image:: /../examples/_static/vanilla_mace_validation_metrics_260701.png
    :align: center
    :width: 70%
 
@@ -573,7 +567,7 @@ MatPES r2SCAN benchmarks reported in
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.149 seconds)
+   **Total running time of the script:** (0 minutes 0.033 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_10_mace_training.py:

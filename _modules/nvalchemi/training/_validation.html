@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.training._validation &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.training._validation &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/_validation';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -525,7 +525,9 @@ document.write(`
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_ensure_reiterable_validation_data</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<div class="viewcode-block" id="ensure_reiterable_validation_data">
+<a class="viewcode-back" href="../../../modules/training/generated/nvalchemi.training.ensure_reiterable_validation_data.html#nvalchemi.training.ensure_reiterable_validation_data">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">ensure_reiterable_validation_data</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Reject one-shot iterators so validation can restart each pass.</span>
 
 <span class="sd">    Parameters</span>
@@ -543,9 +545,9 @@ document.write(`
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        When ``value`` is not iterable at all, or when it is a one-shot</span>
-<span class="sd">        iterator (e.g. a generator) that cannot be re-iterated across</span>
-<span class="sd">        repeated validation passes.</span>
+<span class="sd">        If ``value`` is not iterable at all, or if it is a one-shot iterator</span>
+<span class="sd">        (e.g. a generator) that cannot be re-iterated across repeated</span>
+<span class="sd">        validation passes.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">iterator</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
@@ -561,7 +563,8 @@ document.write(`
             <span class="s2">&quot;restart from the beginning each pass; pass a list (or a &quot;</span>
             <span class="s2">&quot;re-iterable DataLoader/Dataset) instead of a generator.&quot;</span>
         <span class="p">)</span>
-    <span class="k">return</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="n">value</span></div>
+
 
 
 <div class="viewcode-block" id="ValidationConfig">
@@ -583,7 +586,7 @@ document.write(`
 <span class="sd">    ``validation_data`` must be a re-iterable container (``list``,</span>
 <span class="sd">    ``DataLoader``, ``Dataset``, ...); a fresh iterator is drawn for every</span>
 <span class="sd">    pass, so one-shot generators and bare iterators are rejected at</span>
-<span class="sd">    construction time (see ``_ensure_reiterable_validation_data``). The</span>
+<span class="sd">    construction time (see :func:`ensure_reiterable_validation_data`). The</span>
 <span class="sd">    scheduling fields ``every_n_epochs`` and ``every_n_steps`` are mutually</span>
 <span class="sd">    exclusive: set at most one to control cadence, or leave both unset to run</span>
 <span class="sd">    validation only at the end of :meth:`TrainingStrategy.run`. When</span>
@@ -655,7 +658,7 @@ document.write(`
 
     <span class="n">validation_data</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
         <span class="n">Iterable</span><span class="p">[</span><span class="n">Batch</span><span class="p">],</span>
-        <span class="n">PlainValidator</span><span class="p">(</span><span class="n">_ensure_reiterable_validation_data</span><span class="p">),</span>
+        <span class="n">PlainValidator</span><span class="p">(</span><span class="n">ensure_reiterable_validation_data</span><span class="p">),</span>
         <span class="n">Field</span><span class="p">(</span>
             <span class="n">description</span><span class="o">=</span><span class="p">(</span>
                 <span class="s2">&quot;Re-iterable container (e.g. ``list``, ``DataLoader``, ``Dataset``) &quot;</span>
@@ -848,7 +851,14 @@ document.write(`
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_LossAccumulator</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Accumulate composed-loss diagnostics over validation batches.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Accumulate composed-loss diagnostics over validation batches.</span>
+
+<span class="sd">    Every running sum is widened to float64 as it is taken, not on the way out.</span>
+<span class="sd">    A half-precision loss reaching validation outside autocast would otherwise</span>
+<span class="sd">    accumulate in its own dtype, where the running sum stops growing once the</span>
+<span class="sd">    increment falls below half an ulp: 500 bf16 batches averaging 0.8 reported</span>
+<span class="sd">    0.512, a 36% understatement.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
@@ -863,16 +873,16 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loss_out</span><span class="p">:</span> <span class="n">ComposedLossOutput</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add one batch&#39;s loss output to the running totals.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">batch_count</span> <span class="o">+=</span> <span class="mi">1</span>
-        <span class="n">total</span> <span class="o">=</span> <span class="n">loss_out</span><span class="p">[</span><span class="s2">&quot;total_loss&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="n">_as_float64_scalar</span><span class="p">(</span><span class="n">loss_out</span><span class="p">[</span><span class="s2">&quot;total_loss&quot;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">total_sum</span> <span class="o">=</span> <span class="n">total</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_sum</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_sum</span> <span class="o">+</span> <span class="n">total</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">loss_out</span><span class="p">[</span><span class="s2">&quot;per_component_unweighted&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">detached</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="n">detached</span> <span class="o">=</span> <span class="n">_as_float64_scalar</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
             <span class="n">previous</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">per_component_unweighted_sum</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">per_component_unweighted_sum</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">detached</span> <span class="k">if</span> <span class="n">previous</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">previous</span> <span class="o">+</span> <span class="n">detached</span>
             <span class="p">)</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">loss_out</span><span class="p">[</span><span class="s2">&quot;per_component_sample&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">detached_sum</span> <span class="o">=</span> <span class="n">sample</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="n">detached_sum</span> <span class="o">=</span> <span class="n">_as_float64_scalar</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
             <span class="n">previous</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">per_component_sample_sum</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">per_component_sample_sum</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">detached_sum</span> <span class="k">if</span> <span class="n">previous</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">previous</span> <span class="o">+</span> <span class="n">detached_sum</span>

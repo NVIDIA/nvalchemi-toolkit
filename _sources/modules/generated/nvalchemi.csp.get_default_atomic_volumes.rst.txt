@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.get\_default\_atomic\_volumes
+===========================================
+
+.. currentmodule:: nvalchemi.csp
+
+.. autofunction:: get_default_atomic_volumes

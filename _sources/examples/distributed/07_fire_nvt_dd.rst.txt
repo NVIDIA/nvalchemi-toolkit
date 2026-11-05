@@ -23,9 +23,18 @@
 
 A two-stage streaming pipeline — FIRE relaxation then NVT Langevin MD — where
 **each stage is itself domain-decomposed** across a group of GPUs. This is the
-2-D generalization of :ref:`01_distributed_pipeline`: that example maps one rank
+2-D generalization of :doc:`01_distributed_pipeline`: that example maps one rank
 per stage; here each stage is a whole **domain sub-mesh** cooperating on one large
 system, and the two stages form the pipeline dimension.
+
+.. note::
+
+   ``FIRE`` is deprecated in favour of ``FIRE2``, and constructing it emits a
+   ``DeprecationWarning``. This example still uses ``FIRE`` on purpose:
+   ``FIRE2`` is not supported under ``DomainParallel`` yet, because it does not
+   declare the global ``v·f``, ``v·v`` and ``f·f`` reductions that the domain
+   coordinator needs, so its timestep adaptation would run on per-shard values.
+   Switch this example to ``FIRE2`` once it supports ``DomainParallel``.
 
 .. rubric:: Topology
 
@@ -84,7 +93,7 @@ System: alpha-quartz SiO2 supercell, periodic on all axes.
 
 Outputs the NVT trajectory to ``./fire_nvt_dd_trajectory.xyz`` (NVT domain-lead).
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-383
+.. GENERATED FROM PYTHON SOURCE LINES 91-393
 
 
 
@@ -120,13 +129,13 @@ Outputs the NVT trajectory to ``./fire_nvt_dd_trajectory.xyz`` (NVT domain-lead)
     _DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
 
     # Reuse the SiO2 supercell builder shared across the distributed examples.
-    # Sphinx-Gallery executes examples without defining ``__file__`` and skips the
-    # launcher path below, so only resolve the benchmark import for a real run.
-    if not _DOCS_BUILD:
-        sys.path.insert(
-            0, str(Path(__file__).resolve().parents[2] / "benchmark" / "distributed")
-        )
-        from _benchmark_common import build_sio2_supercell  # noqa: E402
+    # Sphinx-Gallery does not define ``__file__``; it runs each example from the
+    # example's own directory, so fall back to the working directory there.
+    _EXAMPLE_DIR = (
+        Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+    )
+    sys.path.insert(0, str(_EXAMPLE_DIR.parents[1] / "benchmark" / "distributed"))
+    from _benchmark_common import build_sio2_supercell  # noqa: E402
 
 
     def build_initial_batch(
@@ -213,6 +222,7 @@ Outputs the NVT trajectory to ``./fire_nvt_dd_trajectory.xyz`` (NVT domain-lead)
 
 
     def main() -> None:
+        """Run the FIRE to NVT pipeline over a domain sub-mesh."""
         parser = argparse.ArgumentParser(
             description="FIRE → NVT as a 2-D-parallel (pipeline × domain) pipeline."
         )
@@ -399,7 +409,7 @@ Outputs the NVT trajectory to ``./fire_nvt_dd_trajectory.xyz`` (NVT domain-lead)
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.002 seconds)
+   **Total running time of the script:** (0 minutes 0.003 seconds)
 
 
 .. _sphx_glr_download_examples_distributed_07_fire_nvt_dd.py:

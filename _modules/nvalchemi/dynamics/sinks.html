@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.dynamics.sinks &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.dynamics.sinks &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/sinks';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -437,7 +437,7 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">runtime_checkable</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributed</span> <span class="k">as</span> <span class="n">dist</span>
@@ -627,6 +627,36 @@ document.write(`
 
 
 
+<div class="viewcode-block" id="ResizableSink">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.ResizableSink.html#nvalchemi.dynamics.ResizableSink">[docs]</a>
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ResizableSink</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sink that a consumer can grow to the capacity it needs.</span>
+
+<span class="sd">    A :class:`DataSink` fixes its capacity at construction. A sink that also</span>
+<span class="sd">    satisfies this protocol can be grown with ``resize``. A consumer that</span>
+<span class="sd">    knows how many frames it is about to write, such as the on-policy</span>
+<span class="sd">    distillation segment loop, calls ``resize`` first instead of rejecting a</span>
+<span class="sd">    sink that is too small.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.dynamics import HostMemory, ResizableSink</span>
+<span class="sd">    &gt;&gt;&gt; isinstance(HostMemory(capacity=1), ResizableSink)</span>
+<span class="sd">    False</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">capacity</span><span class="p">:</span> <span class="nb">int</span>
+
+<div class="viewcode-block" id="ResizableSink.resize">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.ResizableSink.html#nvalchemi.dynamics.ResizableSink.resize">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">resize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">capacity</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Grow the sink so it holds at least *capacity* frames.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+</div>
+
+
+
 <div class="viewcode-block" id="GPUBuffer">
 <a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.GPUBuffer.html#nvalchemi.dynamics.GPUBuffer">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">GPUBuffer</span><span class="p">(</span><span class="n">DataSink</span><span class="p">):</span>
@@ -710,8 +740,6 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1"># _copied_mask is allocated fresh on each write (per-write output mask)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_copied_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1"># Pre-allocated dest_mask tracks which buffer slots are occupied (capacity-sized)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dest_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_buffer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the internal Batch buffer on first use.</span>
@@ -734,44 +762,6 @@ document.write(`
             <span class="n">template</span><span class="o">=</span><span class="n">template</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="c1"># Pre-allocate dest_mask for system-level occupancy tracking</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dest_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
-        <span class="p">)</span>
-        <span class="c1"># Trigger lazy init of _batch_ptr for all groups so zero() can preserve it</span>
-        <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;_lazy_init_batch_ptr&quot;</span><span class="p">):</span>
-                <span class="n">group</span><span class="o">.</span><span class="n">_lazy_init_batch_ptr</span><span class="p">()</span>
-        <span class="c1"># Extend _batch_ptr to capacity + 2 (Batch.empty uses capacity + 1,</span>
-        <span class="c1"># but compute_put_per_system_fit_mask requires capacity + 2)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_restore_batch_ptr_capacity</span><span class="p">()</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_restore_batch_ptr_capacity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore ``_batch_ptr`` to full pre-allocated capacity after put.</span>
-
-<span class="sd">        :meth:`SegmentedLevelStorage.put` trims ``_batch_ptr`` to the number</span>
-<span class="sd">        of active segments via ``.clone()``, which destroys the headroom</span>
-<span class="sd">        needed for subsequent appends.  This method re-extends each</span>
-<span class="sd">        segmented group&#39;s ``_batch_ptr`` to ``capacity + 2`` while</span>
-<span class="sd">        preserving the meaningful prefix written by the Warp kernels.</span>
-
-<span class="sd">        The ``+2`` accounts for the formula used by</span>
-<span class="sd">        :meth:`SegmentedLevelStorage.compute_put_per_system_fit_mask`:</span>
-<span class="sd">        it requires ``num_dest_segments + n_seg + 2`` entries to</span>
-<span class="sd">        accommodate segment boundaries plus safety margin.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="c1"># Need capacity + 2 to satisfy compute_put_per_system_fit_mask formula</span>
-        <span class="n">batch_ptr_cap</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span> <span class="o">+</span> <span class="mi">2</span>
-        <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="s2">&quot;segment_lengths&quot;</span><span class="p">):</span>
-                <span class="k">continue</span>  <span class="c1"># skip UniformLevelStorage</span>
-            <span class="n">bp</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">_batch_ptr</span>
-            <span class="k">if</span> <span class="n">bp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">bp</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">batch_ptr_cap</span><span class="p">:</span>
-                <span class="n">new_bp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">batch_ptr_cap</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">bp</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">bp</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-                <span class="n">new_bp</span><span class="p">[:</span> <span class="n">bp</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">bp</span>
-                <span class="n">group</span><span class="o">.</span><span class="n">_batch_ptr</span> <span class="o">=</span> <span class="n">new_bp</span>
 
 <div class="viewcode-block" id="GPUBuffer.write">
 <a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.GPUBuffer.html#nvalchemi.dynamics.GPUBuffer.write">[docs]</a>
@@ -783,9 +773,10 @@ document.write(`
 <span class="sd">        in *batch* are copied.</span>
 
 <span class="sd">        Uses :meth:`Batch.put` for efficient in-place copying without</span>
-<span class="sd">        tensor allocation.</span>
+<span class="sd">        tensor allocation. A batch arriving on another device is moved to the</span>
+<span class="sd">        buffer&#39;s device first, as :class:`HostMemory` moves its items to CPU.</span>
 
-<span class="sd">        This method will set values for ``_copied_mask`` and ``_dest_mask``.</span>
+<span class="sd">        This method will set the value of ``_copied_mask``.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -808,6 +799,11 @@ document.write(`
         <span class="k">if</span> <span class="n">num_total</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span>
 
+        <span class="c1"># Ensure buffer is allocated with full capacity (lazy init on first write)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_buffer</span><span class="p">(</span><span class="n">template</span><span class="o">=</span><span class="n">batch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
         <span class="c1"># Build mask if not provided</span>
         <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">num_total</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
@@ -817,8 +813,6 @@ document.write(`
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;mask length </span><span class="si">{</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> != num_graphs </span><span class="si">{</span><span class="n">num_total</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
-        <span class="c1"># Ensure buffer is allocated with full capacity (lazy init on first write)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_buffer</span><span class="p">(</span><span class="n">template</span><span class="o">=</span><span class="n">batch</span><span class="p">)</span>
 
         <span class="c1"># Count how many graphs we&#39;re trying to write</span>
         <span class="n">num_to_write</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
@@ -857,15 +851,7 @@ document.write(`
             <span class="n">num_total</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
         <span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
-            <span class="n">batch</span><span class="p">,</span>
-            <span class="n">mask</span><span class="p">,</span>
-            <span class="n">copied_mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_copied_mask</span><span class="p">,</span>
-            <span class="n">dest_mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_dest_mask</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Restore _batch_ptr capacity after put() trims it</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_restore_batch_ptr_capacity</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="n">copied_mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_copied_mask</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="GPUBuffer.read">
@@ -924,9 +910,6 @@ document.write(`
 <span class="sd">        re-allocation on the next :meth:`write` and keeps the buffer</span>
 <span class="sd">        shape intact for ``isend``/``irecv`` symmetry.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Reset occupancy masks</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dest_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_dest_mask</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="c1"># Delegate buffer reset to Batch.zero() which properly handles</span>

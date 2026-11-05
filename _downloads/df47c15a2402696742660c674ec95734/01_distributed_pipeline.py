@@ -13,17 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin
+Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin
 =========================================================
 
-This example orchestrates two independent FIRE → NVTLangevin pipelines
+This example orchestrates two independent FIRE2 → NVTLangevin pipelines
 running in parallel across 4 GPUs using
 :class:`~nvalchemi.dynamics.DistributedPipeline`.
 
 .. rubric:: Topology
 
 .. graphviz::
-   :caption: Two independent FIRE → Langevin pipelines across 4 GPUs.
+   :caption: Two independent FIRE2 → Langevin pipelines across 4 GPUs.
 
    digraph topology {
        rankdir=LR
@@ -31,16 +31,16 @@ running in parallel across 4 GPUs using
        node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1" fontcolor="#111111"]
        edge [fontname="Helvetica" fontsize=10]
 
-       r0 [label="Rank 0\\nFIRE + sampler_a"]
+       r0 [label="Rank 0\\nFIRE2 + sampler_a"]
        r1 [label="Rank 1\\nNVTLangevin + sink_a" fillcolor="#f9e2ae" fontcolor="#111111"]
-       r2 [label="Rank 2\\nFIRE + sampler_b"]
+       r2 [label="Rank 2\\nFIRE2 + sampler_b"]
        r3 [label="Rank 3\\nNVTLangevin + sink_b" fillcolor="#f9e2ae" fontcolor="#111111"]
 
        r0 -> r1 [style=bold color="#c0392b" penwidth=2]
        r2 -> r3 [style=bold color="#c0392b" penwidth=2]
    }
 
-Each FIRE rank draws molecules from a dataset, optimises them until
+Each FIRE2 rank draws molecules from a dataset, optimises them until
 convergence or a 50-step limit, and sends them to the paired Langevin rank
 for 20 steps of short MD production. A
 :class:`~nvalchemi.dynamics.hooks.SnapshotHook` on the Langevin ranks writes
@@ -68,7 +68,7 @@ from loguru import logger
 
 from nvalchemi.data import AtomicData
 from nvalchemi.dynamics import (
-    FIRE,
+    FIRE2,
     ConvergenceHook,
     DistributedPipeline,
     FusedStage,
@@ -148,7 +148,7 @@ def build_dataset() -> list[AtomicData]:
 # transparently via NCCL ``isend``/``irecv`` calls.
 #
 # Here we create two independent sub-pipelines: ranks 0→1 and 2→3.
-# Each sub-pipeline is a FIRE optimiser feeding into a Langevin MD stage.
+# Each sub-pipeline is a FIRE2 optimiser feeding into a Langevin MD stage.
 # The ``stages`` dict is built on every rank but only the local stage is
 # ever executed; constructing all stages on every rank keeps the code
 # identical across processes, which simplifies debugging.
@@ -161,7 +161,7 @@ def build_dataset() -> list[AtomicData]:
 # and edge count budgets.  In a distributed setting, each upstream rank
 # owns its own sampler and dataset partition so that work is distributed
 # evenly.  Downstream ranks (the Langevin stages) do not need a sampler —
-# they receive systems directly from the paired FIRE rank via NCCL.
+# they receive systems directly from the paired FIRE2 rank via NCCL.
 
 
 # %%
@@ -186,10 +186,10 @@ def build_dataset() -> list[AtomicData]:
 
 
 def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FusedStage:
-    """Create a convergence- or step-limited FIRE optimiser stage."""
-    dynamics = FIRE(
+    """Create a convergence- or step-limited FIRE2 optimiser stage."""
+    dynamics = FIRE2(
         model=model,
-        dt=1.0,
+        dt=0.05,
         n_steps=50,
         convergence_hook=ConvergenceHook(
             criteria=[
@@ -237,7 +237,7 @@ def make_langevin(
 
 
 def main() -> None:
-    """Launch two parallel FIRE -> Langevin pipelines on 4 GPUs."""
+    """Launch two parallel FIRE2 -> Langevin pipelines on 4 GPUs."""
     model = DemoModelWrapper(DemoModel())
 
     # Sinks (only used by ranks 1 and 3, but created on all for simplicity)

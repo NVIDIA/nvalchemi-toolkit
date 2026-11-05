@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.sample\_space\_groups
+===================================
+
+.. currentmodule:: nvalchemi.csp
+
+.. autofunction:: sample_space_groups

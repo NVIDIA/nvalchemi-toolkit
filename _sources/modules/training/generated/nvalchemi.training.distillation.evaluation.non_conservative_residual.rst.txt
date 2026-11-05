@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.evaluation.non\_conservative\_residual
+======================================================================
+
+.. currentmodule:: nvalchemi.training.distillation.evaluation
+
+.. autofunction:: non_conservative_residual

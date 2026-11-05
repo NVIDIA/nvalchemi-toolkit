@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.training.losses.composition &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.training.losses.composition &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/losses/composition';</script>
-    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -903,13 +903,21 @@ document.write(`
 <span class="sd">        reduction, RMSD, etc.). Implementations should also populate</span>
 <span class="sd">        :attr:`per_sample_loss` with a detached ``(B,)`` tensor when a</span>
 <span class="sd">        per-graph decomposition is available.</span>
+
+<span class="sd">        Both sums accumulate in at least fp32, so a half-precision residual</span>
+<span class="sd">        whose total passes the fp16 ceiling of 65504 no longer saturates to</span>
+<span class="sd">        ``inf`` before it is divided by the weight; a half-precision input</span>
+<span class="sd">        returns an fp32 loss, and fp32 and fp64 are unchanged.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">valid_weights</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">residual</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">acc_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">residual</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">widened</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">acc_dtype</span><span class="p">)</span>
+        <span class="n">valid_weights</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span>
         <span class="n">weights</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;weights&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">valid_weights</span> <span class="o">=</span> <span class="n">valid_weights</span> <span class="o">*</span> <span class="n">weights</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">residual</span><span class="p">)</span>
-        <span class="n">scalar</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="n">valid_weights</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">valid_weights</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_populate_per_sample_loss</span><span class="p">(</span><span class="n">residual</span><span class="p">)</span>
+            <span class="n">valid_weights</span> <span class="o">=</span> <span class="n">valid_weights</span> <span class="o">*</span> <span class="n">weights</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">residual</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">acc_dtype</span><span class="p">)</span>
+        <span class="n">numerator</span> <span class="o">=</span> <span class="n">widened</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="n">valid_weights</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">scalar</span> <span class="o">=</span> <span class="n">numerator</span> <span class="o">/</span> <span class="n">valid_weights</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_populate_per_sample_loss</span><span class="p">(</span><span class="n">widened</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">scalar</span></div>
 
 

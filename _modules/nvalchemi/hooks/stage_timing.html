@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.hooks.stage_timing &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.hooks.stage_timing &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/hooks/stage_timing';</script>
-    <script defer="defer" src="../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -473,7 +473,7 @@ document.write(`
 
 
 <div class="viewcode-block" id="StageTimingHook">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.StageTimingHook.html#nvalchemi.dynamics.hooks.StageTimingHook">[docs]</a>
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.StageTimingHook.html#nvalchemi.hooks.StageTimingHook">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">StageTimingHook</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-stage timing hook for hook-enabled workflows.</span>
 
@@ -493,7 +493,8 @@ document.write(`
 <span class="sd">    profiled_stages : set[Enum] | {&quot;all&quot;, &quot;step&quot;, &quot;detailed&quot;}</span>
 <span class="sd">        Which stages to instrument.</span>
 
-<span class="sd">        * ``&quot;all&quot;`` (default): every dynamics stage except ``ON_CONVERGE``.</span>
+<span class="sd">        * ``&quot;all&quot;`` (default): every dynamics stage except ``ON_CONVERGE`` and</span>
+<span class="sd">          ``ON_GRADUATE``.</span>
 <span class="sd">        * ``&quot;step&quot;``: ``BEFORE_STEP`` and ``AFTER_STEP`` only.</span>
 <span class="sd">        * ``&quot;detailed&quot;``: all stages from ``BEFORE_STEP`` through</span>
 <span class="sd">          ``AFTER_STEP`` (excluding ``ON_CONVERGE``).</span>
@@ -549,8 +550,6 @@ document.write(`
 <span class="sd">    &gt;&gt;&gt; dynamics.run(batch)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="StageTimingHook.__init__">
-<a class="viewcode-back" href="../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.StageTimingHook.html#nvalchemi.dynamics.hooks.StageTimingHook.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">profiled_stages</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">Enum</span><span class="p">]</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="s2">&quot;detailed&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;all&quot;</span><span class="p">,</span>
@@ -571,7 +570,9 @@ document.write(`
             <span class="n">dynamics_stage</span> <span class="o">=</span> <span class="n">_get_dynamics_stage_type</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">profiled_stages</span> <span class="o">==</span> <span class="s2">&quot;all&quot;</span><span class="p">:</span>
                 <span class="n">resolved</span> <span class="o">=</span> <span class="p">{</span>
-                    <span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">dynamics_stage</span> <span class="k">if</span> <span class="n">s</span> <span class="o">!=</span> <span class="n">dynamics_stage</span><span class="o">.</span><span class="n">ON_CONVERGE</span>
+                    <span class="n">s</span>
+                    <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">dynamics_stage</span>
+                    <span class="k">if</span> <span class="n">s</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">dynamics_stage</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">,</span> <span class="n">dynamics_stage</span><span class="o">.</span><span class="n">ON_GRADUATE</span><span class="p">)</span>
                 <span class="p">}</span>
             <span class="k">elif</span> <span class="n">profiled_stages</span> <span class="o">==</span> <span class="s2">&quot;step&quot;</span><span class="p">:</span>
                 <span class="n">resolved</span> <span class="o">=</span> <span class="p">{</span><span class="n">dynamics_stage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">dynamics_stage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">}</span>
@@ -623,8 +624,7 @@ document.write(`
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_t0_ns</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter_ns</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_backend_resolved</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_steps_recorded</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span></div>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">_steps_recorded</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
 
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Hook entry point</span>
@@ -878,7 +878,7 @@ document.write(`
     <span class="c1"># ------------------------------------------------------------------</span>
 
 <div class="viewcode-block" id="StageTimingHook.summary">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.StageTimingHook.html#nvalchemi.dynamics.hooks.StageTimingHook.summary">[docs]</a>
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.StageTimingHook.html#nvalchemi.hooks.StageTimingHook.summary">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return per-transition timing statistics.</span>
 
@@ -909,7 +909,7 @@ document.write(`
 
 
 <div class="viewcode-block" id="StageTimingHook.reset">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.StageTimingHook.html#nvalchemi.dynamics.hooks.StageTimingHook.reset">[docs]</a>
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.StageTimingHook.html#nvalchemi.hooks.StageTimingHook.reset">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Clear all accumulated timing data.&quot;&quot;&quot;</span>
         <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">timings</span><span class="p">:</span>
@@ -924,7 +924,7 @@ document.write(`
 
 
 <div class="viewcode-block" id="StageTimingHook.close">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.StageTimingHook.html#nvalchemi.dynamics.hooks.StageTimingHook.close">[docs]</a>
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.hooks.StageTimingHook.html#nvalchemi.hooks.StageTimingHook.close">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Flush and close the CSV log file, if open.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_csv_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>

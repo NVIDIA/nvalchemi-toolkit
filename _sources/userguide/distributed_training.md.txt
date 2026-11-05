@@ -130,6 +130,13 @@ DDPHook(
 )
 ```
 
+A desynchronized world does not fail fast. A rank that stalls or raises while
+`DDPHook` owns the process group leaves a live job that never advances, and its
+peers wait for the process group's default timeout. The hook exposes no timeout
+setting of its own. To bound the wait, initialize the process group yourself,
+before the run, with an explicit `timeout=`; the hook then finds communication
+already established and leaves it alone.
+
 ### Custom distributed sampler
 
 When the default sampler does not fit, you can supply your own, and `DDPHook` gets
@@ -235,6 +242,22 @@ Whichever sampler is in play, call
 {py:meth}`~nvalchemi.data.datapipes.dataloader.DataLoader.set_epoch` yourself, or
 let {py:class}`~nvalchemi.training.TrainingStrategy` call it during training, so
 distributed samplers reshuffle deterministically from epoch to epoch.
+
+## On-policy distillation
+
+Distillation scales through the same manager and `DDPHook`, both offline and
+on-policy. The on-policy segment loop, which alternates generating frames with
+the student and training on them, adds the sharding its generation phase needs.
+Each rank propagates its own shard of the initial structures that trajectories
+start from, labels the generated frames with its own teacher replica, and fills
+its own replay buffer and mixed loader. The student's gradient all-reduce is
+therefore the only per-step training traffic between ranks; setup and
+validation add small collectives, and the frozen teacher never joins one. The
+offline path does not enforce the hook, though. A multi-rank offline
+launch without a `DDPHook` trains every rank on the whole store independently,
+and reports a `global_step_count` inflated by the world size. See
+{doc}`/modules/training/distillation` for the sharding rules, the seeding
+contract, and the single-node and multi-node launch runbook.
 
 ## API details
 

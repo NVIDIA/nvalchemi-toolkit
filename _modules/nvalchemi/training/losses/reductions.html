@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.training.losses.reductions &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.training.losses.reductions &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/losses/reductions';</script>
-    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -431,12 +431,31 @@ document.write(`
 <span class="sd">:func:`per_graph_sum` and :func:`per_graph_mean` take a flat per-node</span>
 <span class="sd">tensor with a ``batch_idx`` mapping each node to its graph and reduce</span>
 <span class="sd">the leading node dim into a per-graph output, preserving trailing dims</span>
-<span class="sd">verbatim.</span>
+<span class="sd">verbatim. Both accumulate in at least fp32 and return that width, so a</span>
+<span class="sd">half-precision input reduces to an fp32 per-graph tensor.</span>
 
 <span class="sd">These helpers only produce per-graph tensors. They do not choose the</span>
 <span class="sd">final scalar weighting across graphs. For per-graph values :math:`x_i`,</span>
 <span class="sd">a graph-balanced scalar is :math:`B^{-1} \sum_i x_i`, while an</span>
 <span class="sd">atom-weighted scalar is :math:`(\sum_i N_i x_i) / (\sum_i N_i)`.</span>
+
+<span class="sd">Graph-balanced scalar (``V ... → ()``)</span>
+<span class="sd">--------------------------------------</span>
+
+<span class="sd">:func:`graph_balanced_mean` composes the scatter reduction with the</span>
+<span class="sd">graph-balanced weighting: it sums a per-node residual and its validity</span>
+<span class="sd">weights per graph, divides, and averages the per-graph means. Loss</span>
+<span class="sd">terms that mean over graphs rather than over atoms share it instead of</span>
+<span class="sd">re-deriving the per-graph numerator and denominator.</span>
+
+<span class="sd">Masked scalar (``V ... → ()``)</span>
+<span class="sd">------------------------------</span>
+
+<span class="sd">:func:`masked_mean` is the reduction a per-node loss term with a</span>
+<span class="sd">``normalize_by_atom_count`` switch ends in: the global mean of a masked</span>
+<span class="sd">residual over its valid entries, or :func:`graph_balanced_mean` when the</span>
+<span class="sd">switch is on, reading ``batch_idx`` and ``num_graphs`` from a batch when</span>
+<span class="sd">they are not passed. Both branches accumulate in at least fp32.</span>
 
 <span class="sd">Matrix reductions (``B ... m n → B ...``)</span>
 <span class="sd">-----------------------------------------</span>
@@ -481,7 +500,7 @@ document.write(`
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">TypeAlias</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TypeAlias</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
@@ -490,7 +509,22 @@ document.write(`
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Float</span><span class="p">,</span> <span class="n">Num</span>
 
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;frobenius_mse&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;graph_balanced_mean&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;masked_mean&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;per_graph_mean&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;per_graph_sum&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
 <span class="n">_NumGraphs</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_require_metadata</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">loss_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return required loss metadata or raise a focused error.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">loss_name</span><span class="si">}</span><span class="s2"> requires </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">=... metadata.&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">value</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_batch_indices</span><span class="p">(</span>
@@ -553,13 +587,25 @@ document.write(`
     <span class="n">batch_idx</span><span class="p">:</span> <span class="n">BatchIndices</span><span class="p">,</span>
     <span class="n">num_graphs</span><span class="p">:</span> <span class="n">_NumGraphs</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B ...&quot;</span><span class="p">]:</span>  <span class="c1"># noqa: F722</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sum per-node values after ``batch_idx`` and ``num_graphs`` are resolved.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sum per-node values after ``batch_idx`` and ``num_graphs`` are resolved.</span>
+
+<span class="sd">    The accumulator is at least fp32 regardless of the input dtype, and the</span>
+<span class="sd">    widened result is returned as is. CUDA scatter atomics round after every</span>
+<span class="sd">    add, so a bf16 running sum stops growing at 256 and an fp16 one at 2048: a</span>
+<span class="sd">    graph-balanced force loss over a few thousand atoms was off by more than a</span>
+<span class="sd">    factor of three. Casting the total back to the input dtype reintroduced the</span>
+<span class="sd">    same class of failure from the other end, since an fp16 per-graph sum of a</span>
+<span class="sd">    few thousand squared errors exceeds ``65504`` and saturates to ``inf``</span>
+<span class="sd">    before the caller divides it by the atom count. fp32 and fp64 inputs are</span>
+<span class="sd">    untouched: their accumulator already matches their dtype.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">out_shape</span> <span class="o">=</span> <span class="p">(</span><span class="n">num_graphs</span><span class="p">,</span> <span class="o">*</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
-    <span class="n">out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">out_shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">acc_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">out_shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
     <span class="n">idx_shape</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">index</span> <span class="o">=</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">idx_shape</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
     <span class="c1"># TODO: refactor to use warp kernels when backwards ready</span>
-    <span class="n">out</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span>
+    <span class="n">out</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">values</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">acc_dtype</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">out</span>
 
 
@@ -591,7 +637,10 @@ document.write(`
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    Float[torch.Tensor, &quot;B ...&quot;]</span>
-<span class="sd">        Per-graph sums of shape ``(num_graphs, *values.shape[1:])``.</span>
+<span class="sd">        Per-graph sums of shape ``(num_graphs, *values.shape[1:])``. The sum</span>
+<span class="sd">        accumulates in at least fp32 and keeps that width, so half-precision</span>
+<span class="sd">        inputs (fp16, bf16) come back as fp32 rather than overflowing a</span>
+<span class="sd">        narrow output; fp32 and fp64 inputs return their own dtype.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">batch_idx</span><span class="p">,</span> <span class="n">resolved</span> <span class="o">=</span> <span class="n">_prep_reduction</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;values&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">_per_graph_sum_resolved</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">resolved</span><span class="p">)</span></div>
@@ -621,7 +670,8 @@ document.write(`
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    Float[torch.Tensor, &quot;B ...&quot;]</span>
-<span class="sd">        Per-graph means.</span>
+<span class="sd">        Per-graph means, in fp32 for half-precision inputs — see</span>
+<span class="sd">        :func:`per_graph_sum`.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">batch_idx</span><span class="p">,</span> <span class="n">resolved</span> <span class="o">=</span> <span class="n">_prep_reduction</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;values&quot;</span><span class="p">)</span>
     <span class="n">totals</span> <span class="o">=</span> <span class="n">_per_graph_sum_resolved</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">resolved</span><span class="p">)</span>
@@ -635,6 +685,151 @@ document.write(`
     <span class="n">count_shape</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">totals</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">counts</span> <span class="o">=</span> <span class="n">counts</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">count_shape</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">totals</span> <span class="o">/</span> <span class="n">counts</span></div>
+
+
+
+<div class="viewcode-block" id="graph_balanced_mean">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.losses.reductions.graph_balanced_mean.html#nvalchemi.training.losses.reductions.graph_balanced_mean">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">graph_balanced_mean</span><span class="p">(</span>
+    <span class="n">residual</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V ...&quot;</span><span class="p">],</span>  <span class="c1"># noqa: F722</span>
+    <span class="n">valid</span><span class="p">:</span> <span class="n">Num</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V ...&quot;</span><span class="p">],</span>  <span class="c1"># noqa: F722</span>
+    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">BatchIndices</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_graphs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">loss_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">],</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">]]:</span>  <span class="c1"># noqa: F722</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Mean over graphs of each graph&#39;s mean valid residual.</span>
+
+<span class="sd">    For per-node residuals :math:`\rho_{ia}` and validity weights</span>
+<span class="sd">    :math:`w_{ia}` this returns</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        L = \frac{1}{B} \sum_{i=1}^{B}</span>
+<span class="sd">        \frac{\sum_a \rho_{ia}}{\max\left(\sum_a w_{ia}, 1\right)},</span>
+
+<span class="sd">    so every graph contributes equally regardless of its size and a graph</span>
+<span class="sd">    with no valid node contributes ``0.0``. Trailing dims of ``residual`` and</span>
+<span class="sd">    ``valid`` are summed into the node before the scatter, so a ``(V, 3)``</span>
+<span class="sd">    squared force error with a ``(V, 3)`` component mask divides by the</span>
+<span class="sd">    number of valid components rather than of valid atoms. Both tensors are</span>
+<span class="sd">    promoted to at least float32 first and the per-graph sums stay at that</span>
+<span class="sd">    width (see :func:`per_graph_sum`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    residual : Float[torch.Tensor, &quot;V ...&quot;]</span>
+<span class="sd">        Per-node residual, already zeroed where ``valid`` is false.</span>
+<span class="sd">    valid : Num[torch.Tensor, &quot;V ...&quot;]</span>
+<span class="sd">        Per-node validity mask or weights, same shape as ``residual``.</span>
+<span class="sd">    batch_idx : BatchIndices | None</span>
+<span class="sd">        Node-to-graph assignment; ``None`` is refused.</span>
+<span class="sd">    num_graphs : int | None</span>
+<span class="sd">        Number of graphs in the batch; ``None`` is refused.</span>
+<span class="sd">    loss_name : str</span>
+<span class="sd">        Name of the calling loss, used in the metadata error.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[Float[torch.Tensor, &quot;&quot;], Float[torch.Tensor, &quot;B&quot;]]</span>
+<span class="sd">        The scalar loss and the per-graph means it averages, the latter</span>
+<span class="sd">        suitable for a loss term&#39;s ``per_sample_loss``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``batch_idx`` or ``num_graphs`` is ``None``, or if the leading dim</span>
+<span class="sd">        of ``residual`` does not match ``batch_idx``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">batch_idx</span> <span class="o">=</span> <span class="n">_require_metadata</span><span class="p">(</span><span class="n">batch_idx</span><span class="p">,</span> <span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="n">loss_name</span><span class="o">=</span><span class="n">loss_name</span><span class="p">)</span>
+    <span class="n">num_graphs</span> <span class="o">=</span> <span class="n">_require_metadata</span><span class="p">(</span><span class="n">num_graphs</span><span class="p">,</span> <span class="s2">&quot;num_graphs&quot;</span><span class="p">,</span> <span class="n">loss_name</span><span class="o">=</span><span class="n">loss_name</span><span class="p">)</span>
+    <span class="n">acc_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">residual</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">trailing</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">residual</span><span class="o">.</span><span class="n">ndim</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">trailing</span><span class="p">:</span>
+        <span class="n">per_node_residual</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">trailing</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span>
+        <span class="n">per_node_valid</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">trailing</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">per_node_residual</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">acc_dtype</span><span class="p">)</span>
+        <span class="n">per_node_valid</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">acc_dtype</span><span class="p">)</span>
+    <span class="n">per_graph_residual</span> <span class="o">=</span> <span class="n">per_graph_sum</span><span class="p">(</span>
+        <span class="n">per_node_residual</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">num_graphs</span>
+    <span class="p">)</span>
+    <span class="n">per_graph_valid</span> <span class="o">=</span> <span class="n">per_graph_sum</span><span class="p">(</span><span class="n">per_node_valid</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">num_graphs</span><span class="p">)</span>
+    <span class="n">per_sample</span> <span class="o">=</span> <span class="n">per_graph_residual</span> <span class="o">/</span> <span class="n">per_graph_valid</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">per_sample</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span> <span class="n">per_sample</span></div>
+
+
+
+<div class="viewcode-block" id="masked_mean">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.losses.reductions.masked_mean.html#nvalchemi.training.losses.reductions.masked_mean">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">masked_mean</span><span class="p">(</span>
+    <span class="n">residual</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V ...&quot;</span><span class="p">],</span>  <span class="c1"># noqa: F722</span>
+    <span class="n">valid</span><span class="p">:</span> <span class="n">Num</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V ...&quot;</span><span class="p">],</span>  <span class="c1"># noqa: F722</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">graph_balanced</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">batch_idx</span><span class="p">:</span> <span class="n">BatchIndices</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_graphs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">loss_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;masked_mean&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">],</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>  <span class="c1"># noqa: F722</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Mean of a masked residual, over every valid entry or balanced over graphs.</span>
+
+<span class="sd">    Without *graph_balanced* this is the global mean: the residual summed</span>
+<span class="sd">    over every entry and divided by the number of valid entries, so every</span>
+<span class="sd">    atom weighs the same and a large graph weighs more than a small one.</span>
+<span class="sd">    With it, the reduction is :func:`graph_balanced_mean`, so every graph</span>
+<span class="sd">    weighs the same. Both branches accumulate in at least float32, so a</span>
+<span class="sd">    half-precision residual reduces to a float32 scalar, and a residual with</span>
+<span class="sd">    no valid entry reduces to ``0.0`` on either branch.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    residual : Float[torch.Tensor, &quot;V ...&quot;]</span>
+<span class="sd">        Per-node residual, already zeroed where ``valid`` is false.</span>
+<span class="sd">    valid : Num[torch.Tensor, &quot;V ...&quot;]</span>
+<span class="sd">        Per-node validity mask or weights, same shape as ``residual``.</span>
+<span class="sd">    graph_balanced : bool</span>
+<span class="sd">        Whether to average within each graph first and then over graphs.</span>
+<span class="sd">    batch_idx : BatchIndices | None, optional</span>
+<span class="sd">        Node-to-graph assignment, read only when *graph_balanced*. Default</span>
+<span class="sd">        ``None`` reads it from *batch*.</span>
+<span class="sd">    num_graphs : int | None, optional</span>
+<span class="sd">        Number of graphs in the batch, read only when *graph_balanced*.</span>
+<span class="sd">        Default ``None`` reads it from *batch*.</span>
+<span class="sd">    batch : Any | None, optional</span>
+<span class="sd">        Object carrying ``batch_idx`` and ``num_graphs`` for the keywords</span>
+<span class="sd">        left ``None``, as the ``batch=`` keyword a composed loss forwards.</span>
+<span class="sd">        Default ``None``.</span>
+<span class="sd">    loss_name : str, optional</span>
+<span class="sd">        Name of the calling loss, used in the metadata error. Default</span>
+<span class="sd">        ``&quot;masked_mean&quot;``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[Float[torch.Tensor, &quot;&quot;], Float[torch.Tensor, &quot;B&quot;] | None]</span>
+<span class="sd">        The scalar loss and, when *graph_balanced*, the per-graph means it</span>
+<span class="sd">        averages, suitable for a loss term&#39;s ``per_sample_loss``; ``None``</span>
+<span class="sd">        otherwise.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *graph_balanced* and neither the keywords nor *batch* supply</span>
+<span class="sd">        ``batch_idx`` and ``num_graphs``, or if the leading dim of</span>
+<span class="sd">        ``residual`` does not match ``batch_idx``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">graph_balanced</span><span class="p">:</span>
+        <span class="n">acc_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">residual</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="n">residual</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">acc_dtype</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">valid</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">acc_dtype</span><span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">total</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">batch_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">batch_idx</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_graphs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_graphs</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;num_graphs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">graph_balanced_mean</span><span class="p">(</span>
+        <span class="n">residual</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="p">,</span> <span class="n">loss_name</span><span class="o">=</span><span class="n">loss_name</span>
+    <span class="p">)</span></div>
 
 
 

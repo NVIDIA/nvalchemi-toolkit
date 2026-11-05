@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.build\_mixed\_loader
+====================================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autofunction:: build_mixed_loader

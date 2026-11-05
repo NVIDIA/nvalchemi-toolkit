@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.signal\_fields
+==============================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autofunction:: signal_fields

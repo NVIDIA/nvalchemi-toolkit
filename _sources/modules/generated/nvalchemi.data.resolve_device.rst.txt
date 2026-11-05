@@ -1,0 +1,6 @@
+﻿nvalchemi.data.resolve\_device
+==============================
+
+.. currentmodule:: nvalchemi.data
+
+.. autofunction:: resolve_device

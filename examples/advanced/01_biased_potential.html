@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Biased Sampling with BiasedPotentialHook &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Biased Sampling with BiasedPotentialHook &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -57,7 +57,7 @@
     <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/01_biased_potential';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Writing a Custom Hook: Radial Distribution Function" href="02_custom_hook.html" />
@@ -371,10 +371,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -385,6 +386,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
@@ -398,10 +403,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -489,12 +500,23 @@ argon cluster during NVT dynamics.  The restraint keeps the cluster anchored
 near a target position.  In a production umbrella-sampling workflow you would
 sweep the target position along a reaction coordinate and post-process the
 windowed histograms with WHAM or MBAR.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="../../modules/generated/nvalchemi.hooks.BiasedPotentialHook.html#nvalchemi.hooks.BiasedPotentialHook" title="nvalchemi.hooks.BiasedPotentialHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">BiasedPotentialHook</span></code></a> is <strong>deprecated</strong> in favour
+of <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code>, which derives bias forces <em>and</em>
+stress from a single energy definition by autograd.  A <code class="docutils literal notranslate"><span class="pre">bias_fn</span></code> bias
+contributes no stress, so it is invisible to an NPT/NPH barostat — fine
+for the NVT run below, silently wrong under a barostat.  The equivalent
+with the new API is in <code class="docutils literal notranslate"><span class="pre">12_umbrella_sampling.py</span></code>; see
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.enhanced_sampling</span></code> for the full comparison.  This hook
+stays functional and no removal date is set.</p>
+</div>
 <section id="key-concepts-demonstrated">
 <h2>Key concepts demonstrated<a class="headerlink" href="#key-concepts-demonstrated" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p>Implementing a <code class="docutils literal notranslate"><span class="pre">bias_fn(batch)</span> <span class="pre">-&gt;</span> <span class="pre">(energy,</span> <span class="pre">forces)</span></code> closure.</p></li>
 <li><p>Registering <a class="reference internal" href="../../modules/generated/nvalchemi.hooks.BiasedPotentialHook.html#nvalchemi.hooks.BiasedPotentialHook" title="nvalchemi.hooks.BiasedPotentialHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">BiasedPotentialHook</span></code></a> on
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code>.</p></li>
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.NVTLangevin.html#nvalchemi.dynamics.NVTLangevin" title="nvalchemi.dynamics.NVTLangevin"><code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code></a>.</p></li>
 <li><p>Comparing COM drift in biased vs. unbiased runs.</p></li>
 </ul>
 </section>
@@ -702,6 +724,8 @@ restoring force at the temperatures we are simulating (300 K ≈ 0.026 eV).</p>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>=== Biased NVT run ===
 Target COM: [1.9942469596862793, 1.9935908317565918, 1.9866560697555542]
+/home/kelvin/Repos/nvalchemi-toolkit.worktrees/release-0.3.0-docs/examples/advanced/01_biased_potential.py:226: DeprecationWarning: BiasedPotentialHook is deprecated in favour of nvalchemi.enhanced_sampling (EnhancedSampling / ConservativeBias), which derives forces and stress from a single energy definition. bias_fn returns only (energy, forces), so a bias applied through this hook contributes no stress and is invisible to the NPT/NPH barostat. It remains functional and no removal date is set; run new biases through EnhancedSampling instead.
+  bias_hook = BiasedPotentialHook(bias_fn=my_bias_fn, stage=DynamicsStage.AFTER_COMPUTE)
 Biased run complete: 200 steps
 </pre></div>
 </div>
@@ -785,7 +809,7 @@ Sphinx-gallery will capture it automatically.</p>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;matplotlib not available — skipping plot.&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<img src="../../_images/sphx_glr_01_biased_potential_001.png" srcset="../../_images/sphx_glr_01_biased_potential_001.png" alt="COM Displacement: Biased vs Unbiased NVT" class = "sphx-glr-single-img"/><p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.222 seconds)</p>
+<img src="../../_images/sphx_glr_01_biased_potential_001.png" srcset="../../_images/sphx_glr_01_biased_potential_001.png" alt="COM Displacement: Biased vs Unbiased NVT" class = "sphx-glr-single-img"/><p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.223 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-01-biased-potential-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/c0e308799740ef9cda66b39df929624a/01_biased_potential.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">01_biased_potential.ipynb</span></code></a></p>

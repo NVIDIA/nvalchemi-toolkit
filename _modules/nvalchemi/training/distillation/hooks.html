@@ -1,0 +1,1145 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.distillation.hooks &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/distillation/hooks';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.distillation.hooks</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Dynamics hooks that capture on-policy frames as a propagator produces them.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">TypeAlias</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Bool</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span><span class="p">,</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks.safety</span><span class="w"> </span><span class="kn">import</span> <span class="n">nonfinite_graph_mask</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks.snapshot</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergedSnapshotHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation._attach</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_attach_teacher_labels</span><span class="p">,</span>
+    <span class="n">_prune_empty_edges</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.scoring</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_NEIGHBOR_KEYS</span><span class="p">,</span>
+    <span class="n">_reject_foreign_fields</span><span class="p">,</span>
+    <span class="n">scorer_fields</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSink</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.scoring</span><span class="w"> </span><span class="kn">import</span> <span class="n">TeacherLabels</span><span class="p">,</span> <span class="n">TeacherScorer</span>
+
+    <span class="n">_DivergencePredicate</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">],</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">]]</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;TeacherLabelHook&quot;</span><span class="p">,</span> <span class="s2">&quot;nonfinite_divergence&quot;</span><span class="p">]</span>
+
+<span class="n">_PREDICTION_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">BaseDynamics</span><span class="o">.</span><span class="n">_OUTPUT_KEY_TO_BATCH_ATTR</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+<span class="sd">&quot;&quot;&quot;Batch fields a propagator overwrites with the propagated model&#39;s predictions.&quot;&quot;&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_run_local_keys</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the fields of a live frame that mean nothing outside its run.</span>
+
+<span class="sd">    The bookkeeping part is read from *dynamics* at call time through</span>
+<span class="sd">    :meth:`~nvalchemi.dynamics.base.BaseDynamics.bookkeeping_keys`, which</span>
+<span class="sd">    walks the composition, because</span>
+<span class="sd">    :meth:`~nvalchemi.dynamics.base.BaseDynamics.register_bookkeeping_key`</span>
+<span class="sd">    grows the registries as stages are built. For example, a fused stage</span>
+<span class="sd">    registers one step counter per sub-stage, and keeps a ``reprime_pending``</span>
+<span class="sd">    flag of its own. A hook therefore reads the propagator it is registered</span>
+<span class="sd">    on, and belongs on the root of a composition so that root&#39;s own keys are</span>
+<span class="sd">    included.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_NEIGHBOR_KEYS</span> <span class="o">|</span> <span class="n">_PREDICTION_KEYS</span> <span class="o">|</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">bookkeeping_keys</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_score_and_attach</span><span class="p">(</span><span class="n">scorer</span><span class="p">:</span> <span class="n">TeacherScorer</span><span class="p">,</span> <span class="n">frame</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TeacherLabels</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Label *frame* in place with *scorer*, refusing a label outside ``teacher_*``.</span>
+
+<span class="sd">    The scorer is called inside the caller&#39;s autocast region, if any. Label</span>
+<span class="sd">    precision is the scorer&#39;s decision, and</span>
+<span class="sd">    :class:`~nvalchemi.training.distillation.InProcessTeacherScorer` disables</span>
+<span class="sd">    autocast unless its ``autocast`` setting says otherwise. A label outside</span>
+<span class="sd">    ``teacher_*`` is refused before it can overwrite propagator state.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    TeacherLabels</span>
+<span class="sd">        The attached labels, so a caller can resolve the fields the scorer</span>
+<span class="sd">        writes.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the scorer returns a field outside ``teacher_*``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">scorer</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
+    <span class="n">_attach_teacher_labels</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">labels</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_strip_replay_frame</span><span class="p">(</span><span class="n">frames</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reduce *frames* to the replay-frame contract, in place.</span>
+
+<span class="sd">    A frame captured from the propagator carries run-local fields: the</span>
+<span class="sd">    ephemeral neighbor tensors, the dynamics bookkeeping, and the ``energy``,</span>
+<span class="sd">    ``forces``, and ``stress`` the propagated model wrote. A replay frame keeps</span>
+<span class="sd">    only the structure, the propagator state that travels with it, and the</span>
+<span class="sd">    ``teacher_*`` labels. A stored frame therefore never offers the propagated</span>
+<span class="sd">    model&#39;s own prediction under a reference target&#39;s name.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    frames : Batch</span>
+<span class="sd">        Frames to strip, mutated in place.</span>
+<span class="sd">    dynamics : BaseDynamics</span>
+<span class="sd">        Propagator that wrote *frames*, whose bookkeeping keys are dropped.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Batch</span>
+<span class="sd">        The same object, holding nothing run-local.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dropped</span> <span class="o">=</span> <span class="n">_run_local_keys</span><span class="p">(</span><span class="n">dynamics</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">dropped</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">frames</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">frames</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">frames</span><span class="o">.</span><span class="n">keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">names</span> <span class="ow">in</span> <span class="n">frames</span><span class="o">.</span><span class="n">keys</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">names</span> <span class="o">-=</span> <span class="n">dropped</span>
+    <span class="n">_prune_empty_edges</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">frames</span>
+
+
+<span class="n">nonfinite_divergence</span> <span class="o">=</span> <span class="n">nonfinite_graph_mask</span>
+<span class="sd">&quot;&quot;&quot;Default :attr:`~nvalchemi.training.distillation.OnPolicyConfig.divergence`: :func:`~nvalchemi.dynamics.hooks.nonfinite_graph_mask` over positions and forces.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="TeacherLabelHook">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.TeacherLabelHook.html#nvalchemi.training.distillation.TeacherLabelHook">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TeacherLabelHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Label the live propagator frame with teacher signals, inline.</span>
+
+<span class="sd">    The hook runs at ``AFTER_STEP``. It attaches every signal its scorer</span>
+<span class="sd">    produces to the batch being propagated, each at the level its signal</span>
+<span class="sd">    declares. It can also copy the labeled frame into a</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.sinks.DataSink`. The live batch keeps the</span>
+<span class="sd">    ``energy`` and ``forces`` the propagator wrote, because they drive the</span>
+<span class="sd">    next step. The copy drops them, the ephemeral neighbor tensors, and the</span>
+<span class="sd">    dynamics bookkeeping. A stored frame is therefore a training sample rather</span>
+<span class="sd">    than a propagator state, and it never carries the propagated model&#39;s own</span>
+<span class="sd">    prediction under a reference target&#39;s name. A scorer that declares or</span>
+<span class="sd">    returns a field outside ``teacher_*`` is rejected, so it cannot overwrite</span>
+<span class="sd">    propagator state.</span>
+
+<span class="sd">    With ``exit_status`` set, graphs whose ``status`` has reached it are left</span>
+<span class="sd">    out of that copy and out of the teacher pass that labels it. A lifecycle</span>
+<span class="sd">    freezes those graphs at ``exit_status`` and stores each one once, through</span>
+<span class="sd">    a separate converged-frame route. Capturing them here would store and</span>
+<span class="sd">    score the same structure again on every later capture of the segment.</span>
+<span class="sd">    The hook records which graphs it stored on which step. The</span>
+<span class="sd">    converged-frame route asks :meth:`stored_graphs` before it writes, so a</span>
+<span class="sd">    structure that a step budget graduates right after this hook stored its</span>
+<span class="sd">    frame is not stored twice. Without ``exit_status``, every graph is</span>
+<span class="sd">    captured, frozen or not, because nothing else keeps the final frame of a</span>
+<span class="sd">    graduation the propagator manages itself. A frame that carries no</span>
+<span class="sd">    ``status`` is labeled and captured whole either way, and a hook without a</span>
+<span class="sd">    sink labels every frame whole.</span>
+
+<span class="sd">    Labeling is idempotent per step. A cadence dispatch right after a forced</span>
+<span class="sd">    label is skipped, so the teacher is not paid twice for a segment&#39;s last</span>
+<span class="sd">    frame and the next cadence step. See :ref:`training-distillation-api`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    teacher_scorer : TeacherScorer</span>
+<span class="sd">        Scorer that produces the teacher signals. A scorer that publishes</span>
+<span class="sd">        ``label_fields`` makes the idempotency check exact from the first</span>
+<span class="sd">        dispatch.</span>
+<span class="sd">    sink : DataSink | None, optional</span>
+<span class="sd">        Sink each labeled frame is copied into. Default ``None``.</span>
+<span class="sd">    frequency : int, optional</span>
+<span class="sd">        Label every ``frequency`` steps. Default ``1``.</span>
+<span class="sd">    exit_status : int | None, optional</span>
+<span class="sd">        Propagator status at which a graph counts as graduated. A graduated</span>
+<span class="sd">        graph is stored by another route, so this hook leaves it out. Default</span>
+<span class="sd">        ``None`` labels and stores every graph.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the scorer declares, or returns, a field outside ``teacher_*``.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    nvalchemi.dynamics.hooks.SnapshotHook : Capture frames without labeling them.</span>
+<span class="sd">    nvalchemi.training.distillation.label_dataset : Label a dataset offline.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.dynamics.sinks import HostMemory</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import (</span>
+<span class="sd">    ...     InProcessTeacherScorer,</span>
+<span class="sd">    ...     TeacherLabelHook,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; scorer = InProcessTeacherScorer(teacher, [&quot;energy&quot;, &quot;forces&quot;])  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; sink = HostMemory(capacity=10_000)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; dynamics.register_hook(TeacherLabelHook(scorer, sink=sink, frequency=10))  # doctest: +SKIP</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    This hook is not the labeling seam inside</span>
+<span class="sd">    :class:`~nvalchemi.training.distillation.DistillationStrategy`, which is a</span>
+<span class="sd">    training hook that labels batches on their way into a forward pass. The</span>
+<span class="sd">    two run on different engines, and both are active in an on-policy run.</span>
+<span class="sd">    Label precision is the scorer&#39;s decision, and the hook opens no autocast</span>
+<span class="sd">    region of its own. The built-in scorer disables autocast unless its</span>
+<span class="sd">    ``autocast`` setting says otherwise, so a frame it labels during a</span>
+<span class="sd">    mixed-precision generation phase matches what</span>
+<span class="sd">    :func:`~nvalchemi.training.distillation.label_dataset` writes offline.</span>
+<span class="sd">    ``requires_grad`` handling is the scorer&#39;s responsibility, and the scorer</span>
+<span class="sd">    leaves the batch as :meth:`~nvalchemi.dynamics.base.BaseDynamics.compute`</span>
+<span class="sd">    left it.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">teacher_scorer</span><span class="p">:</span> <span class="n">TeacherScorer</span><span class="p">,</span>
+        <span class="n">sink</span><span class="p">:</span> <span class="n">DataSink</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">exit_status</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve the fields the scorer populates, when they can be known.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">teacher_scorer</span> <span class="o">=</span> <span class="n">teacher_scorer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span> <span class="o">=</span> <span class="n">sink</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exit_status</span> <span class="o">=</span> <span class="n">exit_status</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_teacher_fields</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">scorer_fields</span><span class="p">(</span><span class="n">teacher_scorer</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_teacher_fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_reject_foreign_fields</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_teacher_fields</span><span class="p">,</span> <span class="s2">&quot;A scorer&#39;s label_fields&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_labeled_step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stored</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">labeled_step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Propagator step this hook last labeled a frame on, or ``None``.</span>
+
+<span class="sd">        A step on which every graph had already graduated leaves it</span>
+<span class="sd">        unchanged, because nothing was labeled. A segment loop uses this to</span>
+<span class="sd">        tell a step the cadence covered from one it skipped.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_labeled_step</span>
+
+<div class="viewcode-block" id="TeacherLabelHook.stored_graphs">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.TeacherLabelHook.html#nvalchemi.training.distillation.TeacherLabelHook.stored_graphs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stored_graphs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the graphs of *batch* whose frame this hook stored on *step_count*.</span>
+
+<span class="sd">        ``None`` when the hook stored nothing on that step. The converged-frame</span>
+<span class="sd">        route calls this at ``ON_GRADUATE`` and skips a graph whose final frame</span>
+<span class="sd">        this hook already stored. That happens when a step budget graduates</span>
+<span class="sd">        the graph after this hook ran on the same step.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stored</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stored</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">step_count</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">stored</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">active</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stored</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">active</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">stored</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+            <span class="n">stored</span><span class="p">[</span><span class="n">active</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="n">stored</span></div>
+
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_label_frame</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">,</span>
+        <span class="n">forced</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Label the graphs of *batch* that are still moving, once per step.</span>
+
+<span class="sd">        The frame is narrowed to the graphs below ``exit_status`` before the</span>
+<span class="sd">        teacher sees it. The status is read as it is now, not from the</span>
+<span class="sd">        step-start mask in the hook context, so a graph the criterion froze</span>
+<span class="sd">        earlier in this step is already left out. The run therefore pays</span>
+<span class="sd">        neither for labeling a graduated graph nor for copying it into the</span>
+<span class="sd">        sink. Whenever a graph is cut, the live batch itself is left</span>
+<span class="sd">        unlabeled. A second dispatch at the same step then recognizes its own</span>
+<span class="sd">        work from the step count, because the batch never received the label</span>
+<span class="sd">        fields.</span>
+
+<span class="sd">        *dynamics* is the propagator that wrote *batch*; the copy handed to</span>
+<span class="sd">        the sink drops its bookkeeping. *forced* marks an out-of-band call</span>
+<span class="sd">        that labels a frame the cadence did not land on, such as the last</span>
+<span class="sd">        frame of an on-policy segment. The adjacency rule never skips a forced</span>
+<span class="sd">        call, and the dynamics registry never makes one.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="n">forced</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">&gt;</span> <span class="mi">1</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_labeled_step</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">step_count</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_labeled_step</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="p">):</span>
+            <span class="k">return</span>
+        <span class="n">active</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sink</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">exit_status</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">moving</span> <span class="o">=</span> <span class="n">BaseDynamics</span><span class="o">.</span><span class="n">active_graph_mask</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">exit_status</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">moving</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">moving</span><span class="o">.</span><span class="n">all</span><span class="p">()):</span>
+                <span class="n">active</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">moving</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">active</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">active</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">stored</span> <span class="o">=</span> <span class="n">step_count</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_labeled_step</span>
+        <span class="k">if</span> <span class="n">stored</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="n">active</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">or</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_teacher_fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="n">field</span> <span class="ow">in</span> <span class="n">batch</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_teacher_fields</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">return</span>
+        <span class="n">frame</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">batch</span> <span class="k">if</span> <span class="n">active</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_captured_frame</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">active</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">_score_and_attach</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">teacher_scorer</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_teacher_fields</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_teacher_fields</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">labels</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_labeled_step</span> <span class="o">=</span> <span class="n">step_count</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sink</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">stored</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+            <span class="n">frame</span> <span class="k">if</span> <span class="n">active</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_captured_frame</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stored</span> <span class="o">=</span> <span class="p">(</span><span class="n">step_count</span><span class="p">,</span> <span class="n">active</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_captured_frame</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">,</span> <span class="n">active</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a copy of *batch* holding nothing run-local.</span>
+
+<span class="sd">        The copy leaves out every run-local field, read from *dynamics*, and</span>
+<span class="sd">        the live batch keeps the neighbor tensors and predictions the next</span>
+<span class="sd">        step reads. An edge</span>
+<span class="sd">        group left empty is removed too, so a store never records edges that</span>
+<span class="sd">        no array backs. *active*, when given, narrows the copy to the graphs</span>
+<span class="sd">        still moving, for a lifecycle that graduates graphs out of the batch.</span>
+<span class="sd">        The copy is taken under :func:`torch.no_grad`. A fused propagator</span>
+<span class="sd">        keeps its autograd inputs tracking gradients across its hooks, so a</span>
+<span class="sd">        stored frame would otherwise carry the step&#39;s autograd graph into the</span>
+<span class="sd">        first training pass.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dropped</span> <span class="o">=</span> <span class="n">_run_local_keys</span><span class="p">(</span><span class="n">dynamics</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">frame</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="n">dropped</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">active</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">batch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">active</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="n">dropped</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">_prune_empty_edges</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">frame</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: ARG002</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Label the frame the propagator has just resolved.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_label_frame</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span> <span class="n">dynamics</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">workflow</span><span class="p">)</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_DivergenceHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Evaluate the divergence predicate once per step and freeze what it flags.</span>
+
+<span class="sd">    A diverged relaxation never converges, because every comparison with NaN</span>
+<span class="sd">    is false. Without this hook, nothing would migrate its status, the path</span>
+<span class="sd">    route would keep storing and labeling it, and its labels would reach the</span>
+<span class="sd">    loss. Freezing the graph at the propagator&#39;s ``exit_status`` takes it out</span>
+<span class="sd">    of the step and out of both capture routes. The segment boundary then</span>
+<span class="sd">    retires and backfills it like a converged graph. An</span>
+<span class="sd">    :class:`~nvalchemi.training.distillation.AdmissionPolicy` that refuses</span>
+<span class="sd">    non-finite frames at the buffer would achieve the exclusion alone. The</span>
+<span class="sd">    lifecycle still freezes the graph itself, because freezing also stops</span>
+<span class="sd">    propagating and labeling it.</span>
+
+<span class="sd">    The lifecycle calls the predicate only here, once per step. Each verdict</span>
+<span class="sd">    is ORed into :attr:`diverged`. The converged-frame hook and the segment</span>
+<span class="sd">    boundary read that record and never call the predicate themselves. A</span>
+<span class="sd">    graph that a stateful predicate flags on one step and not on the next</span>
+<span class="sd">    therefore stays out of the converged route and still counts as diverged</span>
+<span class="sd">    at the boundary. :meth:`reset` clears the record once a refill has</span>
+<span class="sd">    changed the batch&#39;s rows.</span>
+
+<span class="sd">    A frozen graph still goes through the propagator&#39;s step: the integrator</span>
+<span class="sd">    moves the whole batch and the model evaluates it, and only afterwards are</span>
+<span class="sd">    the frozen graphs&#39; positions, velocities, and cell restored from a</span>
+<span class="sd">    snapshot taken before the step. A graph frozen with non-finite forces or</span>
+<span class="sd">    velocities therefore keeps presenting a non-finite or runaway geometry to</span>
+<span class="sd">    the model on every remaining step of the segment, which a model&#39;s</span>
+<span class="sd">    neighbor-list builder may not survive. With ``quarantine`` set, the hook</span>
+<span class="sd">    sanitizes a graph on the step it flags it: velocities and forces are</span>
+<span class="sd">    zeroed and positions made finite. The hook runs at ``AFTER_STEP``, after</span>
+<span class="sd">    that step&#39;s restore, and the graph is inactive on every later step, so</span>
+<span class="sd">    each later snapshot and restore carries the sanitized positions and</span>
+<span class="sd">    velocities, the zero velocity moves nothing, and the masked output</span>
+<span class="sd">    publication keeps the zeroed forces. The sanitized frame is still</span>
+<span class="sd">    recorded as diverged and never captured.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    divergence : Callable[[Batch], Bool[torch.Tensor, &quot;G&quot;]], optional</span>
+<span class="sd">        Predicate flagging the diverged graphs of the live frame. Its verdict</span>
+<span class="sd">        is moved onto the batch&#39;s device before it is recorded, so a predicate</span>
+<span class="sd">        that judges on the host is accepted for a frame on an accelerator.</span>
+<span class="sd">        Default :func:`nonfinite_divergence`.</span>
+<span class="sd">    quarantine : bool, optional</span>
+<span class="sd">        Sanitize each graph&#39;s state on the step it is flagged: velocities and</span>
+<span class="sd">        forces zeroed, positions restored to the graph&#39;s last finite frame.</span>
+<span class="sd">        Default ``False`` leaves the flagged state as it is.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If the predicate returns something other than a tensor.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the tensor is not boolean or does not carry one entry per graph.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">divergence</span><span class="p">:</span> <span class="n">_DivergencePredicate</span> <span class="o">=</span> <span class="n">nonfinite_divergence</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">quarantine</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Freeze the graphs *divergence* flags, starting with none recorded.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">divergence</span> <span class="o">=</span> <span class="n">divergence</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">quarantine</span> <span class="o">=</span> <span class="n">quarantine</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_diverged</span><span class="p">:</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">diverged</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Graphs the predicate has flagged since the last reset, or ``None`` before the first verdict.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_diverged</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forget which graphs diverged, after a refill changed the batch.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_diverged</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_flags</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the predicate on *batch* and return its one-boolean-per-graph verdict on the batch&#39;s device.&quot;&quot;&quot;</span>
+        <span class="n">flags</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">divergence</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flags</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;The divergence predicate must return a boolean tensor with one flag &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;per graph; got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">flags</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">flags</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">torch</span><span class="o">.</span><span class="n">bool</span> <span class="ow">or</span> <span class="n">flags</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The divergence predicate must return one boolean per graph; got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;shape=</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">flags</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> of dtype </span><span class="si">{</span><span class="n">flags</span><span class="o">.</span><span class="n">dtype</span><span class="si">!r}</span><span class="s2">, expected &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2">,) of torch.bool.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">flags</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: ARG002</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Record the predicate&#39;s verdict and migrate the flagged graphs to the exit status.&quot;&quot;&quot;</span>
+        <span class="n">exit_status</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;exit_status&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">exit_status</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">moving</span> <span class="o">=</span> <span class="n">BaseDynamics</span><span class="o">.</span><span class="n">active_graph_mask</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">exit_status</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">moving</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">flags</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_flags</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">quarantine</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_remember_finite</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">flags</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_diverged</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_diverged</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="n">flags</span><span class="o">.</span><span class="n">numel</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_diverged</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">flags</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_diverged</span> <span class="o">|=</span> <span class="n">flags</span>
+        <span class="n">frozen</span> <span class="o">=</span> <span class="n">flags</span> <span class="o">&amp;</span> <span class="n">moving</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">status</span>
+        <span class="n">column</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">status</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">status</span>
+        <span class="n">column</span><span class="p">[:</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">]</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">frozen</span><span class="p">,</span> <span class="n">exit_status</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">quarantine</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sanitize</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">frozen</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_remember_finite</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">flags</span><span class="p">:</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Keep the positions of every unflagged graph as its last finite frame.</span>
+
+<span class="sd">        Rows of graphs the predicate flags keep the snapshot they had, so a</span>
+<span class="sd">        graph that diverges is restored to the step before its divergence</span>
+<span class="sd">        instead of collapsing onto one point. A batch whose shape changed (a</span>
+<span class="sd">        refill without :meth:`reset`) starts a fresh snapshot.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">return</span>
+        <span class="n">nodes</span> <span class="o">=</span> <span class="n">flags</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">()]</span>
+        <span class="n">keep</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nodes</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">*</span><span class="p">([</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">keep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span><span class="p">,</span> <span class="n">positions</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sanitize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">graphs</span><span class="p">:</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Zero the velocities and forces of *graphs* and restore finite positions.</span>
+
+<span class="sd">        Positions come from the last finite snapshot when one exists; any</span>
+<span class="sd">        value still non-finite (a graph flagged on the very first step) is</span>
+<span class="sd">        zeroed as a last resort.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">nodes</span> <span class="o">=</span> <span class="n">graphs</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">()]</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">):</span>
+                <span class="n">tensor</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">tensor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nodes</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">*</span><span class="p">([</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span>
+                <span class="n">tensor</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">positions</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nodes</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">*</span><span class="p">([</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span>
+            <span class="n">source</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_finite</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span>
+                <span class="k">else</span> <span class="n">positions</span>
+            <span class="p">)</span>
+            <span class="n">finite</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">posinf</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">neginf</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">finite</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">positions</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_TrajectoryAgeHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Count each trajectory&#39;s propagator steps and retire it at a lifetime.</span>
+
+<span class="sd">    A thermostatted trajectory never converges, so without a lifetime the</span>
+<span class="sd">    structures of the initial batch are the only ones the run ever</span>
+<span class="sd">    propagates, and the teacher labels new geometries of the same molecules</span>
+<span class="sd">    for the whole run. This hook gives every trajectory a maximum age in</span>
+<span class="sd">    propagator steps. A graph that reaches it is frozen at the propagator&#39;s</span>
+<span class="sd">    ``exit_status`` on that step, which the propagator reports at</span>
+<span class="sd">    ``ON_GRADUATE``, where the converged-frame hook stores its final frame.</span>
+<span class="sd">    The segment boundary then retires and backfills it exactly like a</span>
+<span class="sd">    converged graph.</span>
+
+<span class="sd">    The age is kept per graph, in batch order, and follows the batch through</span>
+<span class="sd">    a backfill: :meth:`retain` keeps the survivors&#39; ages and starts the fresh</span>
+<span class="sd">    rows at zero. A graph is aged on every step it was active in, so a graph</span>
+<span class="sd">    frozen earlier, by a criterion or by divergence, stops aging.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    max_steps : int</span>
+<span class="sd">        Propagator steps a trajectory lives for before it is retired.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retire every trajectory once it has been propagated *max_steps* times.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_steps</span> <span class="o">=</span> <span class="n">max_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_age</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">age</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Steps each graph of the live batch has been propagated, or ``None`` before the first.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_age</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">retain</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">survivors</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">fresh</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Keep the *survivors*&#39; ages, in their new order, and age the *fresh* rows from zero.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_age</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">kept</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_age</span><span class="p">[</span><span class="n">survivors</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_age</span><span class="o">.</span><span class="n">device</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_age</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">kept</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">fresh</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">kept</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">kept</span><span class="o">.</span><span class="n">device</span><span class="p">)]</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: ARG002</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Age the graphs that stepped and freeze the ones that reached the lifetime.&quot;&quot;&quot;</span>
+        <span class="n">exit_status</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;exit_status&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">exit_status</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
+        <span class="n">moving</span> <span class="o">=</span> <span class="n">BaseDynamics</span><span class="o">.</span><span class="n">active_graph_mask</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">exit_status</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">moving</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">stepped</span> <span class="o">=</span> <span class="n">moving</span> <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">active_graph_mask</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">ctx</span><span class="o">.</span><span class="n">active_graph_mask</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_age</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_age</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_age</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_age</span> <span class="o">+=</span> <span class="n">stepped</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_age</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">expired</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_age</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_steps</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">moving</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">status</span>
+        <span class="n">column</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">status</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">status</span>
+        <span class="n">column</span><span class="p">[:</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">]</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">expired</span><span class="p">,</span> <span class="n">exit_status</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_ConvergedFrameHook</span><span class="p">(</span><span class="n">ConvergedSnapshotHook</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Capture each graduating structure once, on the step it stopped moving.</span>
+
+<span class="sd">    The hook listens at ``ON_GRADUATE``, the stage every</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.base.BaseDynamics` and</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.FusedStage` propagator dispatches with</span>
+<span class="sd">    ``ctx.graduated_mask`` marking the graphs that graduated during the step.</span>
+<span class="sd">    A :class:`~nvalchemi.distributed.DomainParallel` propagator dispatches no</span>
+<span class="sd">    such stage, so :class:`~nvalchemi.training.distillation.OnPolicyConfig`</span>
+<span class="sd">    refuses one with a criterion. A graph graduates when its ``status``</span>
+<span class="sd">    reaches ``exit_status``, whether the lifecycle&#39;s criterion, a fused</span>
+<span class="sd">    sub-stage&#39;s step budget, or the divergence hook moved it. The parent&#39;s</span>
+<span class="sd">    ``ON_CONVERGE`` stage does not work here, for two reasons.</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.FusedStage` dispatches it on its sub-stages</span>
+<span class="sd">    only. It also fires with every graph the criterion currently accepts, not</span>
+<span class="sd">    only the ones that just reached it. The frames are captured without</span>
+<span class="sd">    teacher labels. The segment loop labels them in one teacher pass when it</span>
+<span class="sd">    drains the sink, which keeps the teacher&#39;s batch size independent of the</span>
+<span class="sd">    propagated batch size. A graph the divergence hook has</span>
+<span class="sd">    recorded as diverged is never written, because it diverged rather than</span>
+<span class="sd">    converged. A graph whose frame the path route stored on the same step is</span>
+<span class="sd">    not written again.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    sink : DataSink</span>
+<span class="sd">        Sink converged frames are written to.</span>
+<span class="sd">    divergence : _DivergenceHook</span>
+<span class="sd">        Hook recording which graphs diverged, registered ahead of this one.</span>
+<span class="sd">    path : TeacherLabelHook | None, optional</span>
+<span class="sd">        Labeling hook of the path route, asked which graphs it stored on the</span>
+<span class="sd">        step. Default ``None`` skips that check, so every graduated graph that</span>
+<span class="sd">        did not diverge is written.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The write runs under :func:`torch.no_grad`, because a fused propagator</span>
+<span class="sd">    keeps its autograd inputs tracking gradients across its hooks.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">sink</span><span class="p">:</span> <span class="n">DataSink</span><span class="p">,</span>
+        <span class="n">divergence</span><span class="p">:</span> <span class="n">_DivergenceHook</span><span class="p">,</span>
+        <span class="n">path</span><span class="p">:</span> <span class="n">TeacherLabelHook</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Listen at ``ON_GRADUATE`` for the graphs that graduate.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">sink</span><span class="p">,</span> <span class="n">stage</span><span class="o">=</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_GRADUATE</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">divergence</span> <span class="o">=</span> <span class="n">divergence</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">=</span> <span class="n">path</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: ARG002</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write the graphs that graduated on this step, and only those.&quot;&quot;&quot;</span>
+        <span class="n">fresh</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">graduated_mask</span>
+        <span class="k">if</span> <span class="n">fresh</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">diverged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">divergence</span><span class="o">.</span><span class="n">diverged</span>
+        <span class="k">if</span> <span class="n">diverged</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fresh</span> <span class="o">=</span> <span class="n">fresh</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">diverged</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">stored</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">stored_graphs</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">stored</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">fresh</span> <span class="o">=</span> <span class="n">fresh</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">stored</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_write_converged</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">fresh</span><span class="p">)</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

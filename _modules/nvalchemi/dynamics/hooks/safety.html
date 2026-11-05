@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.dynamics.hooks.safety &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.dynamics.hooks.safety &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/hooks/safety';</script>
-    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -435,19 +435,88 @@ document.write(`
 
 <span class="sd">Both hooks fire at :attr:`~DynamicsStage.AFTER_COMPUTE`, immediately</span>
 <span class="sd">after the model forward pass writes forces and energy to the batch.</span>
+<span class="sd">The module also provides :func:`nonfinite_graph_mask`, a per-graph finiteness</span>
+<span class="sd">check that any hook or workflow can call directly.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Bool</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;MaxForceClampHook&quot;</span><span class="p">,</span> <span class="s2">&quot;NaNDetectorHook&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;MaxForceClampHook&quot;</span><span class="p">,</span> <span class="s2">&quot;NaNDetectorHook&quot;</span><span class="p">,</span> <span class="s2">&quot;nonfinite_graph_mask&quot;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="nonfinite_graph_mask">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.nonfinite_graph_mask.html#nvalchemi.dynamics.hooks.nonfinite_graph_mask">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">nonfinite_graph_mask</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">keys</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">)</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Flag the graphs of *batch* holding a NaN or infinite value under any of *keys*.</span>
+
+<span class="sd">    A key the batch does not carry is skipped. A non-finite value in a</span>
+<span class="sd">    node-level tensor flags the graph its atom belongs to, and one in a</span>
+<span class="sd">    graph-level tensor flags its own graph. The check runs on the concatenated</span>
+<span class="sd">    tensors without a host synchronization, so it can run inside a compiled</span>
+<span class="sd">    step. It only returns the mask; a caller that must act on the result</span>
+<span class="sd">    inspects the mask itself.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    batch : Batch</span>
+<span class="sd">        Batch to inspect.</span>
+<span class="sd">    keys : Iterable[str], optional</span>
+<span class="sd">        Batch fields to inspect. Default ``(&quot;positions&quot;, &quot;forces&quot;)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Bool[torch.Tensor, &quot;G&quot;]</span>
+<span class="sd">        One flag per graph of *batch*, ``True`` where any inspected value is</span>
+<span class="sd">        not finite.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a present key holds a zero-dimensional tensor, or one whose</span>
+<span class="sd">        leading dimension is neither the batch&#39;s atom count nor its graph</span>
+<span class="sd">        count, so its values cannot be attributed to graphs.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.dynamics.hooks import nonfinite_graph_mask</span>
+<span class="sd">    &gt;&gt;&gt; nonfinite_graph_mask(batch)  # doctest: +SKIP</span>
+<span class="sd">    tensor([False,  True, False])</span>
+<span class="sd">    &gt;&gt;&gt; nonfinite_graph_mask(batch, keys=(&quot;energy&quot;, &quot;stress&quot;))  # doctest: +SKIP</span>
+<span class="sd">    tensor([False, False, False])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">flagged</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+        <span class="n">tensor</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">tensor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">shape</span> <span class="ow">or</span> <span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">):</span>
+            <span class="n">held</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">!r}</span><span class="s2"> rows&quot;</span> <span class="k">if</span> <span class="n">shape</span> <span class="k">else</span> <span class="s2">&quot;no rows&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Field </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2"> holds </span><span class="si">{</span><span class="n">held</span><span class="si">}</span><span class="s2">, shape </span><span class="si">{</span><span class="n">shape</span><span class="si">!r}</span><span class="s2">; it has to have &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="si">!r}</span><span class="s2"> rows, one per atom, or </span><span class="si">{</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+                <span class="s2">&quot;one per graph, for its values to be attributed to graphs.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">bad</span> <span class="o">=</span> <span class="o">~</span><span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">:</span>
+            <span class="n">hits</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">flagged</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+            <span class="n">hits</span><span class="o">.</span><span class="n">index_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">(),</span> <span class="n">bad</span><span class="o">.</span><span class="n">long</span><span class="p">())</span>
+            <span class="n">bad</span> <span class="o">=</span> <span class="n">hits</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="n">flagged</span> <span class="o">|=</span> <span class="n">bad</span>
+    <span class="k">return</span> <span class="n">flagged</span></div>
+
 
 
 <div class="viewcode-block" id="NaNDetectorHook">
@@ -515,6 +584,10 @@ document.write(`
 <span class="sd">    * The check uses ``torch.isfinite`` and operates on the full</span>
 <span class="sd">      concatenated tensors, so the overhead scales with total atom</span>
 <span class="sd">      count rather than batch size.</span>
+<span class="sd">    * The check synchronizes CUDA execution whenever it runs so that it can</span>
+<span class="sd">      raise immediately with detailed diagnostics. It therefore requires graph</span>
+<span class="sd">      breaks under ``torch.compile`` and is not compatible with</span>
+<span class="sd">      ``fullgraph=True`` or uninterrupted CUDA graph capture.</span>
 <span class="sd">    * For production runs where overhead is a concern, set</span>
 <span class="sd">      ``frequency=10`` or ``frequency=100`` to amortize the cost.</span>
 <span class="sd">    * Consider pairing with :class:`MaxForceClampHook` as a first</span>
@@ -522,8 +595,6 @@ document.write(`
 <span class="sd">      integration failures.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="NaNDetectorHook.__init__">
-<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html#nvalchemi.dynamics.hooks.NaNDetectorHook.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
@@ -532,13 +603,36 @@ document.write(`
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">extra_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">extra_keys</span> <span class="k">if</span> <span class="n">extra_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">extra_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">extra_keys</span> <span class="k">if</span> <span class="n">extra_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
 
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_non_finite_mask</span><span class="p">(</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">active_graph_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return non-finite elements restricted to active graphs.&quot;&quot;&quot;</span>
+        <span class="n">non_finite_mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">active_graph_mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">non_finite_mask</span>
+
+        <span class="n">active_values</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">:</span>
+            <span class="n">active_values</span> <span class="o">=</span> <span class="n">active_graph_mask</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">:</span>
+            <span class="n">active_values</span> <span class="o">=</span> <span class="n">active_graph_mask</span>
+
+        <span class="k">if</span> <span class="n">active_values</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">non_finite_mask</span>
+
+        <span class="n">mask_shape</span> <span class="o">=</span> <span class="p">(</span><span class="n">active_values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">non_finite_mask</span> <span class="o">&amp;</span> <span class="n">active_values</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">mask_shape</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_check_finite</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
         <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">active_graph_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check forces, energy, and extra keys for NaN/Inf values.</span>
 
@@ -571,21 +665,27 @@ document.write(`
             <span class="k">return</span>
 
         <span class="c1"># Single-pass finiteness check — one bool per tensor</span>
-        <span class="c1"># torch.isfinite(t).all() returns a scalar bool tensor</span>
-        <span class="n">all_finite</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensors</span><span class="p">])</span>
+        <span class="n">all_finite</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_non_finite_mask</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">active_graph_mask</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">tensors</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
 
-        <span class="c1"># Early exit if everything is finite (hot path — no CPU sync)</span>
+        <span class="c1"># TODO: Move this scalar check to an eager post-step validation phase.</span>
+        <span class="c1"># Here it requires CUDA synchronization and prevents full-graph compilation/CUDA</span>
+        <span class="c1"># graph capture.</span>
         <span class="k">if</span> <span class="n">all_finite</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
             <span class="k">return</span>
 
         <span class="c1"># --- Cold diagnostic path (only on failure) ---</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_raise_with_diagnostics</span><span class="p">(</span>
-            <span class="n">batch</span><span class="p">,</span> <span class="n">step_count</span><span class="p">,</span> <span class="n">present_keys</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">all_finite</span>
+            <span class="n">batch</span><span class="p">,</span> <span class="n">step_count</span><span class="p">,</span> <span class="n">present_keys</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">all_finite</span><span class="p">,</span> <span class="n">active_graph_mask</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check forces, energy, and extra keys for NaN/Inf values.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_check_finite</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_finite</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">active_graph_mask</span><span class="p">)</span>
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_raise_with_diagnostics</span><span class="p">(</span>
@@ -595,6 +695,7 @@ document.write(`
         <span class="n">keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">tensors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
         <span class="n">all_finite</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">active_graph_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Build diagnostic message and raise RuntimeError.</span>
 
@@ -613,20 +714,25 @@ document.write(`
                 <span class="k">continue</span>
 
             <span class="n">bad_fields</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-            <span class="n">non_finite_mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
-            <span class="n">counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">non_finite_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+            <span class="n">non_finite_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_non_finite_mask</span><span class="p">(</span>
+                <span class="n">batch</span><span class="p">,</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">active_graph_mask</span>
+            <span class="p">)</span>
 
             <span class="c1"># Map back to graph indices</span>
             <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">:</span>
+                <span class="n">counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">non_finite_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
                 <span class="c1"># Node-level tensor: find which atoms have non-finite values</span>
-                <span class="n">affected_nodes</span> <span class="o">=</span> <span class="n">non_finite_mask</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (V,)</span>
+                <span class="n">affected_nodes</span> <span class="o">=</span> <span class="n">non_finite_mask</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
                 <span class="n">affected_graphs</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">[</span><span class="n">affected_nodes</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
             <span class="k">else</span><span class="p">:</span>
+                <span class="n">counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">non_finite_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
                 <span class="c1"># Graph-level tensor</span>
-                <span class="n">affected_graphs</span> <span class="o">=</span> <span class="n">non_finite_mask</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">nonzero</span><span class="p">()</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-                <span class="c1"># Ensure 1-D even for scalar case</span>
-                <span class="k">if</span> <span class="n">affected_graphs</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">affected_graphs</span> <span class="o">=</span> <span class="n">affected_graphs</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                <span class="n">affected_graphs</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">non_finite_mask</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="o">.</span><span class="n">nonzero</span><span class="p">()</span>
+                    <span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="p">)</span>
 
             <span class="n">graph_lists</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">affected_graphs</span><span class="p">)</span>
 
@@ -714,8 +820,6 @@ document.write(`
 <span class="sd">      registration order).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="MaxForceClampHook.__init__">
-<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html#nvalchemi.dynamics.hooks.MaxForceClampHook.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">max_force</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -724,17 +828,21 @@ document.write(`
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span> <span class="o">=</span> <span class="n">max_force</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span></div>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Clamp force vectors exceeding ``max_force`` in-place.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_clamp_forces</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_clamp_forces</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">active_graph_mask</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_clamp_forces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_clamp_forces</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">active_graph_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Clamp force vectors exceeding ``max_force`` in-place.&quot;&quot;&quot;</span>
         <span class="n">norms</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">vector_norm</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># (V, 1)</span>
         <span class="n">needs_clamp</span> <span class="o">=</span> <span class="n">norms</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span>  <span class="c1"># (V, 1) bool</span>
+        <span class="k">if</span> <span class="n">active_graph_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">active_atoms</span> <span class="o">=</span> <span class="n">active_graph_mask</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">needs_clamp</span> <span class="o">=</span> <span class="n">needs_clamp</span> <span class="o">&amp;</span> <span class="n">active_atoms</span>
 
         <span class="c1"># Always compute and apply scale unconditionally (torch.compile-friendly).</span>
         <span class="c1"># torch.where is a no-op when nothing needs clamping.</span>

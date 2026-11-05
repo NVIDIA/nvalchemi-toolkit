@@ -1,0 +1,1082 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.dynamics.hooks.swap &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/hooks/swap';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.dy...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.dynamics.hooks.swap</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Pairwise swaps of per-system state, without the physics that decides them.</span>
+
+<span class="sd">Strip the thermodynamics out of replica exchange and the mechanism is:</span>
+<span class="sd">propose pairs, evaluate an acceptance rule, and permute per-system parameters</span>
+<span class="sd">for the pairs that pass, rebinding any integrator state that travels with</span>
+<span class="sd">them.  That mechanism is also basin hopping with swaps, population or</span>
+<span class="sd">evolutionary structure search, and any annealing ladder — so it lives here,</span>
+<span class="sd">and the physics is supplied as ``accept_fn``.</span>
+
+<span class="sd">The half that was already reusable is on the integrator:</span>
+<span class="sd">:meth:`~nvalchemi.dynamics.BaseDynamics.apply_per_system_params` rebinds the</span>
+<span class="sd">parameters and transforms whatever private state depends on them — thermostat</span>
+<span class="sd">chain masses, velocity scaling — as one indivisible change.</span>
+
+<span class="sd">What a caller supplies</span>
+<span class="sd">----------------------</span>
+<span class="sd">``accept_fn(batch, i, j) -&gt; Bool[Tensor, &quot;P&quot;]``</span>
+<span class="sd">    The rule.  *i* and *j* are the graph rows holding the two slots of each</span>
+<span class="sd">    proposed pair, so the rule reads whatever it needs off the batch — energy,</span>
+<span class="sd">    a bias, an order parameter — and returns one decision per pair.  It may</span>
+<span class="sd">    be asked twice about one segment, so it should change nothing.</span>
+<span class="sd">``record_fn(pairs, accepted) -&gt; None``</span>
+<span class="sd">    Optional.  Where a rule keeps its statistics: called once per segment,</span>
+<span class="sd">    after the outcome is final.</span>
+<span class="sd">``pairing(segment, n_slots) -&gt; list[tuple[int, int]]``</span>
+<span class="sd">    Optional.  Which rungs to propose.  Its pairs must be disjoint — they are</span>
+<span class="sd">    decided simultaneously, so an overlap has no defined meaning and its</span>
+<span class="sd">    writes would collide — and that is checked rather than assumed.</span>
+<span class="sd">``params_fn(slots) -&gt; Mapping[str, Tensor]``</span>
+<span class="sd">    Optional.  Maps the post-swap slot assignment to per-graph parameters for</span>
+<span class="sd">    ``apply_per_system_params``.  Omit it when a method permutes labels only.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;PairSwapHook&quot;</span><span class="p">,</span> <span class="s2">&quot;apply_pair_swaps&quot;</span><span class="p">,</span> <span class="s2">&quot;even_odd_pairs&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">even_odd_pairs</span><span class="p">(</span><span class="n">segment</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_slots</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the neighbouring slot pairs attempted in *segment*.</span>
+
+<span class="sd">    Alternating even and odd offsets means every slot is exchangeable with</span>
+<span class="sd">    both neighbours over two segments, while no slot appears in two pairs of</span>
+<span class="sd">    the same segment — which is what lets every pair be decided</span>
+<span class="sd">    simultaneously rather than in sequence.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    segment:</span>
+<span class="sd">        Segment index.  Even segments pair ``(0,1), (2,3), ...``; odd ones</span>
+<span class="sd">        pair ``(1,2), (3,4), ...``.</span>
+<span class="sd">    n_slots:</span>
+<span class="sd">        Number of slots on the ladder.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list[tuple[int, int]]</span>
+<span class="sd">        Neighbouring ``(slot, slot + 1)`` pairs, possibly empty.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">offset</span> <span class="o">=</span> <span class="n">segment</span> <span class="o">%</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="p">[(</span><span class="n">index</span><span class="p">,</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">n_slots</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)]</span>
+
+
+<span class="n">_PAIRINGS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]]]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;even_odd&quot;</span><span class="p">:</span> <span class="n">even_odd_pairs</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_require_disjoint</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">what</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">detail</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise if *values* names anything twice.</span>
+
+<span class="sd">    A swap writes each member of a pair into the other&#39;s place, so two pairs</span>
+<span class="sd">    sharing a member write over each other: one label is duplicated and the</span>
+<span class="sd">    other lost, and what comes out is no longer a permutation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    values:</span>
+<span class="sd">        Every member of every pair, flattened.</span>
+<span class="sd">    what:</span>
+<span class="sd">        What the values are, for the error.</span>
+<span class="sd">    detail:</span>
+<span class="sd">        What the caller should do about it.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If any value appears more than once.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">flat</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">repeated</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">({</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">flat</span> <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="ow">in</span> <span class="n">seen</span> <span class="ow">or</span> <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">))})</span>
+    <span class="k">if</span> <span class="n">repeated</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">what</span><span class="si">}</span><span class="s2"> appears in more than one pair: </span><span class="si">{</span><span class="n">repeated</span><span class="si">}</span><span class="s2">. Pairs within &quot;</span>
+            <span class="s2">&quot;a segment have to be disjoint — they are decided simultaneously, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;and overlapping writes duplicate one label and lose another. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_pair_swaps</span><span class="p">(</span>
+    <span class="n">slots</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">rows_i</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">rows_j</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">accepted</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return *slots* with the accepted row pairs exchanged.</span>
+
+<span class="sd">    Labels move, rows do not: a walker keeps its place in the batch and its</span>
+<span class="sd">    slot assignment changes.  Nothing is copied between rows, which is what</span>
+<span class="sd">    makes the move viable inside a batched GPU step.</span>
+
+<span class="sd">    Keyed by row rather than by slot because rows are what every caller</span>
+<span class="sd">    already holds — proposing a pair means naming the two rows that hold it —</span>
+<span class="sd">    and re-deriving them from a slot lookup is the step that can disagree</span>
+<span class="sd">    with the lookup the acceptance rule used.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    slots:</span>
+<span class="sd">        Current per-graph slot assignment, shape ``[B]``.</span>
+<span class="sd">    rows_i, rows_j:</span>
+<span class="sd">        Graph rows holding each pair&#39;s two slots, shape ``[P]``.</span>
+<span class="sd">    accepted:</span>
+<span class="sd">        One boolean per pair, or ``None`` to swap every pair — which is what</span>
+<span class="sd">        a rule needs when it has to evaluate the *proposal* before deciding</span>
+<span class="sd">        on it.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        A new assignment; *slots* is not modified.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If two accepted pairs share a row, which would make the result</span>
+<span class="sd">        something other than a permutation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">accepted</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">accepted</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">rows_i</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+    <span class="n">take</span> <span class="o">=</span> <span class="n">accepted</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">slots</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="c1"># Only the accepted pairs are written, so only those have to be disjoint:</span>
+    <span class="c1"># a schedule may propose an overlap that acceptance happens to resolve.</span>
+    <span class="n">_require_disjoint</span><span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">rows_i</span><span class="p">[</span><span class="n">take</span><span class="p">],</span> <span class="n">rows_j</span><span class="p">[</span><span class="n">take</span><span class="p">]]),</span>
+        <span class="s2">&quot;apply_pair_swaps: a graph row&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Propose each row at most once per round.&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">new_slots</span> <span class="o">=</span> <span class="n">slots</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">new_slots</span><span class="p">[</span><span class="n">rows_i</span><span class="p">[</span><span class="n">take</span><span class="p">]]</span> <span class="o">=</span> <span class="n">slots</span><span class="p">[</span><span class="n">rows_j</span><span class="p">[</span><span class="n">take</span><span class="p">]]</span>
+    <span class="n">new_slots</span><span class="p">[</span><span class="n">rows_j</span><span class="p">[</span><span class="n">take</span><span class="p">]]</span> <span class="o">=</span> <span class="n">slots</span><span class="p">[</span><span class="n">rows_i</span><span class="p">[</span><span class="n">take</span><span class="p">]]</span>
+    <span class="k">return</span> <span class="n">new_slots</span>
+
+
+<div class="viewcode-block" id="PairSwapHook">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.PairSwapHook.html#nvalchemi.dynamics.hooks.PairSwapHook">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PairSwapHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Propose and accept pairwise swaps of per-system state.</span>
+
+<span class="sd">    The cadence is :attr:`frequency`, so the hook registry gates the dispatch:</span>
+<span class="sd">    fired at step *kN*, the hook acts on segment ``step // N - 1``, the one</span>
+<span class="sd">    that has just completed.  Attempts stay idempotent by segment index,</span>
+<span class="sd">    because a caller may also drain a completed segment from elsewhere — a</span>
+<span class="sd">    checkpoint, say — and neither pass may decide the same segment twice.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    accept_fn:</span>
+<span class="sd">        ``accept_fn(batch, i, j) -&gt; Bool[Tensor, &quot;P&quot;]``.  The physics: given</span>
+<span class="sd">        the graph rows holding each proposed pair, return one decision per</span>
+<span class="sd">        pair.  Not called when the segment proposes no pairs, and called</span>
+<span class="sd">        again when a segment that failed before committing is retried — so</span>
+<span class="sd">        it should have no side effects.  Statistics go in ``record_fn``.</span>
+<span class="sd">    params_fn:</span>
+<span class="sd">        ``params_fn(slots) -&gt; Mapping[str, Tensor]``, mapping the post-swap</span>
+<span class="sd">        assignment to per-graph parameters handed to</span>
+<span class="sd">        ``apply_per_system_params``.  ``None`` for a method that permutes</span>
+<span class="sd">        labels only and rebinds nothing.</span>
+<span class="sd">    slot_field:</span>
+<span class="sd">        Per-graph batch field holding the assignment.  Must be a permutation</span>
+<span class="sd">        of ``0..n_slots-1``.  Required rather than defaulted: the name is the</span>
+<span class="sd">        caller&#39;s, and a default borrowed from one method would quietly make</span>
+<span class="sd">        this hook that method&#39;s.</span>
+<span class="sd">    n_slots:</span>
+<span class="sd">        Number of slots on the ladder.</span>
+<span class="sd">    pairing:</span>
+<span class="sd">        Pair schedule.  ``&quot;even_odd&quot;`` is the only built-in; pass a callable</span>
+<span class="sd">        ``(segment, n_slots) -&gt; list[tuple[int, int]]`` for another.</span>
+<span class="sd">    frequency:</span>
+<span class="sd">        Dynamics steps per segment.</span>
+<span class="sd">    on_swap:</span>
+<span class="sd">        Called with the batch after an accepted swap has been applied, for</span>
+<span class="sd">        whatever the method has to repair — forces computed under the old</span>
+<span class="sd">        parameters, most obviously.</span>
+<span class="sd">    record_fn:</span>
+<span class="sd">        ``record_fn(pairs, accepted) -&gt; None``, given the segment&#39;s slot pairs</span>
+<span class="sd">        and the decision on each.  Called once per decided segment, when the</span>
+<span class="sd">        outcome is final: after an accepted swap commits, or when no pair was</span>
+<span class="sd">        accepted.  Never for a segment that raised before committing, so a</span>
+<span class="sd">        retried segment is counted once.  Runs before ``on_swap``, so a</span>
+<span class="sd">        failed repair does not lose the record of a swap that happened.  If</span>
+<span class="sd">        it raises, the record is kept and retried on the next</span>
+<span class="sd">        :meth:`attempt_segment` call, before anything else is decided — so it</span>
+<span class="sd">        should record all of a call or none of it.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Applying is the indivisible half: the slot labels, the rebound</span>
+<span class="sd">    parameters, and anything derived from them move together.  Leaving any of</span>
+<span class="sd">    them behind would sample a state the assignment says the walker is no</span>
+<span class="sd">    longer in — which is why the parameter rebinding goes through</span>
+<span class="sd">    ``apply_per_system_params`` rather than being open-coded per method.</span>
+
+<span class="sd">    Indivisibility is enforced by ordering rather than by rollback: every</span>
+<span class="sd">    step that can refuse — building the parameters, the engine checking it</span>
+<span class="sd">    can rebind them — runs before the labels are written, and the label write</span>
+<span class="sd">    itself cannot fail.  ``on_swap`` runs last because it repairs quantities</span>
+<span class="sd">    derived from a swap that has, by then, definitely happened.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">accept_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">params_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">slot_field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">n_slots</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">pairing</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;even_odd&quot;</span><span class="p">]</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="s2">&quot;even_odd&quot;</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">on_swap</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">record_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pairing</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">pairing</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_PAIRINGS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;PairSwapHook: unknown pairing </span><span class="si">{</span><span class="n">pairing</span><span class="si">!r}</span><span class="s2">. Built-in &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;schedules are </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">_PAIRINGS</span><span class="p">)</span><span class="si">}</span><span class="s2">; pass a callable &quot;</span>
+                <span class="s2">&quot;(segment, n_slots) -&gt; list[tuple[int, int]] for another.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;PairSwapHook: frequency must be at least 1, got </span><span class="si">{</span><span class="n">frequency</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;It is the segment length, and the registry uses it to gate &quot;</span>
+                <span class="s2">&quot;the dispatch.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">accept_fn</span> <span class="o">=</span> <span class="n">accept_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params_fn</span> <span class="o">=</span> <span class="n">params_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slot_field</span> <span class="o">=</span> <span class="n">slot_field</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_slots</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_slots</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pairing</span> <span class="o">=</span> <span class="n">_PAIRINGS</span><span class="p">[</span><span class="n">pairing</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pairing</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">pairing</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_swap</span> <span class="o">=</span> <span class="n">on_swap</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">record_fn</span> <span class="o">=</span> <span class="n">record_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attempted_segment</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_attempting</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unrecorded</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="PairSwapHook.on_register">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.PairSwapHook.html#nvalchemi.dynamics.hooks.PairSwapHook.on_register">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">workflow</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Remember the engine whose per-system parameters a swap rebinds.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        workflow:</span>
+<span class="sd">            The ``BaseDynamics`` doing the registering.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span> <span class="o">=</span> <span class="n">workflow</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attempt the segment that has just completed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ctx:</span>
+<span class="sd">            The dynamics hook context.</span>
+<span class="sd">        stage:</span>
+<span class="sd">            The stage being dispatched.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s2">&quot;step_count&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attempt_segment</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">step</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+<div class="viewcode-block" id="PairSwapHook.state_dict">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.PairSwapHook.html#nvalchemi.dynamics.hooks.PairSwapHook.state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the segment cursor that must survive a restart.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Mapping[str, Any]</span>
+<span class="sd">            The last segment attempted.  A resumed run that lost it would</span>
+<span class="sd">            re-decide a segment that was already decided.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;attempted_segment&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attempted_segment</span><span class="p">)}</span></div>
+
+
+<div class="viewcode-block" id="PairSwapHook.load_state_dict">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.PairSwapHook.html#nvalchemi.dynamics.hooks.PairSwapHook.load_state_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore the segment cursor.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state:</span>
+<span class="sd">            A mapping produced by :meth:`state_dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attempted_segment</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;attempted_segment&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="PairSwapHook.attempt_segment">
+<a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.PairSwapHook.html#nvalchemi.dynamics.hooks.PairSwapHook.attempt_segment">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">attempt_segment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">segment</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attempt *segment*&#39;s pairs, at most once.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        segment:</span>
+<span class="sd">            The completed segment.  Negative, or already attempted, is a</span>
+<span class="sd">            no-op.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        A segment that raises **before the swap commits** — a rejected</span>
+<span class="sd">        rebinding, a malformed pairing — stays unattempted, so a caller that</span>
+<span class="sd">        recovers can try it again.  ``record_fn`` has not run for it, so the</span>
+<span class="sd">        failed attempt is not counted, and the retry asks ``accept_fn`` again.</span>
+<span class="sd">        A rule that draws from a counter it advances only in ``record_fn`` —</span>
+<span class="sd">        as ``ReplicaExchange`` does — therefore replays the same decision</span>
+<span class="sd">        rather than consuming a second draw.</span>
+
+<span class="sd">        Once the swap commits the cursor advances immediately, even if the</span>
+<span class="sd">        post-swap repair then raises.  Past that line the batch has already</span>
+<span class="sd">        moved, so a retry would not re-attempt the segment: it would decide</span>
+<span class="sd">        afresh and swap an already-swapped batch a second time, giving two</span>
+<span class="sd">        exchanges where the rule granted one.  A failed repair leaves derived</span>
+<span class="sd">        quantities — forces evaluated under the old parameters — stale, which</span>
+<span class="sd">        the next force evaluation corrects; a double swap is silent and</span>
+<span class="sd">        corrects nothing.</span>
+
+<span class="sd">        A ``record_fn`` that raises is the same case: the segment is decided</span>
+<span class="sd">        and stays decided, ``on_swap`` still runs, and the unrecorded decision</span>
+<span class="sd">        is handed to ``record_fn`` again on the next call — before any later</span>
+<span class="sd">        segment is decided, since a rule drawing from a counter its record</span>
+<span class="sd">        advances would otherwise decide that segment from a stale draw.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_attempting</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_attempting</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record_pending</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">segment</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">segment</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attempted_segment</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_attempt</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">segment</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_attempting</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># Reached when the segment proposed no pairs, so there was nothing to</span>
+        <span class="c1"># decide. A segment that was decided advanced the cursor itself,</span>
+        <span class="c1"># inside _attempt. The in-progress flag keeps a hook driven</span>
+        <span class="c1"># re-entrantly from attempting the same segment twice.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attempted_segment</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attempted_segment</span><span class="p">,</span> <span class="n">segment</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validated_pairs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">segment</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return this segment&#39;s pairs, or say why they cannot be used.</span>
+
+<span class="sd">        A pairing is an extension point, so what it returns is input.  Two</span>
+<span class="sd">        pairs sharing a slot is the failure worth catching here: the writes</span>
+<span class="sd">        overlap, one label is duplicated and another lost, and the assignment</span>
+<span class="sd">        stops being a permutation — which the *next* segment reports, after a</span>
+<span class="sd">        round has already been run at parameters nobody asked for.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        segment:</span>
+<span class="sd">            Segment index.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[tuple[int, int]]</span>
+<span class="sd">            The proposed pairs, possibly empty.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a slot is out of range or appears in more than one pair.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pairs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pairing</span><span class="p">(</span><span class="n">segment</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_slots</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pairs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">pairs</span>
+
+        <span class="n">members</span> <span class="o">=</span> <span class="p">[</span><span class="n">slot</span> <span class="k">for</span> <span class="n">pair</span> <span class="ow">in</span> <span class="n">pairs</span> <span class="k">for</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">pair</span><span class="p">]</span>
+        <span class="n">out_of_range</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">slot</span> <span class="k">for</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">members</span> <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">slot</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_slots</span><span class="p">}</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">out_of_range</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;PairSwapHook: the pairing proposed slot(s) </span><span class="si">{</span><span class="n">out_of_range</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;for a ladder of </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_slots</span><span class="si">}</span><span class="s2">. A slot is an index into the &quot;</span>
+                <span class="s2">&quot;ladder, so it has to name a rung that exists.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">_require_disjoint</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">members</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+            <span class="s2">&quot;PairSwapHook: a slot&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Return a schedule whose pairs do not touch — the built-in &quot;</span>
+            <span class="s2">&quot;&#39;even_odd&#39; alternates offsets for exactly this reason.&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">pairs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validated_slots</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the assignment, or say why it cannot be swapped on.</span>
+
+<span class="sd">        Pairing looks up &quot;which row holds slot *k*&quot;, so the assignment has to</span>
+<span class="sd">        be a bijection.  Checked here rather than left to fail later because</span>
+<span class="sd">        the later failure is a bare ``KeyError`` from a dict lookup, naming</span>
+<span class="sd">        neither the field nor the ladder.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            The assignment as a ``[B]`` long tensor.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the field is absent, the wrong length, or not a permutation of</span>
+<span class="sd">            ``0..n_slots-1``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slot_field</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">values</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;PairSwapHook: the batch has no </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">slot_field</span><span class="si">!r}</span><span class="s2"> field, &quot;</span>
+                <span class="s2">&quot;so there is no assignment to swap. Stamp it before the first &quot;</span>
+                <span class="s2">&quot;step, or name the field the batch actually carries.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">slots</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">slots</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_slots</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;PairSwapHook: the ladder has </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_slots</span><span class="si">}</span><span class="s2"> slot(s) but &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">slot_field</span><span class="si">!r}</span><span class="s2"> holds </span><span class="si">{</span><span class="n">slots</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> entr(ies). A swap &quot;</span>
+                <span class="s2">&quot;pairs slots with the rows holding them, which needs one row &quot;</span>
+                <span class="s2">&quot;per slot.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">slots</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span> <span class="o">!=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_slots</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;PairSwapHook: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">slot_field</span><span class="si">!r}</span><span class="s2"> must be a permutation of &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;0..</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_slots</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">slots</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">. A duplicate &quot;</span>
+                <span class="s2">&quot;would let two rows claim the same slot, and the pair lookup &quot;</span>
+                <span class="s2">&quot;would silently decide one of them twice.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">slots</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_attempt</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">segment</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Decide one round of swaps and apply the accepted ones.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch:</span>
+<span class="sd">            The live batch.</span>
+<span class="sd">        segment:</span>
+<span class="sd">            Segment index, which selects the pairing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pairs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated_pairs</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pairs</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">slots</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated_slots</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="n">row_of_slot</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">slot</span><span class="p">):</span> <span class="n">row</span> <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">slot</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">slots</span><span class="o">.</span><span class="n">tolist</span><span class="p">())}</span>
+        <span class="n">rows_i</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">row_of_slot</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">slots</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span>
+        <span class="p">)</span>
+        <span class="n">rows_j</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">row_of_slot</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">slots</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span>
+        <span class="p">)</span>
+
+        <span class="n">accepted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">accept_fn</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">bool</span><span class="p">(</span><span class="n">accepted</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+            <span class="c1"># Nothing to apply, so nothing left that can refuse: the outcome</span>
+            <span class="c1"># is already final.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_settle</span><span class="p">(</span><span class="n">segment</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">accepted</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">new_slots</span> <span class="o">=</span> <span class="n">apply_pair_swaps</span><span class="p">(</span><span class="n">slots</span><span class="p">,</span> <span class="n">rows_i</span><span class="p">,</span> <span class="n">rows_j</span><span class="p">,</span> <span class="n">accepted</span><span class="p">)</span>
+
+        <span class="c1"># Everything that can refuse the swap runs before anything is written.</span>
+        <span class="c1"># The labels are the cheapest half to commit and the most damaging to</span>
+        <span class="c1"># commit alone: a batch saying a walker moved rung while the</span>
+        <span class="c1"># integrator still targets the old one samples a state the assignment</span>
+        <span class="c1"># says it has left, which is exactly the indivisibility this hook</span>
+        <span class="c1"># exists to provide.</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">params_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;PairSwapHook: no engine to rebind on. The hook takes it &quot;</span>
+                    <span class="s2">&quot;from on_register, so register it on the dynamics rather &quot;</span>
+                    <span class="s2">&quot;than driving attempt_segment() by hand.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">params_fn</span><span class="p">(</span><span class="n">new_slots</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Implementations validate the parameters they were handed before</span>
+            <span class="c1"># touching any state, so a rebinding they refuse leaves both the</span>
+            <span class="c1"># integrator and the batch as they were.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="o">.</span><span class="n">apply_per_system_params</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+
+        <span class="n">batch</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">slot_field</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_slots</span>
+
+        <span class="c1"># The swap is now committed: the integrator and the labels both moved.</span>
+        <span class="c1"># The cursor advances here rather than after on_swap, because from</span>
+        <span class="c1"># this line on a retry would not re-attempt the segment, it would</span>
+        <span class="c1"># swap an already-swapped batch a second time — two exchanges where</span>
+        <span class="c1"># the acceptance rule granted one.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_settle</span><span class="p">(</span><span class="n">segment</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">accepted</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="c1"># Last, and deliberately after the labels: this is repair work on</span>
+            <span class="c1"># quantities derived from the swap — forces computed under the old</span>
+            <span class="c1"># parameters — so it needs the swap to have happened, and it is</span>
+            <span class="c1"># owed whether or not the swap was recorded.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_swap</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">on_swap</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_settle</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">segment</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">pairs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span> <span class="n">accepted</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Mark *segment* decided, then hand the decision to ``record_fn``.</span>
+
+<span class="sd">        The one place a segment&#39;s outcome becomes final.  Recording anywhere</span>
+<span class="sd">        earlier — inside ``accept_fn``, say — counts a segment whose</span>
+<span class="sd">        application then fails, and counts it again when it is retried.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        segment:</span>
+<span class="sd">            The segment just decided.</span>
+<span class="sd">        pairs:</span>
+<span class="sd">            Its slot pairs.</span>
+<span class="sd">        accepted:</span>
+<span class="sd">            One boolean per pair.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attempted_segment</span> <span class="o">=</span> <span class="n">segment</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unrecorded</span> <span class="o">=</span> <span class="p">(</span><span class="n">pairs</span><span class="p">,</span> <span class="n">accepted</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record_pending</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_record_pending</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Hand a decided-but-unrecorded segment to ``record_fn``.</span>
+
+<span class="sd">        Cleared only once ``record_fn`` returns, so a record that raised is</span>
+<span class="sd">        still pending on the next call rather than lost with the cursor</span>
+<span class="sd">        already past it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unrecorded</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">record_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">record_fn</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_unrecorded</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unrecorded</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

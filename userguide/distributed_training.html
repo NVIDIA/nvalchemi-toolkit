@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Distributed Training &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Distributed Training &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,11 +55,11 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/distributed_training';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Zarr Compression Tuning" href="zarr_compression.html" />
-    <link rel="prev" title="Distributed ML Potentials: Design Overview" href="distributed_design.html" />
+    <link rel="prev" title="Crystal structure prediction" href="csp.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="current nav bd-sidenav">
@@ -537,7 +545,7 @@ sampler, and multi-dataset batch sampling.</p>
 during strategy setup with no extra configuration; what it installs depends on the
 dataset type. For a single <code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code>, the hook
 wraps a <code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedSampler</span></code> in a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.BatchSampler" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BatchSampler</span></code></a> so the loader keeps emitting complete
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.BatchSampler" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BatchSampler</span></code></a> so the loader keeps emitting complete
 batches. For <a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.MultiDataset.html#nvalchemi.data.datapipes.MultiDataset" title="nvalchemi.data.datapipes.MultiDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiDataset</span></code></a>, it installs
 <a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.MultiDatasetBatchSampler.html#nvalchemi.data.datapipes.MultiDatasetBatchSampler" title="nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiDatasetBatchSampler</span></code></a> so the
 per-dataset batch composition and rank sharding are handled together. Either way,
@@ -579,6 +587,12 @@ leaves the loader unchanged.</p>
 <span class="p">)</span>
 </pre></div>
 </div>
+<p>A desynchronized world does not fail fast. A rank that stalls or raises while
+<code class="docutils literal notranslate"><span class="pre">DDPHook</span></code> owns the process group leaves a live job that never advances, and its
+peers wait for the process group’s default timeout. The hook exposes no timeout
+setting of its own. To bound the wait, initialize the process group yourself,
+before the run, with an explicit <code class="docutils literal notranslate"><span class="pre">timeout=</span></code>; the hook then finds communication
+already established and leaves it alone.</p>
 </section>
 <section id="custom-distributed-sampler">
 <h3>Custom distributed sampler<a class="headerlink" href="#custom-distributed-sampler" title="Link to this heading">#</a></h3>
@@ -679,6 +693,22 @@ let <a class="reference internal" href="../modules/training/generated/nvalchemi.
 distributed samplers reshuffle deterministically from epoch to epoch.</p>
 </section>
 </section>
+<section id="on-policy-distillation">
+<h2>On-policy distillation<a class="headerlink" href="#on-policy-distillation" title="Link to this heading">#</a></h2>
+<p>Distillation scales through the same manager and <code class="docutils literal notranslate"><span class="pre">DDPHook</span></code>, both offline and
+on-policy. The on-policy segment loop, which alternates generating frames with
+the student and training on them, adds the sharding its generation phase needs.
+Each rank propagates its own shard of the initial structures that trajectories
+start from, labels the generated frames with its own teacher replica, and fills
+its own replay buffer and mixed loader. The student’s gradient all-reduce is
+therefore the only per-step training traffic between ranks; setup and
+validation add small collectives, and the frozen teacher never joins one. The
+offline path does not enforce the hook, though. A multi-rank offline
+launch without a <code class="docutils literal notranslate"><span class="pre">DDPHook</span></code> trains every rank on the whole store independently,
+and reports a <code class="docutils literal notranslate"><span class="pre">global_step_count</span></code> inflated by the world size. See
+<a class="reference internal" href="../modules/training/distillation.html"><span class="doc">Distillation API</span></a> for the sharding rules, the seeding
+contract, and the single-node and multi-node launch runbook.</p>
+</section>
 <section id="api-details">
 <h2>API details<a class="headerlink" href="#api-details" title="Link to this heading">#</a></h2>
 <p>This guide covers the training-facing surface of the manager. For the complete
@@ -699,12 +729,12 @@ the
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="distributed_design.html"
+       href="csp.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Distributed ML Potentials: Design Overview</p>
+        <p class="prev-next-title">Crystal structure prediction</p>
       </div>
     </a>
     <a class="right-next"
@@ -741,6 +771,7 @@ the
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multidataset-batch-sampling">Multidataset batch sampling</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#on-policy-distillation">On-policy distillation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-details">API details</a></li>
 </ul>
   </nav></div>

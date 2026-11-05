@@ -1,0 +1,6 @@
+﻿nvalchemi.dynamics.KB\_EV
+=========================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autodata:: KB_EV

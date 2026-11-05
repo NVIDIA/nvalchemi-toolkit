@@ -1,0 +1,1815 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.distillation.config &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/distillation/config';</script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.distillation.config</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Configuration of the on-policy generate-label-train segment loop.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">nullcontext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Bool</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseModel</span><span class="p">,</span>
+    <span class="n">ConfigDict</span><span class="p">,</span>
+    <span class="n">Field</span><span class="p">,</span>
+    <span class="n">PrivateAttr</span><span class="p">,</span>
+    <span class="n">field_validator</span><span class="p">,</span>
+    <span class="n">model_validator</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.batch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchDatasetProtocol</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.distributed.domain_parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">DomainParallel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span><span class="p">,</span> <span class="n">ConvergenceHook</span><span class="p">,</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSink</span><span class="p">,</span> <span class="n">ResizableSink</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.replay</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FIFO</span><span class="p">,</span>
+    <span class="n">AdmissionPolicy</span><span class="p">,</span>
+    <span class="n">EvictionPolicy</span><span class="p">,</span>
+    <span class="n">ReplayEviction</span><span class="p">,</span>
+    <span class="n">_batch_allocation</span><span class="p">,</span>
+    <span class="n">_batch_size_remedy</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.scoring</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TeacherScorer</span><span class="p">,</span>
+    <span class="n">_isolated_neighbors</span><span class="p">,</span>
+    <span class="n">_planned_neighbor_sources</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.seeding</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">InitialStructures</span><span class="p">,</span>
+    <span class="n">InitialStructuresSource</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">evaluating</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;OnPolicyConfig&quot;</span><span class="p">,</span> <span class="s2">&quot;OnPolicySettings&quot;</span><span class="p">,</span> <span class="s2">&quot;ResizableSink&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_probe_propagator</span><span class="p">(</span><span class="n">probe</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run one ``compute()`` on *probe* and check the result against the declared keys.</span>
+
+<span class="sd">    :meth:`~nvalchemi.dynamics.base.BaseDynamics.check_initial_batch`</span>
+<span class="sd">    compares the declared keys with the initial structures. This function</span>
+<span class="sd">    compares them with what ``compute()`` actually does. A propagator whose</span>
+<span class="sd">    declarations no longer match its implementation is therefore rejected</span>
+<span class="sd">    here rather than on the first step of a long run. Examples are a</span>
+<span class="sd">    ``__needs_keys__`` output the student does not produce, or a field that</span>
+<span class="sd">    ``compute()`` reads but nothing declared. The cost is one student forward</span>
+<span class="sd">    pass at construction, which front-loads the kernel and CUDA</span>
+<span class="sd">    initialization the first step pays anyway.</span>
+
+<span class="sd">    The forward pass runs with the same isolation the scorer uses. The model</span>
+<span class="sd">    is held in evaluation mode, and every submodule&#39;s own ``training`` flag is</span>
+<span class="sd">    restored afterwards. ``compute()`` restores the ``requires_grad`` flags it</span>
+<span class="sd">    enables. The propagator&#39;s ``_last_outputs`` is put back. The probe batch</span>
+<span class="sd">    is the caller&#39;s own row, moved to the model&#39;s device. A graph model gets</span>
+<span class="sd">    the neighbor list its ``neighbor_config`` declares, built on the probe and</span>
+<span class="sd">    rolled back afterwards; during a run, a hook builds the propagator&#39;s list</span>
+<span class="sd">    instead. A model that plans more than one neighbor-list source is not</span>
+<span class="sd">    probed, and a warning says so. The probe builds exactly one list, and the</span>
+<span class="sd">    check must not reject a propagator the loop can run.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    probe : Batch</span>
+<span class="sd">        One-row batch already checked for the declared structure fields.</span>
+<span class="sd">    dynamics : BaseDynamics</span>
+<span class="sd">        Propagator to probe.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Batch | None</span>
+<span class="sd">        The probe, on the model&#39;s device, carrying the outputs ``compute()``</span>
+<span class="sd">        wrote. ``None`` when the propagator was not probed.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the model produced no output for a declared ``__needs_keys__``</span>
+<span class="sd">        entry, if ``compute()`` read a field the probe does not carry, or if</span>
+<span class="sd">        a declared ``__provides_keys__`` entry is absent afterwards.</span>
+
+<span class="sd">    Warns</span>
+<span class="sd">    -----</span>
+<span class="sd">    UserWarning</span>
+<span class="sd">        If the model plans more than one neighbor-list source. The</span>
+<span class="sd">        propagator&#39;s declarations then go unchecked until its first step.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dynamics</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">_planned_neighbor_sources</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">dynamics</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> was not probed at construction: its &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;model </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> plans more than one neighbor-list &quot;</span>
+            <span class="s2">&quot;source and the probe builds exactly one list, so its declared keys &quot;</span>
+            <span class="s2">&quot;are first checked against compute() on the first step. Pass &quot;</span>
+            <span class="s2">&quot;probe=False to silence this.&quot;</span><span class="p">,</span>
+            <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">parameters</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;parameters&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">device</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="nb">next</span><span class="p">((</span><span class="n">parameter</span><span class="o">.</span><span class="n">device</span> <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">()),</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">parameters</span><span class="p">)</span>
+        <span class="k">else</span> <span class="kc">None</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">probe</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+        <span class="n">probe</span> <span class="o">=</span> <span class="n">probe</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">neighbor_config</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+        <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;model_config&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">&quot;neighbor_config&quot;</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">dynamics</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+    <span class="n">last_outputs</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dynamics</span><span class="p">,</span> <span class="s2">&quot;_last_outputs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">held</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">evaluating</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="k">else</span> <span class="n">nullcontext</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="n">held</span><span class="p">,</span> <span class="n">_isolated_neighbors</span><span class="p">(</span><span class="n">probe</span><span class="p">,</span> <span class="n">neighbor_config</span><span class="p">):</span>
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">probe</span><span class="p">)</span>
+        <span class="n">dynamics</span><span class="o">.</span><span class="n">_validate_batch_keys</span><span class="p">(</span><span class="n">probe</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.compute() read a field the initial structures do not carry &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">exc</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">!s}</span><span class="s2">). Declare it in __provides_keys__ so the &quot;</span>
+            <span class="s2">&quot;structures are checked for it at construction, or add it to the &quot;</span>
+            <span class="s2">&quot;structures.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;s declared keys do not match what its compute() did on one &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;initial structure: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">dynamics</span><span class="o">.</span><span class="n">_last_outputs</span> <span class="o">=</span> <span class="n">last_outputs</span>
+    <span class="k">return</span> <span class="n">probe</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_probe_criterion</span><span class="p">(</span>
+    <span class="n">probe</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">,</span> <span class="n">criterion</span><span class="p">:</span> <span class="n">ConvergenceHook</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Dispatch a copy of *criterion* once on *probe* and check that it migrates status.</span>
+
+<span class="sd">    *probe* carries the outputs of one ``compute()``. It is stamped with the</span>
+<span class="sd">    ``status`` the run gives its structures and dispatched to a deep copy of</span>
+<span class="sd">    the criterion, exactly as the propagator dispatches the live one. The hook</span>
+<span class="sd">    must therefore read every key its criteria name, and the ``status`` column</span>
+<span class="sd">    must migrate to ``target_status`` exactly where</span>
+<span class="sd">    :meth:`~nvalchemi.dynamics.base.ConvergenceHook.evaluate_mask` says the</span>
+<span class="sd">    structure converged. Whether the structure converges depends on the data</span>
+<span class="sd">    and is not checked; whether the migration works is. Dispatching a copy</span>
+<span class="sd">    leaves the live criterion untouched, because the lifecycle registers and</span>
+<span class="sd">    removes that object by identity. A criterion that names a key the row does</span>
+<span class="sd">    not carry is not dispatched, because a hook may write that key during the</span>
+<span class="sd">    step and one ``compute()`` cannot show that. The check is skipped instead,</span>
+<span class="sd">    with a warning that names the key.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    probe : Batch</span>
+<span class="sd">        One-row batch :func:`_probe_propagator` returned.</span>
+<span class="sd">    dynamics : BaseDynamics</span>
+<span class="sd">        Propagator the criterion will be registered on.</span>
+<span class="sd">    criterion : ConvergenceHook</span>
+<span class="sd">        Live criterion the lifecycle drives.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the criterion raised while reading the row, or if the status column</span>
+<span class="sd">        did not migrate where the criterion converged.</span>
+
+<span class="sd">    Warns</span>
+<span class="sd">    -----</span>
+<span class="sd">    UserWarning</span>
+<span class="sd">        If a criterion reads a key the probed row does not carry.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">({</span><span class="n">rule</span><span class="o">.</span><span class="n">key</span> <span class="k">for</span> <span class="n">rule</span> <span class="ow">in</span> <span class="n">criterion</span><span class="o">.</span><span class="n">criteria</span> <span class="k">if</span> <span class="n">rule</span><span class="o">.</span><span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">probe</span><span class="p">})</span>
+    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;The convergence criterion reads </span><span class="si">{</span><span class="n">missing</span><span class="si">!r}</span><span class="s2">, which one compute() of &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">dynamics</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> on an initial structure did not produce, so &quot;</span>
+            <span class="s2">&quot;whether it fires cannot be checked at construction. A hook writing &quot;</span>
+            <span class="s2">&quot;the key during the step is fine; a key nothing writes never converges.&quot;</span><span class="p">,</span>
+            <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
+    <span class="n">hook</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">criterion</span><span class="p">)</span>
+    <span class="n">probe</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">probe</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">hook</span><span class="o">.</span><span class="n">source_status</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">probe</span><span class="o">.</span><span class="n">device</span>
+    <span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">converged</span> <span class="o">=</span> <span class="n">hook</span><span class="o">.</span><span class="n">evaluate_mask</span><span class="p">(</span><span class="n">probe</span><span class="p">)</span>
+        <span class="n">hook</span><span class="p">(</span>
+            <span class="n">DynamicsContext</span><span class="p">(</span><span class="n">batch</span><span class="o">=</span><span class="n">probe</span><span class="p">,</span> <span class="n">step_count</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">workflow</span><span class="o">=</span><span class="n">dynamics</span><span class="p">),</span>
+            <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;The convergence criterion failed on one initial structure carrying &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;the propagator&#39;s outputs: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="n">probe</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">expected</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+        <span class="n">converged</span><span class="p">,</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">status</span><span class="p">,</span> <span class="n">hook</span><span class="o">.</span><span class="n">target_status</span><span class="p">),</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">status</span><span class="p">,</span> <span class="n">hook</span><span class="o">.</span><span class="n">source_status</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">status</span><span class="p">,</span> <span class="n">expected</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;The convergence criterion fired on one initial structure but the &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;status column did not migrate where it converged; got status &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">status</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">!r}</span><span class="s2"> for converged </span><span class="si">{</span><span class="n">converged</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">!r}</span><span class="s2">, migrating &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">hook</span><span class="o">.</span><span class="n">source_status</span><span class="si">!r}</span><span class="s2"> to </span><span class="si">{</span><span class="n">hook</span><span class="o">.</span><span class="n">target_status</span><span class="si">!r}</span><span class="s2">. A criterion the &quot;</span>
+            <span class="s2">&quot;lifecycle drives has to write batch.status itself, as ConvergenceHook &quot;</span>
+            <span class="s2">&quot;does.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_propagator_tree</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">BaseDynamics</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Yield *dynamics* and every propagator it composes, each exactly once.</span>
+
+<span class="sd">    A :class:`~nvalchemi.dynamics.FusedStage` keeps its integrators in</span>
+<span class="sd">    ``sub_stages``, and a pipeline keeps its stages in ``stages``. A check that</span>
+<span class="sd">    reads only the root therefore misses the propagator that actually runs.</span>
+<span class="sd">    Nodes are compared by identity, because one integrator reached through two</span>
+<span class="sd">    sub-stages is a single propagator.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dynamics : BaseDynamics</span>
+<span class="sd">        Propagator at the root of the composition.</span>
+
+<span class="sd">    Yields</span>
+<span class="sd">    ------</span>
+<span class="sd">    BaseDynamics</span>
+<span class="sd">        Every propagator in the tree, the root first.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">seen</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BaseDynamics</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">pending</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BaseDynamics</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">dynamics</span><span class="p">]</span>
+    <span class="k">while</span> <span class="n">pending</span><span class="p">:</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">pending</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">node</span> <span class="ow">is</span> <span class="n">visited</span> <span class="k">for</span> <span class="n">visited</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">seen</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+        <span class="k">yield</span> <span class="n">node</span>
+        <span class="n">pending</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">sub</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sub</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="s2">&quot;sub_stages&quot;</span><span class="p">,</span> <span class="p">()))</span>
+        <span class="n">stages</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="s2">&quot;stages&quot;</span><span class="p">,</span> <span class="p">())</span>
+        <span class="n">pending</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">stages</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stages</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="k">else</span> <span class="n">stages</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_status_migrators</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return every status migrator on *dynamics* and its sub-stages.</span>
+
+<span class="sd">    A status migrator is a :class:`~nvalchemi.dynamics.base.ConvergenceHook`</span>
+<span class="sd">    with both ``source_status`` and ``target_status`` set. Every place a</span>
+<span class="sd">    propagator can hold one is searched. That covers its registered hooks (on</span>
+<span class="sd">    a :class:`~nvalchemi.dynamics.FusedStage`, the hooks registered at the</span>
+<span class="sd">    fused level) and its ``convergence_hook``. It also covers the same two</span>
+<span class="sd">    places on every sub-stage, where a fused stage puts the migrators it</span>
+<span class="sd">    builds itself: one on every sub-stage except the last, and one on the</span>
+<span class="sd">    last whenever it declares a ``convergence_hook``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dynamics : BaseDynamics</span>
+<span class="sd">        Propagator to walk.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list[ConvergenceHook]</span>
+<span class="sd">        The migrators, in the order they were found.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="n">hook</span>
+        <span class="k">for</span> <span class="n">propagator</span> <span class="ow">in</span> <span class="n">_propagator_tree</span><span class="p">(</span><span class="n">dynamics</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="p">(</span><span class="o">*</span><span class="n">propagator</span><span class="o">.</span><span class="n">hooks</span><span class="p">,</span> <span class="n">propagator</span><span class="o">.</span><span class="n">convergence_hook</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="n">ConvergenceHook</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="n">hook</span><span class="o">.</span><span class="n">source_status</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">and</span> <span class="n">hook</span><span class="o">.</span><span class="n">target_status</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_competing_migrators</span><span class="p">(</span>
+    <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">,</span> <span class="n">criterion</span><span class="p">:</span> <span class="n">ConvergenceHook</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the status migrators already on *dynamics* that are not *criterion*.</span>
+
+<span class="sd">    The lifecycle is about to install *criterion* as the propagator&#39;s</span>
+<span class="sd">    ``convergence_hook`` and as a registered hook, so *criterion* itself is</span>
+<span class="sd">    not a competitor wherever the walk finds it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dynamics : BaseDynamics</span>
+<span class="sd">        Propagator the lifecycle is being installed on.</span>
+<span class="sd">    criterion : ConvergenceHook</span>
+<span class="sd">        The lifecycle&#39;s own criterion.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list[ConvergenceHook]</span>
+<span class="sd">        The competing criteria, in the order they were found.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">hook</span> <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">_status_migrators</span><span class="p">(</span><span class="n">dynamics</span><span class="p">)</span> <span class="k">if</span> <span class="n">hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">criterion</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_sole_migrator</span><span class="p">(</span><span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">,</span> <span class="n">criterion</span><span class="p">:</span> <span class="n">ConvergenceHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reject *dynamics* unless *criterion* would be its only status migrator.</span>
+
+<span class="sd">    The config runs this check when it is built, and the lifecycle runs it</span>
+<span class="sd">    again when the run starts, because a hook can be registered on the</span>
+<span class="sd">    propagator in between.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *dynamics* carries a status-migrating criterion other than</span>
+<span class="sd">        *criterion*.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">competing</span> <span class="o">=</span> <span class="n">_competing_migrators</span><span class="p">(</span><span class="n">dynamics</span><span class="p">,</span> <span class="n">criterion</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">competing</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="n">migrations</span> <span class="o">=</span> <span class="p">[(</span><span class="n">hook</span><span class="o">.</span><span class="n">source_status</span><span class="p">,</span> <span class="n">hook</span><span class="o">.</span><span class="n">target_status</span><span class="p">)</span> <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">competing</span><span class="p">]</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="s2">&quot;The relaxation lifecycle owns graduation for this run, so the &quot;</span>
+        <span class="s2">&quot;propagator must carry no other status-migrating ConvergenceHook; &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">migrations</span><span class="si">!r}</span><span class="s2"> beside the configured &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">criterion</span><span class="o">.</span><span class="n">source_status</span><span class="si">!r}</span><span class="s2">, </span><span class="si">{</span><span class="n">criterion</span><span class="o">.</span><span class="n">target_status</span><span class="si">!r}</span><span class="s2">). &quot;</span>
+        <span class="s2">&quot;Remove it, or drop fmax or convergence_hook and let the propagator &quot;</span>
+        <span class="s2">&quot;manage its own lifecycle. A FusedStage builds one for every &quot;</span>
+        <span class="s2">&quot;sub-stage except the last, and for the last one when it declares a &quot;</span>
+        <span class="s2">&quot;convergence_hook.&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_structure_status</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">criterion</span><span class="p">:</span> <span class="n">ConvergenceHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reject a criterion that migrates off a status no initial structure holds.</span>
+
+<span class="sd">    :meth:`~nvalchemi.dynamics.base.ConvergenceHook.__call__` migrates only the</span>
+<span class="sd">    graphs whose status equals its ``source_status``. A criterion whose</span>
+<span class="sd">    ``source_status`` no initial structure holds leaves the convergence path</span>
+<span class="sd">    inert: no structure ever converges, so none freezes or graduates through</span>
+<span class="sd">    it, and generation never runs out of trajectories through it, so the</span>
+<span class="sd">    exhaustion warning never fires. The divergence path ignores</span>
+<span class="sd">    ``source_status``, so a diverged structure would still freeze, graduate,</span>
+<span class="sd">    and be counted in the boundary warning.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    state : Batch</span>
+<span class="sd">        Initial batch, already stamped with the run&#39;s own bookkeeping.</span>
+<span class="sd">    criterion : ConvergenceHook</span>
+<span class="sd">        Criterion driving the trajectory lifecycle.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *state* carries no ``status`` column, or if no graph of it carries</span>
+<span class="sd">        the criterion&#39;s ``source_status``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s2">&quot;status&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;The initial batch carries no status column, so nothing could migrate &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;off source_status=</span><span class="si">{</span><span class="n">criterion</span><span class="o">.</span><span class="n">source_status</span><span class="si">!r}</span><span class="s2">. A relaxation &quot;</span>
+            <span class="s2">&quot;lifecycle graduates structures on that column. An &quot;</span>
+            <span class="s2">&quot;InitialStructuresSource driving a lifecycle stamps status zeros and &quot;</span>
+            <span class="s2">&quot;system_ids on the batch its initial_batch returns, as &quot;</span>
+            <span class="s2">&quot;InitialStructures does.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">statuses</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">({</span><span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()})</span>
+    <span class="k">if</span> <span class="n">criterion</span><span class="o">.</span><span class="n">source_status</span> <span class="ow">in</span> <span class="n">statuses</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="s2">&quot;A converged graph migrates off the status its initial structure &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;carries; got source_status=</span><span class="si">{</span><span class="n">criterion</span><span class="o">.</span><span class="n">source_status</span><span class="si">!r}</span><span class="s2"> against &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;initial statuses </span><span class="si">{</span><span class="n">statuses</span><span class="si">!r}</span><span class="s2">. The run stamps that status itself &quot;</span>
+        <span class="s2">&quot;rather than reading it from the structures, so nothing would ever &quot;</span>
+        <span class="s2">&quot;freeze or graduate. Pass source_status=0, or pass the threshold as &quot;</span>
+        <span class="s2">&quot;fmax instead.&quot;</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="OnPolicySettings">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.OnPolicySettings.html#nvalchemi.training.distillation.OnPolicySettings">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">OnPolicySettings</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Declarative settings of one on-policy distillation segment loop.</span>
+
+<span class="sd">    Every field is a JSON scalar, so the settings validate without a</span>
+<span class="sd">    propagator, a teacher, or a store. A recipe with invalid settings is</span>
+<span class="sd">    therefore rejected before any teacher is loaded. :class:`OnPolicyConfig`</span>
+<span class="sd">    inherits these settings and adds the live objects the loop drives. That</span>
+<span class="sd">    class and the strategy check whether those objects work with the loop.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    replay_ratio : float</span>
+<span class="sd">        Fraction of every training batch drawn from the replay buffer. The</span>
+<span class="sd">        reference dataset supplies the rest.</span>
+<span class="sd">    training_steps_per_segment : int</span>
+<span class="sd">        Optimizer steps taken per segment, one per training batch.</span>
+<span class="sd">    batch_size : int, optional</span>
+<span class="sd">        Samples per training batch, counting both sources of the mixture.</span>
+<span class="sd">        Default ``8``.</span>
+<span class="sd">    generation_steps : int, optional</span>
+<span class="sd">        Propagator steps generated per segment. Default ``100``.</span>
+<span class="sd">    label_frequency : int, optional</span>
+<span class="sd">        Propagator steps between teacher labelings. Each segment&#39;s last frame</span>
+<span class="sd">        is labeled in addition. Default ``100``.</span>
+<span class="sd">    replay_capacity : int | None, optional</span>
+<span class="sd">        Frame capacity of the replay buffer. Default ``None`` (unbounded). A</span>
+<span class="sd">        Boltzmann objective needs a bound; see the :class:`OnPolicyConfig`</span>
+<span class="sd">        Notes.</span>
+<span class="sd">    replay_eviction : {&quot;fifo&quot;}, optional</span>
+<span class="sd">        Eviction policy of the replay buffer, as a name a recipe can store. A</span>
+<span class="sd">        policy instance is passed to :class:`OnPolicyConfig` instead. Default</span>
+<span class="sd">        ``&quot;fifo&quot;``.</span>
+<span class="sd">    replay_device : str | None, optional</span>
+<span class="sd">        Device the replay buffer keeps frames on. An index-less ``cuda`` means</span>
+<span class="sd">        this rank&#39;s current CUDA device. Default ``None`` uses the</span>
+<span class="sd">        device the reference dataset emits its batches on, or host memory when</span>
+<span class="sd">        there is no reference dataset.</span>
+<span class="sd">    seed : int, optional</span>
+<span class="sd">        Base seed of every segment&#39;s mixture sampler. Default ``0``.</span>
+<span class="sd">    rank_seed_stride : int, optional</span>
+<span class="sd">        Seed offset between neighboring ranks on a multi-rank launch. Rank</span>
+<span class="sd">        ``r`` adds ``r * rank_seed_stride`` to its seeds. Default</span>
+<span class="sd">        ``1_000_003``.</span>
+<span class="sd">    require_wrapped_student : bool, optional</span>
+<span class="sd">        Whether a multi-rank run refuses to start unless the ``SETUP`` stage</span>
+<span class="sd">        replaced the student with a wrapper that owns it, as a ``DDPHook``</span>
+<span class="sd">        does. Default ``True``.</span>
+<span class="sd">    samples_equilibrium : bool | None, optional</span>
+<span class="sd">        Whether the propagator samples an equilibrium ensemble, the ensemble a</span>
+<span class="sd">        distribution-matching objective is defined on. Default ``None`` infers</span>
+<span class="sd">        the answer from the propagator: a stage whose class declares</span>
+<span class="sd">        :attr:`~nvalchemi.dynamics.BaseDynamics.samples_equilibrium` false, as</span>
+<span class="sd">        the relaxation optimizers do, or a convergence criterion counts as not</span>
+<span class="sd">        sampling one. ``True`` or ``False`` overrides that inference for the</span>
+<span class="sd">        objective&#39;s guard.</span>
+<span class="sd">    fmax : float | None, optional</span>
+<span class="sd">        Max force norm below which a generated trajectory counts as finished.</span>
+<span class="sd">        Setting it turns on the trajectory lifecycle of a relaxation run, in</span>
+<span class="sd">        which converged structures leave the batch and fresh initial</span>
+<span class="sd">        structures replace them. Default ``None`` ends no trajectory, which</span>
+<span class="sd">        suits a molecular-dynamics run.</span>
+<span class="sd">    max_trajectory_steps : int | None, optional</span>
+<span class="sd">        Propagator steps a generated trajectory lives for. A trajectory that</span>
+<span class="sd">        reaches this age is frozen on that step, stored once, and retired at</span>
+<span class="sd">        the segment boundary like a converged one, so a fresh initial</span>
+<span class="sd">        structure takes its place. It turns on the trajectory lifecycle on</span>
+<span class="sd">        its own, which is how a thermostatted run rotates through its initial</span>
+<span class="sd">        structures instead of propagating the first batch forever. A multiple</span>
+<span class="sd">        of ``generation_steps`` retires on segment boundaries, so no frozen</span>
+<span class="sd">        graph idles inside a segment. Default ``None`` lets a trajectory live</span>
+<span class="sd">        for the whole run.</span>
+<span class="sd">    quarantine_diverged : bool, optional</span>
+<span class="sd">        Sanitize a diverged graph on the step it is flagged: its velocities</span>
+<span class="sd">        and forces are zeroed and its positions made finite, so the frozen</span>
+<span class="sd">        graph presents a finite geometry to the model on every remaining step</span>
+<span class="sd">        of the segment. The propagator still evaluates the whole batch, frozen</span>
+<span class="sd">        graphs included, and a non-finite or runaway geometry can break a</span>
+<span class="sd">        model&#39;s neighbor-list construction. The sanitized frame is never</span>
+<span class="sd">        captured. Default ``False`` leaves the flagged state as it is.</span>
+<span class="sd">    weight_sync_frequency : int, optional</span>
+<span class="sd">        Segments between weight syncs to the propagator. Default ``1``, the</span>
+<span class="sd">        only accepted value while the propagator shares the student module.</span>
+<span class="sd">    probe : bool, optional</span>
+<span class="sd">        Whether :class:`OnPolicyConfig` runs the propagator&#39;s ``compute()`` on</span>
+<span class="sd">        one initial structure at construction to check it against its</span>
+<span class="sd">        declared keys. ``False`` defers any mismatch to the first step.</span>
+<span class="sd">        Default ``True``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a count or the threshold is not positive, if ``replay_ratio`` falls</span>
+<span class="sd">        outside ``[0, 1]`` or is exactly ``0``, if rounding the ratio against</span>
+<span class="sd">        the batch size gives one mixture source no sample in any batch, or if</span>
+<span class="sd">        ``weight_sync_frequency`` is not ``1``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import OnPolicySettings</span>
+<span class="sd">    &gt;&gt;&gt; settings = OnPolicySettings(replay_ratio=0.25, training_steps_per_segment=32)</span>
+<span class="sd">    &gt;&gt;&gt; settings.batch_size</span>
+<span class="sd">    8</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    ``label_frequency`` is the throughput setting. It counts against the</span>
+<span class="sd">    propagator&#39;s cumulative ``step_count``, so the labeling cadence does not</span>
+<span class="sd">    restart at a segment boundary. Each segment also labels the frame it ends</span>
+<span class="sd">    on, and the cadence dispatch adjacent to that forced label is skipped.</span>
+<span class="sd">    With ``generation_steps`` a multiple of ``label_frequency``, each</span>
+<span class="sd">    trajectory is therefore labeled ``generation_steps // label_frequency``</span>
+<span class="sd">    times per segment, which is once per segment only when the two are equal.</span>
+<span class="sd">    The first segment pays one more, for the cadence dispatch at step ``0``.</span>
+<span class="sd">    ``training_steps_per_segment`` counts training batches. It equals the</span>
+<span class="sd">    number of optimizer steps only while every batch takes one step.</span>
+<span class="sd">    ``fmax`` is compared against the student&#39;s forces, which are the forces</span>
+<span class="sd">    the propagator follows. It therefore measures the convergence of the</span>
+<span class="sd">    relaxation itself.</span>
+
+<span class="sd">    Size ``replay_capacity`` as a multiple of the trajectory count. Otherwise</span>
+<span class="sd">    FIFO eviction removes only part of one labeled step&#39;s frames, which</span>
+<span class="sd">    over-represents the structures at the back of the batch. Space the</span>
+<span class="sd">    ``seed`` of replicate runs by at least</span>
+<span class="sd">    ``num_steps // training_steps_per_segment``, because the sampler adds the</span>
+<span class="sd">    segment index to it. See :ref:`training-distillation-api`.</span>
+
+<span class="sd">    On a multi-rank launch, each rank adds ``rank * rank_seed_stride`` to</span>
+<span class="sd">    ``seed`` and, through</span>
+<span class="sd">    :meth:`~nvalchemi.dynamics.BaseDynamics.seed_offset`, to every</span>
+<span class="sd">    ``random_seed`` that ``dynamics`` and its sub-stages expose. Ranks</span>
+<span class="sd">    therefore draw from the reference dataset independently and apply</span>
+<span class="sd">    different thermostat noise to the structures they were dealt. Both</span>
+<span class="sd">    streams add a step counter to their seed, so the stride has to stay above</span>
+<span class="sd">    every counter the run reaches; the default, ``1_000_003``, does so for a</span>
+<span class="sd">    run whose counters stay below it. Set a different stride when a replicate</span>
+<span class="sd">    launch&#39;s seeds would land on another rank&#39;s stride. A stage that holds</span>
+<span class="sd">    randomness the offset cannot move, such as a :class:`torch.Generator`</span>
+<span class="sd">    with no integer ``random_seed``, is named in a warning, and the caller</span>
+<span class="sd">    must give it a rank-distinct seed.</span>
+
+<span class="sd">    A multi-rank run also checks that the ``SETUP`` stage replaced the student</span>
+<span class="sd">    with a gradient-synchronizing wrapper. A wrapper that works in place, such</span>
+<span class="sd">    as FSDP2&#39;s ``fully_shard`` or hook-based synchronization, leaves the</span>
+<span class="sd">    student object unchanged and fails that check.</span>
+<span class="sd">    ``require_wrapped_student=False`` waives the check for such a wrapper, and</span>
+<span class="sd">    keeping the ranks&#39; students in step then becomes the caller&#39;s</span>
+<span class="sd">    responsibility.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">replay_ratio</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">ge</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">le</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Fraction of every training batch drawn from the replay buffer; &quot;</span>
+                <span class="s2">&quot;the rest comes from the reference dataset.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">training_steps_per_segment</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Training batches drawn from each segment&#39;s mixture, one &quot;</span>
+                <span class="s2">&quot;optimizer step each unless an update hook vetoes the step.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">batch_size</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Samples per training batch, split between the reference &quot;</span>
+                <span class="s2">&quot;dataset and the replay buffer at replay_ratio.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="mi">8</span>
+    <span class="n">generation_steps</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Propagator steps generated per segment.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="mi">100</span>
+    <span class="n">label_frequency</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Propagator steps between teacher labelings, on top of the &quot;</span>
+                <span class="s2">&quot;segment&#39;s own last frame. Larger values trade label density &quot;</span>
+                <span class="s2">&quot;for generation throughput.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="mi">100</span>
+    <span class="n">replay_capacity</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Frames the replay buffer keeps; None leaves it unbounded.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">replay_eviction</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">ReplayEviction</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="s2">&quot;fifo&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Policy retiring frames from a full replay buffer, named as a &quot;</span>
+                <span class="s2">&quot;recipe spells it; &#39;fifo&#39; drops the oldest frames first.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;fifo&quot;</span>
+    <span class="n">replay_device</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Device the replay buffer keeps frames on, named as a string. &quot;</span>
+                <span class="s2">&quot;None uses the device the reference dataset emits its batches &quot;</span>
+                <span class="s2">&quot;on, so the mixture collates on one device, or host memory when &quot;</span>
+                <span class="s2">&quot;the run has no reference dataset. An index-less &#39;cuda&#39; names &quot;</span>
+                <span class="s2">&quot;the device this rank has made current, which under a launcher &quot;</span>
+                <span class="s2">&quot;is the one it pinned this rank to.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Base seed of every segment&#39;s mixture sampler, combined with the &quot;</span>
+                <span class="s2">&quot;segment index so consecutive segments draw different reference &quot;</span>
+                <span class="s2">&quot;samples and replicate runs can be made independent.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">rank_seed_stride</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="mi">1_000_003</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Seed-space distance between neighboring ranks: rank r moves &quot;</span>
+                <span class="s2">&quot;seed, and every random_seed the propagator exposes, by &quot;</span>
+                <span class="s2">&quot;r * rank_seed_stride. Both streams add a step counter to the &quot;</span>
+                <span class="s2">&quot;base seed, so keep it above the run&#39;s step count. Set a &quot;</span>
+                <span class="s2">&quot;different stride when a replicate launch&#39;s seeds would land &quot;</span>
+                <span class="s2">&quot;on another rank&#39;s stride.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="mi">1_000_003</span>
+    <span class="n">require_wrapped_student</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Whether a multi-rank run refuses to start unless the SETUP &quot;</span>
+                <span class="s2">&quot;stage replaced models[&#39;student&#39;] with a wrapper owning it, &quot;</span>
+                <span class="s2">&quot;the way a DDPHook does. False skips that check with a warning &quot;</span>
+                <span class="s2">&quot;for wrappers working in place (FSDP2 fully_shard, hook-based &quot;</span>
+                <span class="s2">&quot;gradient synchronization) and leaves keeping the ranks&#39; &quot;</span>
+                <span class="s2">&quot;students in step to the caller.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">fmax</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Max force norm below which a generated trajectory counts as &quot;</span>
+                <span class="s2">&quot;finished, which is what turns a relaxation run into a &quot;</span>
+                <span class="s2">&quot;lifecycle. None runs no trajectory lifecycle: nothing graduates &quot;</span>
+                <span class="s2">&quot;and nothing is backfilled, which is what a molecular-dynamics &quot;</span>
+                <span class="s2">&quot;run wants.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_trajectory_steps</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Propagator steps a generated trajectory lives for before it is &quot;</span>
+                <span class="s2">&quot;retired and a fresh initial structure takes its place. Turns on &quot;</span>
+                <span class="s2">&quot;the trajectory lifecycle on its own. None lets every &quot;</span>
+                <span class="s2">&quot;trajectory live for the whole run.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">quarantine_diverged</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Zero the velocities and forces of a diverged graph and make its &quot;</span>
+                <span class="s2">&quot;positions finite on the step it is flagged, so the frozen graph &quot;</span>
+                <span class="s2">&quot;stays a finite input to the model until the segment boundary &quot;</span>
+                <span class="s2">&quot;retires it. False leaves the flagged state untouched.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">weight_sync_frequency</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Segments between weight syncs to the propagator. Reserved: &quot;</span>
+                <span class="s2">&quot;must be 1 while the propagator shares the student module.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">probe</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Whether the propagator&#39;s compute() is run on one initial &quot;</span>
+                <span class="s2">&quot;structure at construction to check its declared keys against &quot;</span>
+                <span class="s2">&quot;what it does. False skips that forward and defers a mismatch &quot;</span>
+                <span class="s2">&quot;to the first step.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">samples_equilibrium</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Whether the propagator samples an equilibrium ensemble. None &quot;</span>
+                <span class="s2">&quot;infers it: a stage declaring samples_equilibrium=False on its &quot;</span>
+                <span class="s2">&quot;class, as the relaxation optimizers do, or a convergence &quot;</span>
+                <span class="s2">&quot;criterion is treated as not sampling equilibrium. True or &quot;</span>
+                <span class="s2">&quot;False overrides that inference for a distribution-matching &quot;</span>
+                <span class="s2">&quot;objective&#39;s guard.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;replay_device&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_name_replay_device</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Accept a ``torch.device`` and store it as the string every reader expects.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="k">else</span> <span class="n">value</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_weight_sync</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OnPolicySettings</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject any ``weight_sync_frequency`` other than the reserved value 1.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_sync_frequency</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;weight_sync_frequency must be 1: the propagator holds the same &quot;</span>
+                <span class="s2">&quot;student module the trainer updates, so an eager run is never out &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;of sync; got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">weight_sync_frequency</span><span class="si">!r}</span><span class="s2">. Larger values are &quot;</span>
+                <span class="s2">&quot;reserved for the compiled and asynchronous teacher paths.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_mixture</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OnPolicySettings</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject a mixture that no batch can actually be drawn from.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_ratio</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;replay_ratio=0 trains on reference data only, which is &quot;</span>
+                <span class="s2">&quot;offline distillation paying for generation it never uses; &quot;</span>
+                <span class="s2">&quot;drop on_policy and call run() with a loader over the labeled &quot;</span>
+                <span class="s2">&quot;dataset instead.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">reference_samples</span><span class="p">,</span> <span class="n">replay_samples</span> <span class="o">=</span> <span class="n">_batch_allocation</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">replay_ratio</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_ratio</span> <span class="o">&gt;=</span> <span class="mf">1.0</span> <span class="ow">or</span> <span class="nb">min</span><span class="p">(</span><span class="n">reference_samples</span><span class="p">,</span> <span class="n">replay_samples</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;The mixture is drawn as whole samples, so replay_ratio and &quot;</span>
+            <span class="s2">&quot;batch_size must together give each source at least one sample per &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;batch; got replay_ratio=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">replay_ratio</span><span class="si">!r}</span><span class="s2"> with &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="si">!r}</span><span class="s2">, which puts </span><span class="si">{</span><span class="n">reference_samples</span><span class="si">}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;reference and </span><span class="si">{</span><span class="n">replay_samples</span><span class="si">}</span><span class="s2"> generated samples in every batch &quot;</span>
+            <span class="s2">&quot;and leaves one source out of training entirely. To fix it, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_batch_size_remedy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">replay_ratio</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="OnPolicyConfig">
+<a class="viewcode-back" href="../../../../modules/training/generated/nvalchemi.training.distillation.OnPolicyConfig.html#nvalchemi.training.distillation.OnPolicyConfig">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">OnPolicyConfig</span><span class="p">(</span><span class="n">OnPolicySettings</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Settings and live objects of one on-policy distillation segment loop.</span>
+
+<span class="sd">    Each *segment* has two phases. The *generation* phase runs the student&#39;s</span>
+<span class="sd">    own propagator for ``generation_steps`` steps and labels frames with the</span>
+<span class="sd">    teacher as it goes. The *training* phase then takes</span>
+<span class="sd">    ``training_steps_per_segment`` optimizer steps. Its batches are a</span>
+<span class="sd">    *mixture* of the reference dataset and the replay buffer, split at</span>
+<span class="sd">    ``replay_ratio``. The propagator holds the module the trainer updates, so</span>
+<span class="sd">    each segment generates from a fresher policy than the last. The scalar</span>
+<span class="sd">    settings come from :class:`OnPolicySettings`, which this class inherits so</span>
+<span class="sd">    that a recipe stays flat. :attr:`settings` returns a detached copy of them</span>
+<span class="sd">    for a pre-flight check or a restart bundle.</span>
+
+<span class="sd">    The propagator can be any :class:`~nvalchemi.dynamics.base.BaseDynamics`.</span>
+<span class="sd">    A relaxation optimizer such as :class:`~nvalchemi.dynamics.optimizers.FIRE2`</span>
+<span class="sd">    drives the loop exactly as a thermostat does. The initial structures must</span>
+<span class="sd">    carry every field the propagator updates in place through</span>
+<span class="sd">    ``__provides_keys__``. For every shipped propagator these include</span>
+<span class="sd">    ``velocities``, and the variable-cell ones also need a ``cell``. The model</span>
+<span class="sd">    outputs named by ``__needs_keys__`` are computed before the first step, so</span>
+<span class="sd">    they need not be present. Construction checks one row, so a missing field</span>
+<span class="sd">    is a construction error rather than a failure on the first step. The</span>
+<span class="sd">    propagator&#39;s ``compute()`` then runs once on that row. This rejects</span>
+<span class="sd">    declarations that no longer match the implementation, such as a</span>
+<span class="sd">    ``__needs_keys__`` output the student never produces or a field</span>
+<span class="sd">    ``compute()`` reads that nothing declared. The cost is one student forward</span>
+<span class="sd">    pass at construction. A graph model is probed with the neighbor list its</span>
+<span class="sd">    ``neighbor_config`` declares, built on the row and rolled back afterwards.</span>
+<span class="sd">    A model that plans more than one neighbor-list source is not probed.</span>
+
+<span class="sd">    A relaxation propagator needs a *trajectory lifecycle*. Relaxations</span>
+<span class="sd">    converge, and a converged structure that keeps being propagated fills the</span>
+<span class="sd">    replay buffer with near-duplicates of a frame it already holds. ``fmax``</span>
+<span class="sd">    turns the lifecycle on. A converged structure freezes and is stored once,</span>
+<span class="sd">    as the minimum it reached. At the segment boundary it *graduates*, that</span>
+<span class="sd">    is, it leaves the batch, and the initial structures *backfill* a fresh</span>
+<span class="sd">    structure in its place for as long as the source holds rows. An</span>
+<span class="sd">    :class:`~nvalchemi.training.distillation.InitialStructures` built with</span>
+<span class="sd">    ``recycle=True`` wraps to its first row instead of letting the batch</span>
+<span class="sd">    narrow. Generation ends when the last trajectory finishes, and the</span>
+<span class="sd">    remaining training steps draw on the frames already in the buffer.</span>
+
+<span class="sd">    A thermostatted propagator needs the same lifecycle for a different</span>
+<span class="sd">    reason: its trajectories never end, so the initial batch is the only set</span>
+<span class="sd">    of structures the run ever propagates. ``max_trajectory_steps`` retires a</span>
+<span class="sd">    trajectory after that many propagator steps, stored once like a converged</span>
+<span class="sd">    one, and backfills its place from the initial structures, so the run</span>
+<span class="sd">    rotates through the whole source. It works alone or beside ``fmax``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dynamics : BaseDynamics</span>
+<span class="sd">        Propagator that generates on-policy frames. It holds the student</span>
+<span class="sd">        module.</span>
+<span class="sd">    teacher_scorer : TeacherScorer</span>
+<span class="sd">        Scorer that labels generated frames. A custom scorer that declares</span>
+<span class="sd">        ``label_fields`` lets the fields it writes be known before the run.</span>
+<span class="sd">    initial_structures : InitialStructuresSource</span>
+<span class="sd">        Structures the generated trajectories start from. They are served</span>
+<span class="sd">        from one position that backfills and restarts share. A multi-rank</span>
+<span class="sd">        launch deals them out strided, every ``world_size``-th structure to</span>
+<span class="sd">        each rank. Pass an</span>
+<span class="sd">        :class:`~nvalchemi.training.distillation.InitialStructures`, any other</span>
+<span class="sd">        object that implements the protocol, or a bare dataset, which is</span>
+<span class="sd">        wrapped in an ``InitialStructures``.</span>
+<span class="sd">    capture_sink : DataSink | None, optional</span>
+<span class="sd">        Sink that stages each segment&#39;s labeled frames until the segment</span>
+<span class="sd">        boundary drains them into the replay buffer. A</span>
+<span class="sd">        :class:`~nvalchemi.dynamics.sinks.GPUBuffer` keeps the staged frames on</span>
+<span class="sd">        the generation device and avoids a device-to-host copy per frame.</span>
+<span class="sd">        Default ``None`` builds a host-memory sink per segment.</span>
+<span class="sd">    replay_eviction : {&quot;fifo&quot;} | EvictionPolicy, optional</span>
+<span class="sd">        Eviction policy of the replay buffer: the name ``&quot;fifo&quot;`` or a live</span>
+<span class="sd">        :class:`~nvalchemi.training.distillation.EvictionPolicy` instance.</span>
+<span class="sd">        Default ``&quot;fifo&quot;``.</span>
+<span class="sd">    replay_admission : AdmissionPolicy | None, optional</span>
+<span class="sd">        Predicate that selects which captured frames each segment admits into</span>
+<span class="sd">        the replay buffer. Default ``None`` admits every captured frame.</span>
+<span class="sd">    convergence_hook : ConvergenceHook | None, optional</span>
+<span class="sd">        Live criterion that decides when a generated trajectory is finished,</span>
+<span class="sd">        used instead of the ``fmax`` threshold. Default ``None``.</span>
+<span class="sd">    divergence : Callable[[Batch], Bool[torch.Tensor, &quot;G&quot;]] | None, optional</span>
+<span class="sd">        Predicate over the live frame that returns one boolean per graph,</span>
+<span class="sd">        ``True`` where the trajectory diverged. The lifecycle freezes a flagged</span>
+<span class="sd">        graph on the step it is flagged and keeps it out of both capture</span>
+<span class="sd">        routes. At the segment boundary it retires the graph and backfills its</span>
+<span class="sd">        place. Default ``None`` uses</span>
+<span class="sd">        :func:`~nvalchemi.training.distillation.nonfinite_divergence`.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a setting is out of range, if both ``fmax`` and</span>
+<span class="sd">        ``convergence_hook`` are set, if ``convergence_hook`` cannot manage</span>
+<span class="sd">        the lifecycle, if ``initial_structures`` recycles while neither a</span>
+<span class="sd">        criterion nor ``max_trajectory_steps`` is set, if a lifecycle is paired with a</span>
+<span class="sd">        :class:`~nvalchemi.distributed.DomainParallel` propagator or a</span>
+<span class="sd">        multi-sub-stage :class:`~nvalchemi.dynamics.FusedStage`, if</span>
+<span class="sd">        ``initial_structures`` is neither a source nor a dataset, if the</span>
+<span class="sd">        initial structures lack a field the propagator needs for its first</span>
+<span class="sd">        step, or if the propagator&#39;s ``compute()`` on one row contradicts its</span>
+<span class="sd">        declared keys.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation import (  # doctest: +SKIP</span>
+<span class="sd">    ...     InProcessTeacherScorer,</span>
+<span class="sd">    ...     OnPolicyConfig,</span>
+<span class="sd">    ...     InitialStructures,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; config = OnPolicyConfig(  # doctest: +SKIP</span>
+<span class="sd">    ...     dynamics=NVTLangevin(student, dt=0.5, temperature=300.0),</span>
+<span class="sd">    ...     teacher_scorer=InProcessTeacherScorer(teacher, [&quot;energy&quot;, &quot;forces&quot;]),</span>
+<span class="sd">    ...     initial_structures=InitialStructures(dataset),</span>
+<span class="sd">    ...     replay_ratio=0.25,</span>
+<span class="sd">    ...     training_steps_per_segment=32,</span>
+<span class="sd">    ...     batch_size=16,</span>
+<span class="sd">    ...     generation_steps=50,</span>
+<span class="sd">    ...     label_frequency=10,</span>
+<span class="sd">    ...     replay_capacity=8192,</span>
+<span class="sd">    ... )</span>
+
+<span class="sd">    The same loop over relaxation paths. Each structure graduates once its max</span>
+<span class="sd">    force norm falls below ``0.05``, and the next initial structure takes its</span>
+<span class="sd">    place:</span>
+
+<span class="sd">    &gt;&gt;&gt; config = OnPolicyConfig(  # doctest: +SKIP</span>
+<span class="sd">    ...     dynamics=FIRE2(student, dt=0.05),</span>
+<span class="sd">    ...     teacher_scorer=InProcessTeacherScorer(teacher, [&quot;energy&quot;, &quot;forces&quot;]),</span>
+<span class="sd">    ...     initial_structures=InitialStructures(dataset, recycle=True),</span>
+<span class="sd">    ...     fmax=0.05,</span>
+<span class="sd">    ...     replay_ratio=0.25,</span>
+<span class="sd">    ...     training_steps_per_segment=32,</span>
+<span class="sd">    ...     batch_size=16,</span>
+<span class="sd">    ...     generation_steps=50,</span>
+<span class="sd">    ...     label_frequency=10,</span>
+<span class="sd">    ... )</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Any :class:`~nvalchemi.training.distillation.TeacherScorer` may drive</span>
+<span class="sd">    generation. A custom scorer can declare ``label_fields``. The declaration</span>
+<span class="sd">    lets :class:`~nvalchemi.training.distillation.DistillationStrategy` check</span>
+<span class="sd">    the generated fields against ``reference_dataset`` at construction. It</span>
+<span class="sd">    also keeps :class:`~nvalchemi.training.distillation.TeacherLabelHook` from</span>
+<span class="sd">    re-scoring a frame that is dispatched again. A custom ``teacher_*`` field</span>
+<span class="sd">    the scorer writes is an ordinary loss target, so the reference dataset and</span>
+<span class="sd">    any validation data must carry it too.</span>
+
+<span class="sd">    The loop sizes ``capture_sink``. A segment captures at most one frame per</span>
+<span class="sd">    trajectory per labeled step, including the forced last frame. The sink</span>
+<span class="sd">    must therefore hold ``(generation_steps + 1)`` frames per trajectory in</span>
+<span class="sd">    the propagated batch. A configured sink with less capacity is grown</span>
+<span class="sd">    through ``resize(capacity)`` when it satisfies</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.ResizableSink`, and rejected otherwise. The</span>
+<span class="sd">    sink must also be empty when a segment starts, because everything it holds</span>
+<span class="sd">    is drained into the replay buffer as generated frames.</span>
+
+<span class="sd">    ``capture_sink`` is runtime-only, like ``dynamics`` and</span>
+<span class="sd">    ``teacher_scorer``, so no recipe names it. A recipe does not name a policy</span>
+<span class="sd">    instance either. :attr:`settings` records a custom ``replay_eviction`` as</span>
+<span class="sd">    ``&quot;fifo&quot;`` with a warning, and a config rebuilt from those settings evicts</span>
+<span class="sd">    FIFO until the policy is supplied again.</span>
+
+<span class="sd">    ``fmax`` stays a plain number that a recipe can hold.</span>
+<span class="sd">    :attr:`convergence_criterion` is the live criterion the lifecycle drives.</span>
+<span class="sd">    For an ``fmax`` threshold, it is built once with</span>
+<span class="sd">    :meth:`~nvalchemi.dynamics.base.ConvergenceHook.from_fmax`, migrating</span>
+<span class="sd">    status ``0`` to the propagator&#39;s ``exit_status``. The same object is</span>
+<span class="sd">    returned on every read, because the lifecycle registers that one object</span>
+<span class="sd">    and removes it by identity. A criterion that has to be a live hook goes to</span>
+<span class="sd">    ``convergence_hook`` instead. Setting both ``fmax`` and</span>
+<span class="sd">    ``convergence_hook`` is refused.</span>
+
+<span class="sd">    A ``convergence_hook`` must migrate status on every step, from the status</span>
+<span class="sd">    ``0`` the run stamps its structures with. A hook that only reports</span>
+<span class="sd">    convergence would freeze and graduate nothing. A hook that skips steps</span>
+<span class="sd">    graduates a structure late, so both capture routes would store it. The</span>
+<span class="sd">    construction probe also dispatches a copy of the criterion to the probed</span>
+<span class="sd">    row. A criterion that raises on the propagator&#39;s outputs, or whose firing</span>
+<span class="sd">    leaves ``status`` unchanged, is therefore refused here. A criterion that</span>
+<span class="sd">    reads a key no ``compute()`` produces is not dispatched, because a hook</span>
+<span class="sd">    may write that key during the step; a warning names the key instead.</span>
+<span class="sd">    ``probe=False`` skips this dispatch along with the forward pass it reads.</span>
+
+<span class="sd">    ``divergence`` ends a trajectory before it converges. It has the same</span>
+<span class="sd">    shape as :class:`~nvalchemi.training.distillation.AdmissionPolicy`: it</span>
+<span class="sd">    takes the live frame and returns one boolean per graph. The default flags</span>
+<span class="sd">    a graph whose positions or forces are no longer finite. Use a custom</span>
+<span class="sd">    predicate for a student whose forces explode to finite but unphysical</span>
+<span class="sd">    values, or for a criterion on the energy. Like ``replay_admission``, the</span>
+<span class="sd">    predicate is runtime-only. A predicate that returns anything but one</span>
+<span class="sd">    boolean per graph is refused on its first dispatch, and the error names</span>
+<span class="sd">    the shape it returned.</span>
+
+<span class="sd">    For the duration of the loop, the criterion also becomes the propagator&#39;s</span>
+<span class="sd">    convergence detector. It must be the only hook that migrates status, so a</span>
+<span class="sd">    propagator that carries a second migrating</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.base.ConvergenceHook` is refused. A</span>
+<span class="sd">    :class:`~nvalchemi.dynamics.FusedStage` builds such a hook for every</span>
+<span class="sd">    sub-stage except the last, and for the last one whenever it declares a</span>
+<span class="sd">    ``convergence_hook``. Only a single-sub-stage fused stage without a</span>
+<span class="sd">    criterion of its own is therefore accepted. A</span>
+<span class="sd">    :class:`~nvalchemi.distributed.DomainParallel` propagator is refused with</span>
+<span class="sd">    a criterion as well: its step dispatches no ``ON_GRADUATE``, the stage</span>
+<span class="sd">    the converged route captures at, so its minima would never be stored. A</span>
+<span class="sd">    migrator already on the propagator is refused when the config is built,</span>
+<span class="sd">    and one registered afterwards is refused when the run starts. See</span>
+<span class="sd">    :ref:`training-distillation-api` for the capture routes and the backfill.</span>
+
+<span class="sd">    Distribution-matching objectives are defined on equilibrium ensembles, and</span>
+<span class="sd">    a relaxation path is not one. A</span>
+<span class="sd">    :class:`~nvalchemi.training.distillation.BoltzmannMatchingLoss` is</span>
+<span class="sd">    therefore refused at construction beside a relaxation propagator or any</span>
+<span class="sd">    convergence criterion, unless ``samples_equilibrium=True`` declares that</span>
+<span class="sd">    the propagator does sample an equilibrium ensemble. ``False`` refuses the</span>
+<span class="sd">    term whatever the propagator is. The term should also have a bounded</span>
+<span class="sd">    ``replay_capacity``. Energy, force, and atomic-energy matching are</span>
+<span class="sd">    pointwise, so they distill a relaxation path exactly as they distill a</span>
+<span class="sd">    trajectory.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">dynamics</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">BaseDynamics</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Propagator generating on-policy frames from the student. Any &quot;</span>
+                <span class="s2">&quot;BaseDynamics: an integrator for trajectories, an optimizer for &quot;</span>
+                <span class="s2">&quot;relaxation paths.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">teacher_scorer</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">TeacherScorer</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Scorer producing the teacher signals for generated frames. A &quot;</span>
+                <span class="s2">&quot;label_fields declaration on a custom one lets the strategy &quot;</span>
+                <span class="s2">&quot;check its fields against reference_dataset up front and makes a &quot;</span>
+                <span class="s2">&quot;teacher_* field of its own usable as a loss target.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">initial_structures</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">InitialStructuresSource</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Structures the generated trajectories start from: any &quot;</span>
+                <span class="s2">&quot;InitialStructuresSource, of which InitialStructures is the &quot;</span>
+                <span class="s2">&quot;reference. The initial batch, the backfill, and a restart all &quot;</span>
+                <span class="s2">&quot;read from its one position. A bare dataset is wrapped in an &quot;</span>
+                <span class="s2">&quot;unbudgeted InitialStructures.&quot;</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">replay_eviction</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">ReplayEviction</span> <span class="o">|</span> <span class="n">EvictionPolicy</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="s2">&quot;fifo&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Policy retiring frames from a full replay buffer: &#39;fifo&#39;, or a &quot;</span>
+                <span class="s2">&quot;live EvictionPolicy instance, which is runtime-only and &quot;</span>
+                <span class="s2">&quot;recorded as &#39;fifo&#39; in the declarative settings.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;fifo&quot;</span>
+    <span class="n">replay_admission</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">AdmissionPolicy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Predicate over a batch of captured frames returning one boolean &quot;</span>
+                <span class="s2">&quot;per graph; frames it refuses never enter the replay buffer. &quot;</span>
+                <span class="s2">&quot;Runtime-only: no recipe names it.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">capture_sink</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">DataSink</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Runtime-only sink the labeling hook stages each segment&#39;s &quot;</span>
+                <span class="s2">&quot;labeled frames in until the segment boundary drains them into &quot;</span>
+                <span class="s2">&quot;the replay buffer; None builds a host-memory sink per segment, &quot;</span>
+                <span class="s2">&quot;and a GPUBuffer keeps the staging on the generation device. &quot;</span>
+                <span class="s2">&quot;The loop sizes it to (generation_steps + 1) frames per &quot;</span>
+                <span class="s2">&quot;trajectory, growing a ResizableSink through resize(capacity) &quot;</span>
+                <span class="s2">&quot;and refusing a smaller sink otherwise.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">convergence_hook</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">ConvergenceHook</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Live criterion deciding when a generated trajectory is &quot;</span>
+                <span class="s2">&quot;finished, in place of the fmax threshold. No recipe &quot;</span>
+                <span class="s2">&quot;describes it, so it is runtime-only.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">divergence</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">Callable</span><span class="p">[[</span><span class="n">Batch</span><span class="p">],</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Predicate over the live frame returning one boolean per graph, &quot;</span>
+                <span class="s2">&quot;set where the trajectory diverged; the lifecycle moves the &quot;</span>
+                <span class="s2">&quot;verdict onto the batch&#39;s device, then freezes and retires &quot;</span>
+                <span class="s2">&quot;those graphs uncaptured. None flags non-finite positions or &quot;</span>
+                <span class="s2">&quot;forces. Runtime-only: no recipe names it.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="n">_probed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_convergence_criterion</span><span class="p">:</span> <span class="n">ConvergenceHook</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">settings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OnPolicySettings</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Detached copy of the declarative settings, for a recipe or a restart bundle.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        OnPolicySettings</span>
+<span class="sd">            The scalar settings of this config, validated on their own. The</span>
+<span class="sd">            copy holds no reference to the live objects.</span>
+
+<span class="sd">        Warns</span>
+<span class="sd">        -----</span>
+<span class="sd">        UserWarning</span>
+<span class="sd">            If ``replay_eviction`` is a policy instance other than</span>
+<span class="sd">            :class:`~nvalchemi.training.distillation.FIFO`. The copy records</span>
+<span class="sd">            it as ``&quot;fifo&quot;``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">OnPolicySettings</span><span class="o">.</span><span class="n">model_fields</span><span class="p">}</span>
+        <span class="n">eviction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_eviction</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">eviction</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">eviction</span><span class="p">,</span> <span class="n">FIFO</span><span class="p">):</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;replay_eviction is a </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">eviction</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> instance, &quot;</span>
+                    <span class="s2">&quot;which no recipe or restart bundle can name, so the &quot;</span>
+                    <span class="s2">&quot;declarative settings record &#39;fifo&#39;; a config rebuilt from &quot;</span>
+                    <span class="s2">&quot;them evicts FIFO until the policy is re-supplied at &quot;</span>
+                    <span class="s2">&quot;construction.&quot;</span><span class="p">,</span>
+                    <span class="ne">UserWarning</span><span class="p">,</span>
+                    <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;replay_eviction&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;fifo&quot;</span>
+        <span class="k">return</span> <span class="n">OnPolicySettings</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">convergence_criterion</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ConvergenceHook</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the criterion the trajectory lifecycle drives, or ``None``.</span>
+
+<span class="sd">        A ``convergence_hook`` is returned as is. An ``fmax`` threshold is</span>
+<span class="sd">        turned into a criterion on first read, migrating status ``0`` to the</span>
+<span class="sd">        propagator&#39;s ``exit_status``. The same object is returned for the life</span>
+<span class="sd">        of the config, because the lifecycle registers it on the propagator</span>
+<span class="sd">        and removes it again by identity.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ConvergenceHook | None</span>
+<span class="sd">            The live criterion, or ``None`` for a run managing no lifecycle.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fmax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convergence_criterion</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_convergence_criterion</span> <span class="o">=</span> <span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span>
+                <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fmax</span><span class="p">),</span>
+                <span class="n">source_status</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">target_status</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="o">.</span><span class="n">exit_status</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convergence_criterion</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">manages_lifecycle</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the segment loop retires and backfills trajectories.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            ``True`` when a convergence criterion (``fmax`` or</span>
+<span class="sd">            ``convergence_hook``) or a ``max_trajectory_steps`` lifetime is</span>
+<span class="sd">            set; ``False`` for a run that propagates its initial batch for</span>
+<span class="sd">            the whole run.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_criterion</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">max_trajectory_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_coerce_initial_structures</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Pass a source through, wrap a bare dataset, and refuse anything else.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">structures</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;initial_structures&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">structures</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structures</span><span class="p">,</span> <span class="n">InitialStructuresSource</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structures</span><span class="p">,</span> <span class="n">BatchDatasetProtocol</span><span class="p">):</span>
+            <span class="n">data</span><span class="p">[</span><span class="s2">&quot;initial_structures&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">InitialStructures</span><span class="p">(</span><span class="n">structures</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;OnPolicyConfig.initial_structures must be an InitialStructuresSource &quot;</span>
+            <span class="s2">&quot;(an object with probe, initial_batch, shard, exhausted, draw, &quot;</span>
+            <span class="s2">&quot;state_dict, and load_state_dict, as InitialStructures implements &quot;</span>
+            <span class="s2">&quot;them) or a BatchDatasetProtocol dataset to wrap in one; got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">structures</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2">. Pass an InitialStructures, another &quot;</span>
+            <span class="s2">&quot;source, or a dataset.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_convergence_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OnPolicyConfig</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate a ``convergence_hook``; an ``fmax`` threshold needs no checks.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fmax</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Set fmax or convergence_hook, not both; got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;fmax=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fmax</span><span class="si">!r}</span><span class="s2">, convergence_hook=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="si">!r}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;Drop the threshold to keep the hook, or drop the hook to keep a &quot;</span>
+                <span class="s2">&quot;config a recipe can describe.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">exit_status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="o">.</span><span class="n">exit_status</span>
+        <span class="n">migrates</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="o">.</span><span class="n">source_status</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="o">.</span><span class="n">target_status</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">migrates</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The convergence hook of a relaxation loop has to migrate &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;status; got source_status=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="o">.</span><span class="n">source_status</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;and target_status=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="o">.</span><span class="n">target_status</span><span class="si">!r}</span><span class="s2">. A &quot;</span>
+                <span class="s2">&quot;converged graph freezes in the propagator&#39;s step on its status. &quot;</span>
+                <span class="s2">&quot;It graduates out of the batch on that status too. Pass &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;source_status=0 with target_status=</span><span class="si">{</span><span class="n">exit_status</span><span class="si">!r}</span><span class="s2">, or pass &quot;</span>
+                <span class="s2">&quot;the threshold as fmax instead.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="o">.</span><span class="n">target_status</span> <span class="o">&lt;</span> <span class="n">exit_status</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Converged graphs must migrate to at least the propagator&#39;s &quot;</span>
+                <span class="s2">&quot;exit status, which is what graduates them out of the active &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;batch; got target_status=&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="o">.</span><span class="n">target_status</span><span class="si">!r}</span><span class="s2"> against &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;dynamics.exit_status=</span><span class="si">{</span><span class="n">exit_status</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="o">.</span><span class="n">frequency</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The convergence hook of a relaxation loop has to run on every &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;step; got frequency=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="o">.</span><span class="n">frequency</span><span class="si">!r}</span><span class="s2">. A &quot;</span>
+                <span class="s2">&quot;structure is captured on the step it converges. It has to be &quot;</span>
+                <span class="s2">&quot;frozen and left out of the path capture on that same step. A &quot;</span>
+                <span class="s2">&quot;hook that skips steps would store it by both routes and keep &quot;</span>
+                <span class="s2">&quot;propagating it until the next firing. Pass frequency=1, or pass &quot;</span>
+                <span class="s2">&quot;the threshold as fmax instead.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_lifecycle_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OnPolicyConfig</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reject a lifecycle the structures or the propagator cannot carry.&quot;&quot;&quot;</span>
+        <span class="n">managed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">manages_lifecycle</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_structures</span><span class="p">,</span> <span class="s2">&quot;recycle&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">managed</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The initial-structures source sets recycle=True; got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;fmax=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fmax</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;convergence_hook=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="si">!r}</span><span class="s2">, and &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;max_trajectory_steps=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_trajectory_steps</span><span class="si">!r}</span><span class="s2">. Recycling &quot;</span>
+                <span class="s2">&quot;wraps the backfill to the front of the rows, and only a run &quot;</span>
+                <span class="s2">&quot;managing a trajectory lifecycle ever backfills. Pass fmax, a &quot;</span>
+                <span class="s2">&quot;convergence_hook, or max_trajectory_steps, or drop recycle.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">managed</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="p">,</span> <span class="n">DomainParallel</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;A DomainParallel propagator cannot carry a trajectory lifecycle: &quot;</span>
+                <span class="s2">&quot;its step dispatches no ON_GRADUATE stage, so no converged frame &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;would ever be captured; got dynamics=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="si">!r}</span><span class="s2"> with &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;fmax=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fmax</span><span class="si">!r}</span><span class="s2">, convergence_hook=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;and max_trajectory_steps=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_trajectory_steps</span><span class="si">!r}</span><span class="s2">. Pass &quot;</span>
+                <span class="s2">&quot;the dynamics it wraps, or drop the lifecycle settings.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_criterion</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_check_sole_migrator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_criterion</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_structure_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OnPolicyConfig</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check one row against the propagator&#39;s declared keys, its compute(), and the criterion.</span>
+
+<span class="sd">        The forward pass and the criterion dispatch run only with</span>
+<span class="sd">        ``probe=True``, and only once per instance. The after-validators run</span>
+<span class="sd">        again when the config is passed into a strategy, and that second pass</span>
+<span class="sd">        skips both.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">probe</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_structures</span><span class="o">.</span><span class="n">probe</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="o">.</span><span class="n">check_initial_batch</span><span class="p">(</span><span class="n">probe</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_probed</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">probe</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="n">probed</span> <span class="o">=</span> <span class="n">_probe_propagator</span><span class="p">(</span><span class="n">probe</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="p">)</span>
+        <span class="n">criterion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergence_criterion</span>
+        <span class="k">if</span> <span class="n">probed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">criterion</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_probe_criterion</span><span class="p">(</span><span class="n">probed</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span><span class="p">,</span> <span class="n">criterion</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_probed</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

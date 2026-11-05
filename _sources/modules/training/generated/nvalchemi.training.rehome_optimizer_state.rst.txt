@@ -1,0 +1,6 @@
+﻿nvalchemi.training.rehome\_optimizer\_state
+===========================================
+
+.. currentmodule:: nvalchemi.training
+
+.. autofunction:: rehome_optimizer_state

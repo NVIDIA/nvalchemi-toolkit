@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.NeighborListPolicy
+==================================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autodata:: NeighborListPolicy

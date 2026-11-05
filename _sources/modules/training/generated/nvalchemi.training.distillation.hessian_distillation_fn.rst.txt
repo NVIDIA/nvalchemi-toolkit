@@ -1,0 +1,6 @@
+﻿nvalchemi.training.distillation.hessian\_distillation\_fn
+=========================================================
+
+.. currentmodule:: nvalchemi.training.distillation
+
+.. autofunction:: hessian_distillation_fn

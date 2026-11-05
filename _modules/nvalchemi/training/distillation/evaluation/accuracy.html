@@ -1,0 +1,1641 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.training.distillation.evaluation.accuracy &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/training/distillation/evaluation/accuracy';</script>
+    <script defer="defer" src="../../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.tr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.training.distillation.evaluation.accuracy</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Accuracy, teacher-consistency, and non-conservative diagnostics for students.</span>
+
+<span class="sd">:func:`evaluate_accuracy` runs a student over a held-out set. It reports energy,</span>
+<span class="sd">force, and stress errors against either the reference dataset&#39;s own labels or a</span>
+<span class="sd">teacher&#39;s labels. :func:`non_conservative_residual` measures the part of a</span>
+<span class="sd">teacher&#39;s force field that no conservative student can fit. That residual is</span>
+<span class="sd">the floor against which the accuracy evaluation&#39;s force error is read.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">Field</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">resolve_device</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ValidationConfig</span><span class="p">,</span>
+    <span class="n">ValidationLoop</span><span class="p">,</span>
+    <span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">ensure_reiterable_validation_data</span><span class="p">,</span>
+    <span class="n">unwrap_model</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.evaluation._export</span><span class="w"> </span><span class="kn">import</span> <span class="n">MeasurementRecord</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">_score_and_attach</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.scoring</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TeacherScorer</span><span class="p">,</span>
+    <span class="n">_as_scorer</span><span class="p">,</span>
+    <span class="n">signal_fields</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distillation.strategy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_student_label_dtype</span><span class="p">,</span>
+    <span class="n">_to_device</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">all_reduce</span><span class="p">,</span>
+    <span class="n">all_reduce_flags</span><span class="p">,</span>
+    <span class="n">is_distributed_initialized</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses.composition</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseLossFunction</span><span class="p">,</span>
+    <span class="n">ComposedLossFunction</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses.reductions</span><span class="w"> </span><span class="kn">import</span> <span class="n">per_graph_sum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.losses.terms</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">EnergyMSELoss</span><span class="p">,</span>
+    <span class="n">ForceMSELoss</span><span class="p">,</span>
+    <span class="n">StressMSELoss</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;BUILTIN_ACCURACY_QUANTITIES&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AccuracyMetrics&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AccuracyQuantity&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AccuracyQuantitySpec&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;NonConservativeResidual&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;evaluate_accuracy&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;non_conservative_residual&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">AccuracyQuantity</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">,</span> <span class="s2">&quot;atomic_energies&quot;</span><span class="p">]</span>
+<span class="sd">&quot;&quot;&quot;Built-in quantity an accuracy evaluation compares between a student and a target.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="AccuracyQuantitySpec">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AccuracyQuantitySpec.html#nvalchemi.training.distillation.evaluation.AccuracyQuantitySpec">[docs]</a>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AccuracyQuantitySpec</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Where one accuracy quantity&#39;s prediction and target are read from.</span>
+
+<span class="sd">    The built-in quantities are :data:`BUILTIN_ACCURACY_QUANTITIES`. A custom</span>
+<span class="sd">    quantity is passed to :func:`evaluate_accuracy` as an instance, and its</span>
+<span class="sd">    errors are reported in ``AccuracyMetrics.errors`` under its name. It can be</span>
+<span class="sd">    a head that the training function publishes under its own key, or a</span>
+<span class="sd">    built-in quantity read from another field.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Name the quantity is requested and reported under.</span>
+<span class="sd">    prediction_key : str</span>
+<span class="sd">        Key of the validation function&#39;s output holding the prediction.</span>
+<span class="sd">    reference_key : str</span>
+<span class="sd">        Batch field holding the dataset&#39;s own label.</span>
+<span class="sd">    signal : str | None, optional</span>
+<span class="sd">        Teacher signal the quantity is compared against when</span>
+<span class="sd">        ``targets=&quot;teacher&quot;``. The signal is resolved to its batch field</span>
+<span class="sd">        through :func:`~nvalchemi.training.distillation.signal_fields`.</span>
+<span class="sd">        Default ``None`` (no teacher target; name a teacher field in</span>
+<span class="sd">        ``target_keys`` to compare against a teacher).</span>
+<span class="sd">    supervised_loss : Callable[..., BaseLossFunction] | None, optional</span>
+<span class="sd">        Factory, called as ``supervised_loss(target_key=...)``, that builds the</span>
+<span class="sd">        loss term driving the validation pass. Default ``None`` (the quantity</span>
+<span class="sd">        is a diagnostic that never enters the pass&#39;s loss).</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import (</span>
+<span class="sd">    ...     AccuracyQuantitySpec,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; charges = AccuracyQuantitySpec(</span>
+<span class="sd">    ...     &quot;charges&quot;, prediction_key=&quot;predicted_charges&quot;, reference_key=&quot;charges&quot;</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; charges.supervised_loss is None</span>
+<span class="sd">    True</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">prediction_key</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">reference_key</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">signal</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">supervised_loss</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">BaseLossFunction</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+
+<span class="n">BUILTIN_ACCURACY_QUANTITIES</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">AccuracyQuantitySpec</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">AccuracyQuantitySpec</span><span class="p">(</span>
+        <span class="s2">&quot;energy&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;predicted_energy&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;energy&quot;</span><span class="p">,</span>
+        <span class="n">signal</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span>
+        <span class="n">supervised_loss</span><span class="o">=</span><span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">EnergyMSELoss</span><span class="p">,</span> <span class="n">per_atom</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+    <span class="p">),</span>
+    <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="n">AccuracyQuantitySpec</span><span class="p">(</span>
+        <span class="s2">&quot;forces&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;predicted_forces&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;forces&quot;</span><span class="p">,</span>
+        <span class="n">signal</span><span class="o">=</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span>
+        <span class="n">supervised_loss</span><span class="o">=</span><span class="n">ForceMSELoss</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="s2">&quot;stress&quot;</span><span class="p">:</span> <span class="n">AccuracyQuantitySpec</span><span class="p">(</span>
+        <span class="s2">&quot;stress&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;predicted_stress&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;stress&quot;</span><span class="p">,</span>
+        <span class="n">signal</span><span class="o">=</span><span class="s2">&quot;stress&quot;</span><span class="p">,</span>
+        <span class="n">supervised_loss</span><span class="o">=</span><span class="n">StressMSELoss</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="s2">&quot;atomic_energies&quot;</span><span class="p">:</span> <span class="n">AccuracyQuantitySpec</span><span class="p">(</span>
+        <span class="s2">&quot;atomic_energies&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;predicted_atomic_energies&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;atomic_energies&quot;</span><span class="p">,</span>
+        <span class="n">signal</span><span class="o">=</span><span class="s2">&quot;atomic_energies&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">}</span>
+<span class="sd">&quot;&quot;&quot;Specs of the built-in quantities, keyed by the name a caller requests them under.&quot;&quot;&quot;</span>
+
+<span class="n">_DEFAULT_QUANTITIES</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AccuracyQuantity</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Quantities evaluated when a caller names none.&quot;&quot;&quot;</span>
+
+<span class="n">_EPS</span> <span class="o">=</span> <span class="mf">1e-12</span>
+<span class="sd">&quot;&quot;&quot;Denominator guard for direction normalization and force-scale ratios.&quot;&quot;&quot;</span>
+
+<span class="n">_RESIDUAL_SUFFIXES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;abs&quot;</span><span class="p">,</span> <span class="s2">&quot;sq&quot;</span><span class="p">,</span> <span class="s2">&quot;count&quot;</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Sums accumulated per quantity, in the order :func:`_mae_rmse` reads them.&quot;&quot;&quot;</span>
+
+<span class="n">_FORCE_ALIGNMENT_KEYS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;force_cosine_sum&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;force_cosine_count&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;force_dot&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;force_predicted_sq&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;force_target_sq&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;force_nonfinite_atoms&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;Extra sums the force quantity contributes on top of its residuals.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="AccuracyMetrics">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AccuracyMetrics.html#nvalchemi.training.distillation.evaluation.AccuracyMetrics">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AccuracyMetrics</span><span class="p">(</span><span class="n">MeasurementRecord</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Errors of one student against one set of targets over a held-out set.</span>
+
+<span class="sd">    Every metric is an exact global reduction over the evaluated set: the sum</span>
+<span class="sd">    of residuals divided by the total count, not a mean of per-batch means.</span>
+<span class="sd">    Metrics are in the units the batch carries: eV for energies, eV/A for</span>
+<span class="sd">    forces, and the dataset&#39;s stress units. A quantity the pass could not</span>
+<span class="sd">    measure is ``None``. That happens when the quantity was not requested, or</span>
+<span class="sd">    when no batch carried its prediction or target. A quantity that was</span>
+<span class="sd">    measured but came out non-finite is ``nan``. An acceptance bar fails a</span>
+<span class="sd">    ``nan`` value instead of reporting it as missing.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Label carried into reports.</span>
+<span class="sd">    num_graphs, num_atoms : int</span>
+<span class="sd">        Graphs and atoms evaluated.</span>
+<span class="sd">    energy_mae, energy_rmse : float | None</span>
+<span class="sd">        Total-energy error per graph.</span>
+<span class="sd">    energy_per_atom_mae, energy_per_atom_rmse : float | None</span>
+<span class="sd">        Total-energy error divided by each graph&#39;s atom count.</span>
+<span class="sd">    forces_mae, forces_rmse : float | None</span>
+<span class="sd">        Force error per Cartesian component over every atom.</span>
+<span class="sd">    stress_mae, stress_rmse : float | None</span>
+<span class="sd">        Stress error per component over all nine components.</span>
+<span class="sd">    force_cosine_mean : float | None</span>
+<span class="sd">        Mean over atoms of the cosine between the predicted and target force,</span>
+<span class="sd">        weighting every atom equally. An atom whose force is at or below the</span>
+<span class="sd">        student&#39;s own error has an essentially random angle, so this number</span>
+<span class="sd">        describes the held-out set&#39;s low-force tail as much as the student.</span>
+<span class="sd">        Atoms whose force vanishes on either side are not counted. ``None``</span>
+<span class="sd">        when no atom carries a force on both sides.</span>
+<span class="sd">    force_cosine_aggregate : float | None</span>
+<span class="sd">        Cosine between the two force fields, each taken as a single vector over</span>
+<span class="sd">        the whole set, so atoms are weighted by force magnitude. This is the</span>
+<span class="sd">        alignment an acceptance bar reads. A single non-finite atom makes it</span>
+<span class="sd">        ``nan``, whereas ``force_cosine_mean`` still reports the atoms that</span>
+<span class="sd">        stayed finite.</span>
+<span class="sd">    atomic_energies_mae, atomic_energies_rmse : float | None</span>
+<span class="sd">        Per-atom energy error, measured when both the prediction and the target</span>
+<span class="sd">        include a per-atom energy decomposition.</span>
+<span class="sd">    force_nonfinite_atoms : int</span>
+<span class="sd">        Atoms dropped from ``force_cosine_mean`` for a non-finite force.</span>
+<span class="sd">    errors : Mapping[str, Mapping[str, float]]</span>
+<span class="sd">        ``{&quot;mae&quot;: ..., &quot;rmse&quot;: ...}`` per custom :class:`AccuracyQuantitySpec`</span>
+<span class="sd">        that was measured; the built-in quantities report through their own</span>
+<span class="sd">        fields.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">num_graphs</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">num_atoms</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">energy_mae</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">energy_rmse</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">energy_per_atom_mae</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">energy_per_atom_rmse</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">forces_mae</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">forces_rmse</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">stress_mae</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">stress_rmse</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">force_cosine_mean</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">force_cosine_aggregate</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">atomic_energies_mae</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">atomic_energies_rmse</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">force_nonfinite_atoms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">errors</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AccuracyMetrics.to_dict">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.AccuracyMetrics.html#nvalchemi.training.distillation.evaluation.AccuracyMetrics.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the populated fields as a plain dictionary.</span>
+
+<span class="sd">        A quantity that was not measured is left out rather than exported as</span>
+<span class="sd">        ``None``, and :meth:`from_dict` restores it as ``None``. An empty</span>
+<span class="sd">        ``errors`` map is left out the same way.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">exported</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">exclude_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">exported</span><span class="p">[</span><span class="s2">&quot;errors&quot;</span><span class="p">]:</span>
+            <span class="k">del</span> <span class="n">exported</span><span class="p">[</span><span class="s2">&quot;errors&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">exported</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="NonConservativeResidual">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.NonConservativeResidual.html#nvalchemi.training.distillation.evaluation.NonConservativeResidual">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NonConservativeResidual</span><span class="p">(</span><span class="n">MeasurementRecord</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Non-conservative component of a teacher&#39;s force field.</span>
+
+<span class="sd">    The *non-conservative residual* is the part of a teacher&#39;s force field that</span>
+<span class="sd">    no conservative student can fit. A force field decomposes as</span>
+<span class="sd">    :math:`F = -\nabla E + F_{\perp}`. A student that predicts forces as the</span>
+<span class="sd">    gradient of an energy represents only the first term, whose work around any</span>
+<span class="sd">    closed path vanishes. A closed-path integral of the teacher&#39;s field</span>
+<span class="sd">    therefore measures :math:`F_{\perp}` alone. Every force here is a</span>
+<span class="sd">    root-mean-square per-atom magnitude in eV/A. Compare ``force_floor`` with</span>
+<span class="sd">    the ``forces_rmse`` of :class:`AccuracyMetrics` accordingly: ``forces_rmse``</span>
+<span class="sd">    is a per-component figure, smaller by ``sqrt(3)`` for an isotropic error.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    num_probes : int</span>
+<span class="sd">        Closed loops integrated in total, ``num_loops`` per graph.</span>
+<span class="sd">    amplitude : float</span>
+<span class="sd">        Loop side length in A, as a root-mean-square per-atom displacement.</span>
+<span class="sd">    segments : int</span>
+<span class="sd">        Midpoint-rule samples per side.</span>
+<span class="sd">    loop_work_mean_abs, loop_work_max_abs : float</span>
+<span class="sd">        Mean and maximum absolute work around one loop, in eV.</span>
+<span class="sd">    force_floor, force_floor_max : float</span>
+<span class="sd">        Mean and maximum lower bound the loop work places on a conservative</span>
+<span class="sd">        student&#39;s root-mean-square per-atom force error, in eV/A.</span>
+<span class="sd">    force_rms : float</span>
+<span class="sd">        Root-mean-square teacher force at the loop centers over every atom.</span>
+<span class="sd">    relative_floor, relative_floor_max : float</span>
+<span class="sd">        Mean and maximum of each probe&#39;s floor divided by the root-mean-square</span>
+<span class="sd">        teacher force of its own graph. A batch that mixes force scales</span>
+<span class="sd">        therefore reports a figure between its graphs&#39; ratios. A graph at</span>
+<span class="sd">        equilibrium is divided by a small clamp rather than by zero.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">num_probes</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">segments</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">loop_work_mean_abs</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">loop_work_max_abs</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">force_floor</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">force_floor_max</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">force_rms</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">relative_floor</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">relative_floor_max</span><span class="p">:</span> <span class="nb">float</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_PlacedBatches</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Re-iterable view that places each batch on *device* and labels it if scored.</span>
+
+<span class="sd">    Every batch is placed before the loop sees it, whatever device it starts</span>
+<span class="sd">    on. The placement is a clone: a copy into device memory is asynchronous, a</span>
+<span class="sd">    copy into host memory blocks so the moved batch&#39;s pointers can be read at</span>
+<span class="sd">    once, and a batch already on the device is cloned without a transfer.</span>
+<span class="sd">    Because it is a clone, a scorer&#39;s ``teacher_*`` fields stay off the</span>
+<span class="sd">    caller&#39;s batches. The scorer labels after the placement, at the precision</span>
+<span class="sd">    its own ``autocast`` setting selects, and a label outside ``teacher_*`` is</span>
+<span class="sd">    refused.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">source</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Batch</span><span class="p">],</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">scorer</span><span class="p">:</span> <span class="n">TeacherScorer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scorer</span> <span class="o">=</span> <span class="n">scorer</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield each source batch on the run device, labeled if a scorer was given.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">:</span>
+            <span class="n">placed</span> <span class="o">=</span> <span class="n">_to_device</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scorer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_score_and_attach</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scorer</span><span class="p">,</span> <span class="n">placed</span><span class="p">)</span>
+            <span class="k">yield</span> <span class="n">placed</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_MetricAccumulator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-batch callback accumulating exact residual sums over a validation pass.</span>
+
+<span class="sd">    Implements :class:`~nvalchemi.training.BatchValidationCallback` and runs</span>
+<span class="sd">    inside a :class:`ValidationLoop` pass. Sums are float64 device tensors,</span>
+<span class="sd">    reduced once at the end. Every sum the requested quantities can produce is</span>
+<span class="sd">    seeded at zero up front. The packed all-reduce tensor therefore has the</span>
+<span class="sd">    same shape and key order on every rank, even when a shard carried no target</span>
+<span class="sd">    for some quantity.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">quantities</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">AccuracyQuantitySpec</span><span class="p">],</span>
+        <span class="n">target_keys</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">specs</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">quantities</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">quantities</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">specs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_keys</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">target_keys</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">key</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_metric_keys</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">quantities</span><span class="p">)</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">predictions</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">loss</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># noqa: ARG002</span>
+        <span class="n">batch_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>  <span class="c1"># noqa: ARG002</span>
+        <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>  <span class="c1"># noqa: ARG002</span>
+        <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>  <span class="c1"># noqa: ARG002</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Accumulate one validation batch&#39;s residual sums.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="s2">&quot;num_graphs&quot;</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="s2">&quot;num_atoms&quot;</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">specs</span><span class="p">:</span>
+            <span class="n">quantity</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">name</span>
+            <span class="n">prediction</span> <span class="o">=</span> <span class="n">predictions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">prediction_key</span><span class="p">)</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">target_keys</span><span class="p">[</span><span class="n">quantity</span><span class="p">],</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">prediction</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">target</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">quantity</span> <span class="o">==</span> <span class="s2">&quot;atomic_energies&quot;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_accumulate</span><span class="p">(</span>
+                    <span class="n">quantity</span><span class="p">,</span> <span class="n">prediction</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">target</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">target</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                <span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_accumulate</span><span class="p">(</span><span class="n">quantity</span><span class="p">,</span> <span class="n">prediction</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">target</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">quantity</span> <span class="o">==</span> <span class="s2">&quot;energy&quot;</span><span class="p">:</span>
+                <span class="n">counts</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+                    <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_accumulate</span><span class="p">(</span>
+                    <span class="s2">&quot;energy_per_atom&quot;</span><span class="p">,</span>
+                    <span class="n">prediction</span> <span class="o">/</span> <span class="n">counts</span><span class="p">,</span>
+                    <span class="n">target</span> <span class="o">/</span> <span class="n">counts</span><span class="p">,</span>
+                    <span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">quantity</span> <span class="o">==</span> <span class="s2">&quot;forces&quot;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_accumulate_cosine</span><span class="p">(</span><span class="n">prediction</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add one contribution to the running float64 sum *key*.&quot;&quot;&quot;</span>
+        <span class="n">tensor</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">value</span>
+        <span class="n">scalar</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">previous</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">scalar</span> <span class="k">if</span> <span class="n">previous</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">previous</span> <span class="o">+</span> <span class="n">scalar</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_accumulate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">prediction</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add the absolute and squared residual sums of one quantity.</span>
+
+<span class="sd">        Shapes must match exactly. Broadcasting a ``(B,)`` target against a</span>
+<span class="sd">        ``(B, 1)`` prediction would silently measure every pairing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">prediction</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Prediction and target of </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must have the same shape; got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">prediction</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> and </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">residual</span> <span class="o">=</span> <span class="n">prediction</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">-</span> <span class="n">target</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">float64</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_abs&quot;</span><span class="p">,</span> <span class="n">residual</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_sq&quot;</span><span class="p">,</span> <span class="n">residual</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_count&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">count</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_accumulate_cosine</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">prediction</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add the per-atom and aggregate force-alignment sums.</span>
+
+<span class="sd">        The ``&gt; 0.0`` test only guards against zero divided by zero, so a small</span>
+<span class="sd">        force still counts at full weight in the per-atom mean. A non-finite</span>
+<span class="sd">        atom is also dropped from the per-atom mean and is counted in</span>
+<span class="sd">        ``force_nonfinite_atoms``. It stays in the aggregate sums, so the</span>
+<span class="sd">        whole-set alignment reports as unmeasurable rather than as an average</span>
+<span class="sd">        over the atoms that are left.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">predicted</span> <span class="o">=</span> <span class="n">prediction</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">reference</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">dot</span> <span class="o">=</span> <span class="p">(</span><span class="n">predicted</span> <span class="o">*</span> <span class="n">reference</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">predicted_norm</span> <span class="o">=</span> <span class="n">predicted</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">reference_norm</span> <span class="o">=</span> <span class="n">reference</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">finite</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">predicted</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">reference</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span>
+            <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span>
+        <span class="p">)</span>
+        <span class="n">aligned</span> <span class="o">=</span> <span class="n">finite</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">predicted_norm</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">reference_norm</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">norms</span> <span class="o">=</span> <span class="n">predicted_norm</span> <span class="o">*</span> <span class="n">reference_norm</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="s2">&quot;force_cosine_sum&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">dot</span><span class="p">[</span><span class="n">aligned</span><span class="p">]</span> <span class="o">/</span> <span class="n">norms</span><span class="p">[</span><span class="n">aligned</span><span class="p">])</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="s2">&quot;force_cosine_count&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">aligned</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="s2">&quot;force_nonfinite_atoms&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">((</span><span class="o">~</span><span class="n">finite</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="s2">&quot;force_dot&quot;</span><span class="p">,</span> <span class="n">dot</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="s2">&quot;force_predicted_sq&quot;</span><span class="p">,</span> <span class="n">predicted</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="s2">&quot;force_target_sq&quot;</span><span class="p">,</span> <span class="n">reference</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">distributed_manager</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AccuracyMetrics</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the reduced metrics, all-reducing sums under distributed runs.</span>
+
+<span class="sd">        Whether this rank measured anything is decided locally and exchanged</span>
+<span class="sd">        with :func:`~nvalchemi.training.distributed.all_reduce_flags` before</span>
+<span class="sd">        the sums are reduced. A rank whose shard carried no target still</span>
+<span class="sd">        enters the all-reduce, contributing zeros, because the metrics are</span>
+<span class="sd">        global ratios of the summed residuals and counts. Only when every rank</span>
+<span class="sd">        came up empty is there nothing to divide, and then every rank raises</span>
+<span class="sd">        the same refusal rather than leaving a peer waiting in the all-reduce.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If no rank measured any quantity, meaning every batch on every</span>
+<span class="sd">            rank was missing either the prediction or the target of every</span>
+<span class="sd">            requested quantity.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="p">))</span>
+        <span class="n">packed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">])</span>
+        <span class="n">measured</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span> <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;_count&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">empty</span> <span class="o">=</span> <span class="n">all_reduce_flags</span><span class="p">(</span><span class="ow">not</span> <span class="n">measured</span><span class="p">,</span> <span class="n">distributed_manager</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">empty</span><span class="o">.</span><span class="n">all</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;No accuracy metric could be measured on any rank; every batch was &quot;</span>
+                <span class="s2">&quot;missing the prediction or the target of every requested quantity &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">quantities</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> (targets </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">target_keys</span><span class="si">!r}</span><span class="s2">).&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_distributed_initialized</span><span class="p">(</span><span class="n">distributed_manager</span><span class="p">):</span>
+            <span class="n">all_reduce</span><span class="p">(</span><span class="n">packed</span><span class="p">,</span> <span class="n">distributed_manager</span><span class="p">)</span>
+        <span class="n">totals</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">packed</span><span class="p">[</span><span class="n">index</span><span class="p">])</span> <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">keys</span><span class="p">)}</span>
+        <span class="n">energy_mae</span><span class="p">,</span> <span class="n">energy_rmse</span> <span class="o">=</span> <span class="n">_mae_rmse</span><span class="p">(</span><span class="n">totals</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">)</span>
+        <span class="n">per_atom_mae</span><span class="p">,</span> <span class="n">per_atom_rmse</span> <span class="o">=</span> <span class="n">_mae_rmse</span><span class="p">(</span><span class="n">totals</span><span class="p">,</span> <span class="s2">&quot;energy_per_atom&quot;</span><span class="p">)</span>
+        <span class="n">forces_mae</span><span class="p">,</span> <span class="n">forces_rmse</span> <span class="o">=</span> <span class="n">_mae_rmse</span><span class="p">(</span><span class="n">totals</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">)</span>
+        <span class="n">stress_mae</span><span class="p">,</span> <span class="n">stress_rmse</span> <span class="o">=</span> <span class="n">_mae_rmse</span><span class="p">(</span><span class="n">totals</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">)</span>
+        <span class="n">atomic_mae</span><span class="p">,</span> <span class="n">atomic_rmse</span> <span class="o">=</span> <span class="n">_mae_rmse</span><span class="p">(</span><span class="n">totals</span><span class="p">,</span> <span class="s2">&quot;atomic_energies&quot;</span><span class="p">)</span>
+        <span class="n">errors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">quantity</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantities</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">quantity</span> <span class="ow">in</span> <span class="n">BUILTIN_ACCURACY_QUANTITIES</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">mae</span><span class="p">,</span> <span class="n">rmse</span> <span class="o">=</span> <span class="n">_mae_rmse</span><span class="p">(</span><span class="n">totals</span><span class="p">,</span> <span class="n">quantity</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">mae</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">errors</span><span class="p">[</span><span class="n">quantity</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;mae&quot;</span><span class="p">:</span> <span class="n">mae</span><span class="p">,</span> <span class="s2">&quot;rmse&quot;</span><span class="p">:</span> <span class="n">rmse</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">AccuracyMetrics</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">num_graphs</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">totals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;num_graphs&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+            <span class="n">num_atoms</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">totals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;num_atoms&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+            <span class="n">energy_mae</span><span class="o">=</span><span class="n">energy_mae</span><span class="p">,</span>
+            <span class="n">energy_rmse</span><span class="o">=</span><span class="n">energy_rmse</span><span class="p">,</span>
+            <span class="n">energy_per_atom_mae</span><span class="o">=</span><span class="n">per_atom_mae</span><span class="p">,</span>
+            <span class="n">energy_per_atom_rmse</span><span class="o">=</span><span class="n">per_atom_rmse</span><span class="p">,</span>
+            <span class="n">forces_mae</span><span class="o">=</span><span class="n">forces_mae</span><span class="p">,</span>
+            <span class="n">forces_rmse</span><span class="o">=</span><span class="n">forces_rmse</span><span class="p">,</span>
+            <span class="n">stress_mae</span><span class="o">=</span><span class="n">stress_mae</span><span class="p">,</span>
+            <span class="n">stress_rmse</span><span class="o">=</span><span class="n">stress_rmse</span><span class="p">,</span>
+            <span class="n">force_cosine_mean</span><span class="o">=</span><span class="n">_ratio</span><span class="p">(</span>
+                <span class="n">totals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;force_cosine_sum&quot;</span><span class="p">),</span> <span class="n">totals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;force_cosine_count&quot;</span><span class="p">)</span>
+            <span class="p">),</span>
+            <span class="n">force_cosine_aggregate</span><span class="o">=</span><span class="n">_aggregate_cosine</span><span class="p">(</span><span class="n">totals</span><span class="p">),</span>
+            <span class="n">atomic_energies_mae</span><span class="o">=</span><span class="n">atomic_mae</span><span class="p">,</span>
+            <span class="n">atomic_energies_rmse</span><span class="o">=</span><span class="n">atomic_rmse</span><span class="p">,</span>
+            <span class="n">force_nonfinite_atoms</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">totals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;force_nonfinite_atoms&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+            <span class="n">errors</span><span class="o">=</span><span class="n">errors</span><span class="p">,</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_metric_keys</span><span class="p">(</span><span class="n">quantities</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return every sum the requested *quantities* can contribute to.&quot;&quot;&quot;</span>
+    <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;num_graphs&quot;</span><span class="p">,</span> <span class="s2">&quot;num_atoms&quot;</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">quantity</span> <span class="ow">in</span> <span class="n">quantities</span><span class="p">:</span>
+        <span class="n">prefixes</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;energy_per_atom&quot;</span><span class="p">,</span> <span class="n">quantity</span><span class="p">]</span> <span class="k">if</span> <span class="n">quantity</span> <span class="o">==</span> <span class="s2">&quot;energy&quot;</span> <span class="k">else</span> <span class="p">[</span><span class="n">quantity</span><span class="p">]</span>
+        <span class="n">keys</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">suffix</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">prefix</span> <span class="ow">in</span> <span class="n">prefixes</span> <span class="k">for</span> <span class="n">suffix</span> <span class="ow">in</span> <span class="n">_RESIDUAL_SUFFIXES</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">quantity</span> <span class="o">==</span> <span class="s2">&quot;forces&quot;</span><span class="p">:</span>
+            <span class="n">keys</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">_FORCE_ALIGNMENT_KEYS</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_mae_rmse</span><span class="p">(</span>
+    <span class="n">totals</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the MAE and RMSE of one quantity, or two ``None`` when unmeasured.&quot;&quot;&quot;</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="n">totals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_count&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">count</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">totals</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_abs&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">count</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">totals</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_sq&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">count</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_ratio</span><span class="p">(</span><span class="n">numerator</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">denominator</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``numerator / denominator``, or ``None`` when either is missing.</span>
+
+<span class="sd">    A denominator of zero also yields ``None``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">numerator</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">denominator</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">numerator</span> <span class="o">/</span> <span class="n">denominator</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_aggregate_cosine</span><span class="p">(</span><span class="n">totals</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the cosine similarity of the two force fields taken as one vector.</span>
+
+<span class="sd">    A non-finite sum means the alignment was measured but is unusable, so it</span>
+<span class="sd">    reports ``nan`` for a bar to fail. A norm of exactly zero means every force</span>
+<span class="sd">    in the set vanishes, so it reports ``None``, like any quantity that was not</span>
+<span class="sd">    measured.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dot</span> <span class="o">=</span> <span class="n">totals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;force_dot&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">dot</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">squares</span> <span class="o">=</span> <span class="n">totals</span><span class="p">[</span><span class="s2">&quot;force_predicted_sq&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">totals</span><span class="p">[</span><span class="s2">&quot;force_target_sq&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">dot</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">squares</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">nan</span>
+    <span class="n">norm</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">squares</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dot</span> <span class="o">/</span> <span class="n">norm</span> <span class="k">if</span> <span class="n">norm</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_teacher_target_keys</span><span class="p">(</span><span class="n">specs</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">AccuracyQuantitySpec</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the teacher field each quantity with a signal is compared against.</span>
+
+<span class="sd">    Each signal is resolved to its field through the scoring module, so if a</span>
+<span class="sd">    signal changes the field it writes, the evaluation follows it. A spec</span>
+<span class="sd">    without a signal has no teacher field and is left out.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If the signal behind a quantity publishes more than one field.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">resolved</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">signal</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="n">signal_fields</span><span class="p">([</span><span class="n">spec</span><span class="o">.</span><span class="n">signal</span><span class="p">])</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Quantity </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is compared against a single teacher &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;field, but its signal </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">signal</span><span class="si">!r}</span><span class="s2"> publishes </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">resolved</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">fields</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">resolved</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_quantities</span><span class="p">(</span>
+    <span class="n">quantities</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">AccuracyQuantitySpec</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AccuracyQuantitySpec</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the specs *quantities* request, built-ins looked up by name.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a name is not a built-in quantity, or two specs share a name.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">quantities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">BUILTIN_ACCURACY_QUANTITIES</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_DEFAULT_QUANTITIES</span><span class="p">)</span>
+    <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+        <span class="n">quantity</span>
+        <span class="k">for</span> <span class="n">quantity</span> <span class="ow">in</span> <span class="n">quantities</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">quantity</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">quantity</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">BUILTIN_ACCURACY_QUANTITIES</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Accuracy quantities must be names from &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">BUILTIN_ACCURACY_QUANTITIES</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> or AccuracyQuantitySpec &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;instances; got unsupported </span><span class="si">{</span><span class="n">unknown</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">specs</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+        <span class="n">BUILTIN_ACCURACY_QUANTITIES</span><span class="p">[</span><span class="n">quantity</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">quantity</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">quantity</span>
+        <span class="k">for</span> <span class="n">quantity</span> <span class="ow">in</span> <span class="n">quantities</span>
+    <span class="p">)</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">names</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Accuracy quantity names must be unique; got </span><span class="si">{</span><span class="n">names</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">specs</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_device</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the requested device, else the device the model&#39;s parameters sit on.</span>
+
+<span class="sd">    An explicit request goes through :func:`~nvalchemi.data.resolve_device`,</span>
+<span class="sd">    so an index-less ``&quot;cuda&quot;`` names the current CUDA device and compares</span>
+<span class="sd">    equal to the device the placed batches report.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">resolve_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">parameters</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;parameters&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">parameters</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">parameter</span><span class="o">.</span><span class="n">device</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_requires_autograd</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether a model&#39;s own forward pass needs autograd enabled around it.</span>
+
+<span class="sd">    It reads :attr:`~nvalchemi.models.base.BaseModelMixin.requires_autograd`</span>
+<span class="sd">    through :func:`~nvalchemi.training.unwrap_model`, so a parallelism</span>
+<span class="sd">    wrapper around the student does not hide the declaration. A model without</span>
+<span class="sd">    the attribute is taken to publish direct outputs only.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">unwrap_model</span><span class="p">(</span><span class="n">model</span><span class="p">),</span> <span class="s2">&quot;requires_autograd&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_metric_loss</span><span class="p">(</span>
+    <span class="n">specs</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">AccuracyQuantitySpec</span><span class="p">],</span> <span class="n">target_keys</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLossFunction</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the composed loss whose gradient requirement drives the pass.&quot;&quot;&quot;</span>
+    <span class="n">terms</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">spec</span><span class="o">.</span><span class="n">supervised_loss</span><span class="p">(</span><span class="n">target_key</span><span class="o">=</span><span class="n">target_keys</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">supervised_loss</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">terms</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;At least one quantity carrying a supervised loss (&#39;energy&#39;, &#39;forces&#39;, &quot;</span>
+            <span class="s2">&quot;or &#39;stress&#39; among the built-ins) must be evaluated so the validation &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;pass has a loss to run; got </span><span class="si">{</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">spec</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">specs</span><span class="p">]</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">ComposedLossFunction</span><span class="p">(</span><span class="n">terms</span><span class="p">,</span> <span class="n">dtype_policy</span><span class="o">=</span><span class="s2">&quot;prediction_to_target&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="evaluate_accuracy">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.evaluate_accuracy.html#nvalchemi.training.distillation.evaluation.evaluate_accuracy">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">evaluate_accuracy</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">BaseModelMixin</span><span class="p">,</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Batch</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">targets</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;reference&quot;</span><span class="p">,</span> <span class="s2">&quot;teacher&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;reference&quot;</span><span class="p">,</span>
+    <span class="n">quantities</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">AccuracyQuantitySpec</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">scorer</span><span class="p">:</span> <span class="n">TeacherScorer</span> <span class="o">|</span> <span class="n">BaseModelMixin</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">target_keys</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">loss_fn</span><span class="p">:</span> <span class="n">ComposedLossFunction</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">validation_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">default_training_fn</span><span class="p">,</span>
+    <span class="n">grad_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;enabled&quot;</span><span class="p">,</span> <span class="s2">&quot;disabled&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="n">label_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">distributed_manager</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;accuracy&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AccuracyMetrics</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Measure a student&#39;s error over a held-out set.</span>
+
+<span class="sd">    The pass runs through :class:`~nvalchemi.training.ValidationLoop`, so eval</span>
+<span class="sd">    mode and device placement behave as in training validation. The autograd</span>
+<span class="sd">    policy is settled before the loop runs, because a student that</span>
+<span class="sd">    differentiates inside its own forward needs gradients whatever is scored.</span>
+<span class="sd">    The loop is built without an autocast context, so the student predicts in</span>
+<span class="sd">    its own dtype. A bare *scorer* model labels with autocast disabled, the</span>
+<span class="sd">    in-process scorer&#39;s default; a supplied scorer decides its own precision.</span>
+<span class="sd">    The metrics are exact global residual sums accumulated in float64. The</span>
+<span class="sd">    loop&#39;s graph-balanced loss value is discarded.</span>
+
+<span class="sd">    ``targets=&quot;reference&quot;`` compares against the dataset&#39;s own labels.</span>
+<span class="sd">    ``targets=&quot;teacher&quot;`` compares against the ``teacher_*`` fields, which</span>
+<span class="sd">    :func:`~nvalchemi.training.distillation.label_dataset` writes offline or a</span>
+<span class="sd">    *scorer* writes on the fly. Against either family, the force-alignment</span>
+<span class="sd">    numbers fill in whenever forces are compared, and the per-atom energy</span>
+<span class="sd">    diagnostic whenever ``&quot;atomic_energies&quot;`` is requested and both sides carry</span>
+<span class="sd">    it. A *scorer* passed with reference targets is refused, because its</span>
+<span class="sd">    teacher pass would be paid for and thrown away.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : BaseModelMixin</span>
+<span class="sd">        Student to evaluate. The call leaves it in the training mode it arrived</span>
+<span class="sd">        in, and scores exactly the weights passed. For a student trained under</span>
+<span class="sd">        an ``EMAHook``, pass ``strategy.inference_model``. Nothing downstream</span>
+<span class="sd">        can tell which weights were scored, so record the choice on</span>
+<span class="sd">        :class:`~nvalchemi.training.distillation.evaluation.StudentEvaluation`.</span>
+<span class="sd">    data : Iterable[Batch]</span>
+<span class="sd">        Re-iterable held-out set. One-shot iterators are rejected.</span>
+<span class="sd">    targets : {&quot;reference&quot;, &quot;teacher&quot;}, optional</span>
+<span class="sd">        Family of batch fields to compare against. Default ``&quot;reference&quot;``.</span>
+<span class="sd">    quantities : Sequence[str | AccuracyQuantitySpec] | None, optional</span>
+<span class="sd">        Quantities to evaluate. Each entry is a built-in name from</span>
+<span class="sd">        :data:`BUILTIN_ACCURACY_QUANTITIES`, or an</span>
+<span class="sd">        :class:`AccuracyQuantitySpec` instance for a custom quantity, which is</span>
+<span class="sd">        reported under ``errors``. The built-in ``&quot;atomic_energies&quot;`` is a</span>
+<span class="sd">        diagnostic that never enters the pass&#39;s loss. Default ``None`` (energy</span>
+<span class="sd">        and forces).</span>
+<span class="sd">    scorer : TeacherScorer | BaseModelMixin | None, optional</span>
+<span class="sd">        Teacher that labels each batch before it is evaluated. A bare model is</span>
+<span class="sd">        wrapped in an</span>
+<span class="sd">        :class:`~nvalchemi.training.distillation.InProcessTeacherScorer` for</span>
+<span class="sd">        the requested quantities, and its labels are cast to *label_dtype*. A</span>
+<span class="sd">        supplied scorer&#39;s labels are not cast. Default ``None``.</span>
+<span class="sd">    target_keys : Mapping[str, str] | None, optional</span>
+<span class="sd">        Per-quantity overrides of the batch field to compare against. They take</span>
+<span class="sd">        precedence over the fields *targets* selects. Default ``None``.</span>
+<span class="sd">    loss_fn : ComposedLossFunction | None, optional</span>
+<span class="sd">        Loss driving the pass. Default ``None`` (mean-squared terms over the</span>
+<span class="sd">        requested supervised quantities).</span>
+<span class="sd">    validation_fn : Callable, optional</span>
+<span class="sd">        Forward callable invoked as ``validation_fn(model, batch)``. Default</span>
+<span class="sd">        :func:`~nvalchemi.training.default_training_fn`.</span>
+<span class="sd">    grad_mode : {&quot;auto&quot;, &quot;enabled&quot;, &quot;disabled&quot;}, optional</span>
+<span class="sd">        Autograd policy. ``&quot;auto&quot;`` enables gradients whenever the student&#39;s</span>
+<span class="sd">        forward needs them or the loss does. ``&quot;disabled&quot;`` is refused for a</span>
+<span class="sd">        student whose forward differentiates. Default ``&quot;auto&quot;``.</span>
+<span class="sd">    label_dtype : torch.dtype | None, optional</span>
+<span class="sd">        Dtype that a bare *scorer* model&#39;s labels are cast to. Default ``None``</span>
+<span class="sd">        (the dtype the distillation strategy infers for the student&#39;s own</span>
+<span class="sd">        labels: the dtype of its first floating-point parameter, floored at</span>
+<span class="sd">        float32).</span>
+<span class="sd">    device : torch.device | str | None, optional</span>
+<span class="sd">        Device the pass runs on. Default ``None`` (the model&#39;s own device).</span>
+<span class="sd">    distributed_manager : Any | None, optional</span>
+<span class="sd">        Manager used to all-reduce the metric sums. Default ``None``.</span>
+<span class="sd">    name : str, optional</span>
+<span class="sd">        Label stored on the result. Default ``&quot;accuracy&quot;``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    AccuracyMetrics</span>
+<span class="sd">        Errors and consistency diagnostics over the whole set.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *quantities* names an unknown quantity, repeats a name, or includes</span>
+<span class="sd">        no supervised quantity. If a quantity without a teacher signal is</span>
+<span class="sd">        compared against the teacher and has no ``target_keys`` entry. If a</span>
+<span class="sd">        *scorer* is given but no requested quantity is compared against a</span>
+<span class="sd">        teacher field, or the scorer does not publish the fields the</span>
+<span class="sd">        evaluation reads, or it returns a label outside ``teacher_*``. If</span>
+<span class="sd">        gradients are disabled for a student that differentiates inside its</span>
+<span class="sd">        forward. If a prediction and its target disagree on shape, or if no</span>
+<span class="sd">        metric could be measured on any rank. If any rank received no batches:</span>
+<span class="sd">        the refusal is raised on every rank, naming the empty ones, before the</span>
+<span class="sd">        pass starts.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import evaluate_accuracy</span>
+<span class="sd">    &gt;&gt;&gt; metrics = evaluate_accuracy(student, holdout)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; metrics.forces_mae  # doctest: +SKIP</span>
+<span class="sd">    0.031</span>
+
+<span class="sd">    Against the teacher, labeling on the fly:</span>
+
+<span class="sd">    &gt;&gt;&gt; metrics = evaluate_accuracy(  # doctest: +SKIP</span>
+<span class="sd">    ...     student,</span>
+<span class="sd">    ...     holdout,</span>
+<span class="sd">    ...     targets=&quot;teacher&quot;,</span>
+<span class="sd">    ...     scorer=teacher,</span>
+<span class="sd">    ...     quantities=(&quot;energy&quot;, &quot;forces&quot;, &quot;atomic_energies&quot;),</span>
+<span class="sd">    ... )</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The student is called through *validation_fn* exactly as a training loop</span>
+<span class="sd">    would call it. A student that reads a neighbor list therefore needs batches</span>
+<span class="sd">    that carry one. A *scorer* builds the teacher&#39;s own list for each batch and</span>
+<span class="sd">    rolls it back afterwards.</span>
+
+<span class="sd">    ``grad_mode=&quot;auto&quot;`` reads the student&#39;s ``autograd_outputs``, the same</span>
+<span class="sd">    declaration that :meth:`~nvalchemi.models.base.BaseModelMixin.adapt_input`</span>
+<span class="sd">    reads, and looks through any ``DistributedDataParallel`` or similar wrapper</span>
+<span class="sd">    to find it. An autograd-force student is therefore scored with gradients</span>
+<span class="sd">    even when only energies are compared. Narrowing its ``active_outputs`` puts</span>
+<span class="sd">    it back on the ``torch.no_grad()`` path.</span>
+
+<span class="sd">    Under a distributed run, every rank must call this function with the same</span>
+<span class="sd">    *quantities* and a non-empty shard. The sums are packed in one key order</span>
+<span class="sd">    before the all-reduce, so packs of different shapes would deadlock. Whether</span>
+<span class="sd">    each rank has a batch is exchanged before the pass, because the validation</span>
+<span class="sd">    loop raises on an empty shard before its own summary reduce and would</span>
+<span class="sd">    strand the other ranks there; the refusal names the empty ranks on every</span>
+<span class="sd">    rank instead. Shard sizes, and the targets each shard carries, may differ:</span>
+<span class="sd">    a shard with no target for a quantity contributes zeros to its sums.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">specs</span> <span class="o">=</span> <span class="n">_resolve_quantities</span><span class="p">(</span><span class="n">quantities</span><span class="p">)</span>
+    <span class="n">requested</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">)</span>
+    <span class="n">teacher_keys</span> <span class="o">=</span> <span class="n">_teacher_target_keys</span><span class="p">(</span><span class="n">specs</span><span class="p">)</span>
+    <span class="n">base</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">teacher_keys</span>
+        <span class="k">if</span> <span class="n">targets</span> <span class="o">==</span> <span class="s2">&quot;teacher&quot;</span>
+        <span class="k">else</span> <span class="p">{</span><span class="n">spec</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">spec</span><span class="o">.</span><span class="n">reference_key</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">}</span>
+    <span class="p">)</span>
+    <span class="n">resolved_keys</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">base</span><span class="p">)</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">(</span><span class="n">target_keys</span> <span class="ow">or</span> <span class="p">{})</span>
+    <span class="n">unresolved</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">requested</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">resolved_keys</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">unresolved</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Quantities </span><span class="si">{</span><span class="n">unresolved</span><span class="si">!r}</span><span class="s2"> declare no teacher signal, so &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;targets=</span><span class="si">{</span><span class="n">targets</span><span class="si">!r}</span><span class="s2"> has no field to compare them against; name &quot;</span>
+            <span class="s2">&quot;the teacher field in target_keys or give the spec a signal.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">compared</span> <span class="o">=</span> <span class="p">{</span><span class="n">resolved_keys</span><span class="p">[</span><span class="n">quantity</span><span class="p">]</span> <span class="k">for</span> <span class="n">quantity</span> <span class="ow">in</span> <span class="n">requested</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">scorer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="n">compared</span> <span class="o">&amp;</span> <span class="nb">set</span><span class="p">(</span><span class="n">teacher_keys</span><span class="o">.</span><span class="n">values</span><span class="p">())):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;A scorer was given, but targets=</span><span class="si">{</span><span class="n">targets</span><span class="si">!r}</span><span class="s2"> compares against &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">compared</span><span class="p">)</span><span class="si">!r}</span><span class="s2">, none of which is a teacher field. The teacher &quot;</span>
+            <span class="s2">&quot;pass would be paid and thrown away, and the reported errors would be &quot;</span>
+            <span class="s2">&quot;against the dataset&#39;s own labels rather than the teacher&#39;s. Pass &quot;</span>
+            <span class="s2">&quot;targets=&#39;teacher&#39;, drop the scorer, or name the teacher fields to &quot;</span>
+            <span class="s2">&quot;compare against in target_keys.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">differentiated</span> <span class="o">=</span> <span class="n">_requires_autograd</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">differentiated</span> <span class="ow">and</span> <span class="n">grad_mode</span> <span class="o">==</span> <span class="s2">&quot;disabled&quot;</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Student </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2"> computes an active output by &quot;</span>
+            <span class="s2">&quot;differentiating inside its own forward, so it needs autograd &quot;</span>
+            <span class="s2">&quot;whatever is being scored; got grad_mode=&#39;disabled&#39;. Pass &quot;</span>
+            <span class="s2">&quot;grad_mode=&#39;auto&#39;, or narrow the student&#39;s model_config.active_outputs &quot;</span>
+            <span class="s2">&quot;so it stops differentiating.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">resolved_device</span> <span class="o">=</span> <span class="n">_resolve_device</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+
+    <span class="n">reiterable</span> <span class="o">=</span> <span class="n">ensure_reiterable_validation_data</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">empty</span> <span class="o">=</span> <span class="n">all_reduce_flags</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">reiterable</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span> <span class="n">distributed_manager</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">empty</span><span class="o">.</span><span class="n">any</span><span class="p">()):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;evaluate_accuracy received no batches on rank(s) &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">empty</span><span class="o">.</span><span class="n">nonzero</span><span class="p">()</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">!r}</span><span class="s2">. Under a distributed run the &quot;</span>
+            <span class="s2">&quot;sums are all-reduced across ranks, so every rank needs at least one &quot;</span>
+            <span class="s2">&quot;batch of the held-out set; shard it so none comes up empty.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">signals</span> <span class="o">=</span> <span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">signal</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span> <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">signal</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="n">evaluation_data</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Batch</span><span class="p">]</span> <span class="o">=</span> <span class="n">_PlacedBatches</span><span class="p">(</span>
+        <span class="n">reiterable</span><span class="p">,</span>
+        <span class="n">resolved_device</span><span class="p">,</span>
+        <span class="n">scorer</span><span class="o">=</span><span class="p">(</span>
+            <span class="n">_as_scorer</span><span class="p">(</span>
+                <span class="n">scorer</span><span class="p">,</span>
+                <span class="n">signals</span><span class="p">,</span>
+                <span class="n">_student_label_dtype</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="k">if</span> <span class="n">label_dtype</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">label_dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">scorer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="n">accumulator</span> <span class="o">=</span> <span class="n">_MetricAccumulator</span><span class="p">(</span><span class="n">resolved_device</span><span class="p">,</span> <span class="n">specs</span><span class="p">,</span> <span class="n">resolved_keys</span><span class="p">)</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">ValidationConfig</span><span class="p">(</span>
+        <span class="n">validation_data</span><span class="o">=</span><span class="n">evaluation_data</span><span class="p">,</span>
+        <span class="n">loss_fn</span><span class="o">=</span><span class="n">loss_fn</span> <span class="ow">or</span> <span class="n">_metric_loss</span><span class="p">(</span><span class="n">specs</span><span class="p">,</span> <span class="n">resolved_keys</span><span class="p">),</span>
+        <span class="n">grad_mode</span><span class="o">=</span><span class="n">grad_mode</span><span class="p">,</span>
+        <span class="n">batch_callback</span><span class="o">=</span><span class="n">accumulator</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">loop</span> <span class="o">=</span> <span class="n">ValidationLoop</span><span class="p">(</span>
+        <span class="n">validation_data</span><span class="o">=</span><span class="n">evaluation_data</span><span class="p">,</span>
+        <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">resolved_device</span><span class="p">,</span>
+        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+        <span class="n">validation_fn</span><span class="o">=</span><span class="n">validation_fn</span><span class="p">,</span>
+        <span class="n">grad_enabled</span><span class="o">=</span><span class="kc">True</span> <span class="k">if</span> <span class="n">differentiated</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">distributed_manager</span><span class="o">=</span><span class="n">distributed_manager</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">with</span> <span class="n">loop</span><span class="p">:</span>
+        <span class="n">loop</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">accumulator</span><span class="o">.</span><span class="n">metrics</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">distributed_manager</span><span class="o">=</span><span class="n">distributed_manager</span><span class="p">)</span></div>
+
+
+
+<span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_displaced</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Swap *positions* onto *batch* for the block, restoring the originals after.&quot;&quot;&quot;</span>
+    <span class="n">original</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">positions</span> <span class="o">=</span> <span class="n">positions</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">positions</span> <span class="o">=</span> <span class="n">original</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_probe_directions</span><span class="p">(</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return two per-graph orthogonal displacement directions for *batch*.</span>
+
+<span class="sd">    Each direction has unit root-mean-square per-atom norm within each graph.</span>
+<span class="sd">    Scaling a direction by ``amplitude`` therefore moves the atoms by</span>
+<span class="sd">    ``amplitude`` in root-mean-square, whatever the graph&#39;s size. Normalizing</span>
+<span class="sd">    by the graph&#39;s Frobenius norm instead would shrink the step as</span>
+<span class="sd">    ``1 / sqrt(N)``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span>
+    <span class="n">device</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span> <span class="k">if</span> <span class="n">generator</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">generator</span><span class="o">.</span><span class="n">device</span>
+    <span class="n">shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+    <span class="n">second</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+    <span class="n">index</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+    <span class="n">overlap</span> <span class="o">=</span> <span class="n">per_graph_sum</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">first</span> <span class="o">*</span> <span class="n">second</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+    <span class="p">)</span>
+    <span class="n">norm</span> <span class="o">=</span> <span class="n">per_graph_sum</span><span class="p">(</span>
+        <span class="n">first</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+    <span class="p">)</span>
+    <span class="n">second</span> <span class="o">=</span> <span class="n">second</span> <span class="o">-</span> <span class="p">(</span><span class="n">overlap</span> <span class="o">/</span> <span class="n">norm</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="n">_EPS</span><span class="p">))[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">first</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="n">first</span> <span class="o">/</span> <span class="p">(</span><span class="n">norm</span> <span class="o">/</span> <span class="n">sizes</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="n">_EPS</span><span class="p">)[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">second_norm</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">per_graph_sum</span><span class="p">(</span>
+            <span class="n">second</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="p">)</span>
+        <span class="o">/</span> <span class="n">sizes</span>
+    <span class="p">)</span>
+    <span class="n">second</span> <span class="o">=</span> <span class="n">second</span> <span class="o">/</span> <span class="n">second_norm</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="n">_EPS</span><span class="p">)[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span>
+
+
+<div class="viewcode-block" id="non_conservative_residual">
+<a class="viewcode-back" href="../../../../../modules/training/generated/nvalchemi.training.distillation.evaluation.non_conservative_residual.html#nvalchemi.training.distillation.evaluation.non_conservative_residual">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">non_conservative_residual</span><span class="p">(</span>
+    <span class="n">teacher</span><span class="p">:</span> <span class="n">TeacherScorer</span> <span class="o">|</span> <span class="n">BaseModelMixin</span><span class="p">,</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Batch</span><span class="p">]</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">num_loops</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">segments</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NonConservativeResidual</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Estimate the part of a teacher&#39;s force field no conservative student can fit.</span>
+
+<span class="sd">    For each graph, two orthogonal directions :math:`u` and :math:`v`, each</span>
+<span class="sd">    with unit root-mean-square per-atom norm, span a square loop of side</span>
+<span class="sd">    *amplitude* :math:`\varepsilon` through configuration space. The teacher&#39;s</span>
+<span class="sd">    work :math:`W = \oint F \cdot \mathrm{d}R` around the loop is integrated</span>
+<span class="sd">    with the midpoint rule at *segments* samples per side. A conservative field</span>
+<span class="sd">    integrates to zero, so :math:`W` measures the non-conservative component</span>
+<span class="sd">    alone. The loop&#39;s path length is :math:`4 \varepsilon \sqrt{N}`, so by</span>
+<span class="sd">    Cauchy-Schwarz :math:`|W| / (4 \varepsilon N)` is a lower bound on the</span>
+<span class="sd">    largest root-mean-square per-atom force error a conservative student makes</span>
+<span class="sd">    on that loop. This bound is reported as ``force_floor``.</span>
+
+<span class="sd">    The floor is a bound at the probed displacement scale, not a dataset-wide</span>
+<span class="sd">    error bar. It shrinks linearly with *amplitude*, so choose an amplitude on</span>
+<span class="sd">    the order of a thermal vibration. One randomly oriented loop sees a</span>
+<span class="sd">    :math:`1 / \sqrt{3N}` fraction of the field&#39;s curl, so floors are</span>
+<span class="sd">    comparable only between probes of similar system size. A conservative</span>
+<span class="sd">    teacher reports the midpoint rule&#39;s quadrature error and, below that, the</span>
+<span class="sd">    round-off of the batch&#39;s own dtype. A floor below the float32 round-off</span>
+<span class="sd">    plateau needs a float64 batch and teacher. See</span>
+<span class="sd">    :ref:`distillation-evaluation` for the magnitudes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    teacher : TeacherScorer | BaseModelMixin</span>
+<span class="sd">        Teacher whose field is probed. A bare model is wrapped in an</span>
+<span class="sd">        :class:`~nvalchemi.training.distillation.InProcessTeacherScorer`, which</span>
+<span class="sd">        builds and rolls back the teacher&#39;s neighbor list at each probe point.</span>
+<span class="sd">    data : Iterable[Batch] | Batch</span>
+<span class="sd">        Held-out structures to probe. Positions are displaced in place and</span>
+<span class="sd">        restored before returning.</span>
+<span class="sd">    num_loops : int, optional</span>
+<span class="sd">        Loops integrated per graph. Default ``4``.</span>
+<span class="sd">    amplitude : float, optional</span>
+<span class="sd">        Loop side length in A, as a per-atom displacement. Default ``0.05``.</span>
+<span class="sd">    segments : int, optional</span>
+<span class="sd">        Midpoint-rule samples per side; one loop costs ``4 * segments`` teacher</span>
+<span class="sd">        force evaluations. Default ``4``.</span>
+<span class="sd">    generator : torch.Generator | None, optional</span>
+<span class="sd">        Generator drawing the loop directions. Default ``None`` (the global</span>
+<span class="sd">        RNG).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    NonConservativeResidual</span>
+<span class="sd">        Loop work, the force floor it implies, and its size relative to the</span>
+<span class="sd">        teacher&#39;s own force scale.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If *amplitude*, *num_loops*, or *segments* is not positive, if the</span>
+<span class="sd">        scorer does not publish the teacher force field, or if *data* holds no</span>
+<span class="sd">        graphs.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from nvalchemi.training.distillation.evaluation import (</span>
+<span class="sd">    ...     non_conservative_residual,</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; residual = non_conservative_residual(teacher, holdout)  # doctest: +SKIP</span>
+<span class="sd">    &gt;&gt;&gt; residual.relative_floor  # doctest: +SKIP</span>
+<span class="sd">    0.02</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">amplitude</span> <span class="o">&lt;=</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="n">num_loops</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">segments</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;amplitude, num_loops, and segments must all be positive; got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;amplitude=</span><span class="si">{</span><span class="n">amplitude</span><span class="si">!r}</span><span class="s2">, num_loops=</span><span class="si">{</span><span class="n">num_loops</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;segments=</span><span class="si">{</span><span class="n">segments</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">scorer</span> <span class="o">=</span> <span class="n">_as_scorer</span><span class="p">(</span><span class="n">teacher</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">])</span>
+    <span class="n">works</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">sizes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">graph_scales</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">force_squares</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="p">[</span><span class="n">data</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Batch</span><span class="p">)</span> <span class="k">else</span> <span class="n">data</span><span class="p">:</span>
+        <span class="n">squares</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">scorer</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="n">batch</span><span class="p">)[</span><span class="s2">&quot;teacher_forces&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">force_squares</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">squares</span><span class="p">)</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">per_graph_sum</span><span class="p">(</span><span class="n">squares</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">)</span>
+            <span class="o">/</span> <span class="n">counts</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_loops</span><span class="p">):</span>
+            <span class="n">first</span><span class="p">,</span> <span class="n">second</span> <span class="o">=</span> <span class="n">_probe_directions</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">generator</span><span class="p">)</span>
+            <span class="n">works</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">_loop_work</span><span class="p">(</span><span class="n">scorer</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">base</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span><span class="p">,</span> <span class="n">amplitude</span><span class="p">,</span> <span class="n">segments</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span>
+            <span class="n">graph_scales</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">works</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;data must hold at least one graph to probe.&quot;</span><span class="p">)</span>
+    <span class="n">work</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">works</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">floor</span> <span class="o">=</span> <span class="n">work</span> <span class="o">/</span> <span class="p">(</span><span class="mf">4.0</span> <span class="o">*</span> <span class="n">amplitude</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">sizes</span><span class="p">))</span>
+    <span class="n">relative</span> <span class="o">=</span> <span class="n">floor</span> <span class="o">/</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">graph_scales</span><span class="p">)</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="n">_EPS</span><span class="p">)</span>
+    <span class="n">magnitudes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">force_squares</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">NonConservativeResidual</span><span class="p">(</span>
+        <span class="n">num_probes</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">work</span><span class="o">.</span><span class="n">numel</span><span class="p">()),</span>
+        <span class="n">amplitude</span><span class="o">=</span><span class="n">amplitude</span><span class="p">,</span>
+        <span class="n">segments</span><span class="o">=</span><span class="n">segments</span><span class="p">,</span>
+        <span class="n">loop_work_mean_abs</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">work</span><span class="o">.</span><span class="n">mean</span><span class="p">()),</span>
+        <span class="n">loop_work_max_abs</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">work</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span>
+        <span class="n">force_floor</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">floor</span><span class="o">.</span><span class="n">mean</span><span class="p">()),</span>
+        <span class="n">force_floor_max</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">floor</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span>
+        <span class="n">force_rms</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">magnitudes</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()),</span>
+        <span class="n">relative_floor</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">relative</span><span class="o">.</span><span class="n">mean</span><span class="p">()),</span>
+        <span class="n">relative_floor_max</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">relative</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_loop_work</span><span class="p">(</span>
+    <span class="n">scorer</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+    <span class="n">base</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">first</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">second</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">segments</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Integrate the teacher&#39;s work around one closed rectangular loop.</span>
+
+<span class="sd">    The samples nearly cancel, so they are accumulated in float64. The probe</span>
+<span class="sd">    points are laid out around each graph&#39;s own centroid. The precision with</span>
+<span class="sd">    which a displaced position is represented, and so the floor a conservative</span>
+<span class="sd">    teacher reports, then does not depend on where in space a graph sits or</span>
+<span class="sd">    how far it lies from the other graphs in the batch.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">base</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">centered</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">base</span>
+        <span class="o">-</span> <span class="p">(</span><span class="n">per_graph_sum</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">)</span> <span class="o">/</span> <span class="n">counts</span><span class="p">)[</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">corners</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">first</span><span class="p">),</span>
+        <span class="n">amplitude</span> <span class="o">*</span> <span class="n">first</span><span class="p">,</span>
+        <span class="n">amplitude</span> <span class="o">*</span> <span class="p">(</span><span class="n">first</span> <span class="o">+</span> <span class="n">second</span><span class="p">),</span>
+        <span class="n">amplitude</span> <span class="o">*</span> <span class="n">second</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">work</span> <span class="o">=</span> <span class="n">base</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">corners</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="p">(</span><span class="n">corners</span><span class="p">[(</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">4</span><span class="p">]</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span> <span class="o">/</span> <span class="n">segments</span>
+        <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">segments</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">_displaced</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">centered</span> <span class="o">+</span> <span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">step</span> <span class="o">*</span> <span class="p">(</span><span class="n">sample</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">))):</span>
+                <span class="n">forces</span> <span class="o">=</span> <span class="n">scorer</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="n">batch</span><span class="p">)[</span><span class="s2">&quot;teacher_forces&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">contribution</span> <span class="o">=</span> <span class="p">(</span><span class="n">forces</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">*</span> <span class="n">step</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span>
+                <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span>
+            <span class="p">)</span>
+            <span class="n">work</span> <span class="o">=</span> <span class="n">work</span> <span class="o">+</span> <span class="n">per_graph_sum</span><span class="p">(</span>
+                <span class="n">contribution</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="n">work</span>
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

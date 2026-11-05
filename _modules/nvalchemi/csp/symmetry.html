@@ -1,0 +1,1255 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.csp.symmetry &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/csp/symmetry';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.cs...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.csp.symmetry</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+
+<span class="sd">&quot;&quot;&quot;Space-group operations, crystal-system metadata, and sampling helpers.</span>
+
+<span class="sd">The source CSP project supplies the pinned standard-setting Hall-number</span>
+<span class="sd">mapping. Operation tables were regenerated from the spglib 2.7.0 Hall database</span>
+<span class="sd">using that mapping; the bundled sampling prior is CSD-derived. Operations use</span>
+<span class="sd">International space-group numbers ``1..230`` and store each fractional</span>
+<span class="sd">operation as a ``[3, 4]`` matrix ``[R | t]``.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">lru_cache</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numbers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Integral</span><span class="p">,</span> <span class="n">Real</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">MappingProxyType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseModel</span><span class="p">,</span>
+    <span class="n">ConfigDict</span><span class="p">,</span>
+    <span class="n">Field</span><span class="p">,</span>
+    <span class="n">field_serializer</span><span class="p">,</span>
+    <span class="n">field_validator</span><span class="p">,</span>
+    <span class="n">model_validator</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp._data_tables</span><span class="w"> </span><span class="kn">import</span> <span class="n">SPACE_GROUP_PROBABILITIES</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp._space_group_tables</span><span class="w"> </span><span class="kn">import</span> <span class="n">SG_OPS_IDX</span><span class="p">,</span> <span class="n">SG_OPS_PTR</span><span class="p">,</span> <span class="n">SYMM_OPS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.csp._validation</span><span class="w"> </span><span class="kn">import</span> <span class="n">positive_integer</span>
+
+<span class="n">Device</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="c1"># Each entry is (first space-group number, last space-group number,</span>
+<span class="c1"># zero-based crystal-system code). The codes follow the CrystalSystem enum below.</span>
+<span class="n">_CRYSTAL_SYSTEM_RANGES</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+    <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">74</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+    <span class="p">(</span><span class="mi">75</span><span class="p">,</span> <span class="mi">142</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="p">(</span><span class="mi">143</span><span class="p">,</span> <span class="mi">167</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+    <span class="p">(</span><span class="mi">168</span><span class="p">,</span> <span class="mi">194</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+    <span class="p">(</span><span class="mi">195</span><span class="p">,</span> <span class="mi">230</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="c1"># International numbers for chirality-preserving (proper-rotation-only) groups</span>
+<span class="c1"># queried by :func:`is_sohncke_space_group`.</span>
+<span class="c1"># fmt: off</span>
+<span class="n">_SOHNCKE</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">17</span><span class="p">,</span> <span class="mi">18</span><span class="p">,</span> <span class="mi">19</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">21</span><span class="p">,</span> <span class="mi">22</span><span class="p">,</span> <span class="mi">23</span><span class="p">,</span>
+        <span class="mi">24</span><span class="p">,</span> <span class="mi">75</span><span class="p">,</span> <span class="mi">76</span><span class="p">,</span> <span class="mi">77</span><span class="p">,</span> <span class="mi">78</span><span class="p">,</span> <span class="mi">79</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="mi">89</span><span class="p">,</span> <span class="mi">90</span><span class="p">,</span> <span class="mi">91</span><span class="p">,</span> <span class="mi">92</span><span class="p">,</span> <span class="mi">93</span><span class="p">,</span>
+        <span class="mi">94</span><span class="p">,</span> <span class="mi">95</span><span class="p">,</span> <span class="mi">96</span><span class="p">,</span> <span class="mi">97</span><span class="p">,</span> <span class="mi">98</span><span class="p">,</span> <span class="mi">143</span><span class="p">,</span> <span class="mi">144</span><span class="p">,</span> <span class="mi">145</span><span class="p">,</span> <span class="mi">146</span><span class="p">,</span> <span class="mi">149</span><span class="p">,</span> <span class="mi">150</span><span class="p">,</span> <span class="mi">151</span><span class="p">,</span>
+        <span class="mi">152</span><span class="p">,</span> <span class="mi">153</span><span class="p">,</span> <span class="mi">154</span><span class="p">,</span> <span class="mi">155</span><span class="p">,</span> <span class="mi">168</span><span class="p">,</span> <span class="mi">169</span><span class="p">,</span> <span class="mi">170</span><span class="p">,</span> <span class="mi">171</span><span class="p">,</span> <span class="mi">172</span><span class="p">,</span> <span class="mi">173</span><span class="p">,</span> <span class="mi">177</span><span class="p">,</span>
+        <span class="mi">178</span><span class="p">,</span> <span class="mi">179</span><span class="p">,</span> <span class="mi">180</span><span class="p">,</span> <span class="mi">181</span><span class="p">,</span> <span class="mi">182</span><span class="p">,</span> <span class="mi">195</span><span class="p">,</span> <span class="mi">196</span><span class="p">,</span> <span class="mi">197</span><span class="p">,</span> <span class="mi">198</span><span class="p">,</span> <span class="mi">199</span><span class="p">,</span>
+        <span class="mi">207</span><span class="p">,</span> <span class="mi">208</span><span class="p">,</span> <span class="mi">209</span><span class="p">,</span> <span class="mi">210</span><span class="p">,</span> <span class="mi">211</span><span class="p">,</span> <span class="mi">212</span><span class="p">,</span> <span class="mi">213</span><span class="p">,</span> <span class="mi">214</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="c1"># fmt: on</span>
+
+
+<div class="viewcode-block" id="CrystalSystem">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.CrystalSystem.html#nvalchemi.csp.CrystalSystem">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CrystalSystem</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The seven crystallographic crystal systems.&quot;&quot;&quot;</span>
+
+    <span class="n">TRICLINIC</span> <span class="o">=</span> <span class="s2">&quot;triclinic&quot;</span>
+    <span class="n">MONOCLINIC</span> <span class="o">=</span> <span class="s2">&quot;monoclinic&quot;</span>
+    <span class="n">ORTHORHOMBIC</span> <span class="o">=</span> <span class="s2">&quot;orthorhombic&quot;</span>
+    <span class="n">TETRAGONAL</span> <span class="o">=</span> <span class="s2">&quot;tetragonal&quot;</span>
+    <span class="n">TRIGONAL</span> <span class="o">=</span> <span class="s2">&quot;trigonal&quot;</span>
+    <span class="n">HEXAGONAL</span> <span class="o">=</span> <span class="s2">&quot;hexagonal&quot;</span>
+    <span class="n">CUBIC</span> <span class="o">=</span> <span class="s2">&quot;cubic&quot;</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_space_group</span><span class="p">(</span><span class="n">space_group</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return an International space-group number after range validation.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">space_group</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">space_group</span><span class="p">,</span> <span class="n">Integral</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;space_group must be an integer&quot;</span><span class="p">)</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">space_group</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">number</span> <span class="o">&lt;=</span> <span class="mi">230</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;space_group must be in [1, 230]&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">number</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_positive_integer</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a positive integral value, rejecting booleans.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">positive_integer</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be an integer&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_table</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check that bundled operation and pointer tables have consistent shapes.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">SYMM_OPS</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">SYMM_OPS</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">12</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;space-group operations must have shape [K, 12]&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">SG_OPS_IDX</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">SG_OPS_PTR</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">231</span><span class="p">,):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;space-group pointer and index tables have invalid shapes&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">SG_OPS_PTR</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">int</span><span class="p">(</span><span class="n">SG_OPS_PTR</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">!=</span> <span class="n">SG_OPS_IDX</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;space-group operation pointers do not cover the index table&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">SG_OPS_PTR</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;every space group must have at least one operation&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">SG_OPS_IDX</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="mi">4425</span>
+        <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">SG_OPS_IDX</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">SG_OPS_IDX</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">SYMM_OPS</span><span class="p">))</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;space-group operation indices are malformed&quot;</span><span class="p">)</span>
+
+
+<span class="n">_validate_table</span><span class="p">()</span>
+
+
+<span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_default_probabilities</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return cached, validated default space-group sampling weights.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_validate_probabilities</span><span class="p">(</span><span class="n">SPACE_GROUP_PROBABILITIES</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_probabilities</span><span class="p">(</span><span class="n">probabilities</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Copy and validate finite nonnegative weights keyed by space group.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">probabilities</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;probabilities must be a mapping&quot;</span><span class="p">)</span>
+    <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">probabilities</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">number</span> <span class="o">=</span> <span class="n">_validate_space_group</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Real</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;probability weights must be real numbers&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">weight</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">OverflowError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;probability weights must be finite and nonnegative&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">weight</span><span class="p">)</span> <span class="ow">or</span> <span class="n">weight</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;probability weights must be finite and nonnegative&quot;</span><span class="p">)</span>
+        <span class="n">result</span><span class="p">[</span><span class="n">number</span><span class="p">]</span> <span class="o">=</span> <span class="n">weight</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalize_policy_probabilities</span><span class="p">(</span>
+    <span class="n">probabilities</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize canonical serialized group keys and detect key collisions.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">probabilities</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;probabilities must be a mapping&quot;</span><span class="p">)</span>
+
+    <span class="n">normalized</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">probabilities</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="ow">not</span> <span class="n">key</span>
+                <span class="ow">or</span> <span class="ow">not</span> <span class="n">key</span><span class="o">.</span><span class="n">isascii</span><span class="p">()</span>
+                <span class="ow">or</span> <span class="ow">not</span> <span class="n">key</span><span class="o">.</span><span class="n">isdecimal</span><span class="p">()</span>
+                <span class="ow">or</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">))</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;serialized space-group keys must be canonical decimal strings&quot;</span>
+                <span class="p">)</span>
+            <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">number</span> <span class="o">=</span> <span class="n">key</span>
+
+        <span class="n">number</span> <span class="o">=</span> <span class="n">_validate_space_group</span><span class="p">(</span><span class="n">number</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">normalized</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;probabilities contain multiple keys for space group </span><span class="si">{</span><span class="n">number</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">normalized</span><span class="p">[</span><span class="n">number</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="n">normalized</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a validated nonnegative seed, preserving public error categories.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">Integral</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;seed must be an integer or None&quot;</span><span class="p">)</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;seed must be nonnegative&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">value</span>
+
+
+<div class="viewcode-block" id="SpaceGroupPolicy">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.SpaceGroupPolicy.html#nvalchemi.csp.SpaceGroupPolicy">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SpaceGroupPolicy</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Immutable fixed or weighted-sampling rule for crystal space groups.</span>
+
+<span class="sd">    Construct policies with :meth:`fixed` or :meth:`sampled`. A sampled</span>
+<span class="sd">    policy stores an optional replacement prior and crystallographic filters;</span>
+<span class="sd">    its compatibility depends on the operation count required by a packing</span>
+<span class="sd">    configuration or a standalone :meth:`draw` call. Policies can be saved</span>
+<span class="sd">    and restored with Pydantic&#39;s JSON text, JSON-mode dictionary, or Python-mode</span>
+<span class="sd">    dictionary serialization routes. Restored model data accepts canonical</span>
+<span class="sd">    decimal string keys for ``probabilities`` and serialized</span>
+<span class="sd">    :class:`CrystalSystem` values; convenience sampling helpers continue to</span>
+<span class="sd">    require integer keys and enum values.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;fixed&quot;</span><span class="p">,</span> <span class="s2">&quot;sampled&quot;</span><span class="p">]</span>
+    <span class="n">group</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">probabilities</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">crystal_system</span><span class="p">:</span> <span class="n">CrystalSystem</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">sohncke_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;probabilities&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_copy_probabilities</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Normalize, copy, and validate caller-owned prior mappings.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">_validate_probabilities</span><span class="p">(</span><span class="n">_normalize_policy_probabilities</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;probabilities&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_freeze_probabilities</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expose the copied prior through a read-only mapping.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">MappingProxyType</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+
+    <span class="nd">@field_serializer</span><span class="p">(</span><span class="s2">&quot;probabilities&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_serialize_probabilities</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ordinary mapping data for Python and JSON serialization.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;crystal_system&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_crystal_system</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">CrystalSystem</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">value</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">CrystalSystem</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;crystal_system must be a CrystalSystem or None&quot;</span><span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SpaceGroupPolicy</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sohncke_only</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;sohncke_only must be a bool&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;fixed&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;fixed policies require a space-group number&quot;</span><span class="p">)</span>
+            <span class="n">group</span> <span class="o">=</span> <span class="n">_validate_space_group</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">group</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">probabilities</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">crystal_system</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;fixed policies cannot include probabilities or crystal_system&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sohncke_only</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_sohncke_space_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;fixed group must be a Sohncke group when sohncke_only=True&quot;</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;sampled policies cannot specify a fixed group&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+<div class="viewcode-block" id="SpaceGroupPolicy.fixed">
+<a class="viewcode-back" href="../../../modules/csp.html#nvalchemi.csp.SpaceGroupPolicy.fixed">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fixed</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">group</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">sohncke_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SpaceGroupPolicy</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a policy that always selects one compatible group.</span>
+
+<span class="sd">        The group number and optional handedness requirement are checked</span>
+<span class="sd">        immediately. Its operation count is checked when the policy enters a</span>
+<span class="sd">        packing configuration or a draw.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        group : int</span>
+<span class="sd">            International space-group number in ``[1, 230]``.</span>
+<span class="sd">        sohncke_only : bool, default=False</span>
+<span class="sd">            Require the selected group to preserve molecular handedness.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        policy : SpaceGroupPolicy</span>
+<span class="sd">            Frozen fixed-group policy.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``group`` is not a non-boolean integer or ``sohncke_only`` is</span>
+<span class="sd">            not a boolean.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``group`` is outside ``[1, 230]`` or is not a Sohncke group when</span>
+<span class="sd">            ``sohncke_only=True``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">number</span> <span class="o">=</span> <span class="n">_validate_space_group</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sohncke_only</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;sohncke_only must be a bool&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;fixed&quot;</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">number</span><span class="p">,</span> <span class="n">sohncke_only</span><span class="o">=</span><span class="n">sohncke_only</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SpaceGroupPolicy.sampled">
+<a class="viewcode-back" href="../../../modules/csp.html#nvalchemi.csp.SpaceGroupPolicy.sampled">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sampled</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">probabilities</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">crystal_system</span><span class="p">:</span> <span class="n">CrystalSystem</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">sohncke_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SpaceGroupPolicy</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a policy that samples compatible groups with replacement.</span>
+
+<span class="sd">        A custom mapping replaces the bundled CSD weights. Missing entries</span>
+<span class="sd">        have zero weight, and positive compatible weights are normalized when</span>
+<span class="sd">        resolving a draw or packing configuration.</span>
+
+<span class="sd">        Construction validates and copies the supplied weights. Compatibility</span>
+<span class="sd">        and positive remaining weight are checked when the policy enters a</span>
+<span class="sd">        packing configuration or a draw.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        probabilities : Mapping[int, float], optional</span>
+<span class="sd">            Replacement relative weights keyed by group number.</span>
+<span class="sd">        crystal_system : CrystalSystem, optional</span>
+<span class="sd">            Restrict selection to one crystallographic system.</span>
+<span class="sd">        sohncke_only : bool, default=False</span>
+<span class="sd">            Keep only groups whose symmetry-generated copies preserve</span>
+<span class="sd">            molecular handedness.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        policy : SpaceGroupPolicy</span>
+<span class="sd">            Frozen sampled-group policy with a copied prior mapping.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``probabilities`` is not a mapping, a key or weight has an</span>
+<span class="sd">            invalid type, ``crystal_system`` is not a ``CrystalSystem``, or</span>
+<span class="sd">            ``sohncke_only`` is not a boolean.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a key is outside ``[1, 230]`` or a weight is negative or</span>
+<span class="sd">            nonfinite.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">crystal_system</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">crystal_system</span><span class="p">,</span> <span class="n">CrystalSystem</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;crystal_system must be a CrystalSystem or None&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sohncke_only</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;sohncke_only must be a bool&quot;</span><span class="p">)</span>
+        <span class="n">clean_prior</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="kc">None</span> <span class="k">if</span> <span class="n">probabilities</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_validate_probabilities</span><span class="p">(</span><span class="n">probabilities</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;sampled&quot;</span><span class="p">,</span>
+            <span class="n">probabilities</span><span class="o">=</span><span class="n">clean_prior</span><span class="p">,</span>
+            <span class="n">crystal_system</span><span class="o">=</span><span class="n">crystal_system</span><span class="p">,</span>
+            <span class="n">sohncke_only</span><span class="o">=</span><span class="n">sohncke_only</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SpaceGroupPolicy.draw">
+<a class="viewcode-back" href="../../../modules/csp.html#nvalchemi.csp.SpaceGroupPolicy.draw">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">draw</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_operations</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Draw compatible International space-group numbers with replacement.</span>
+
+<span class="sd">        Fixed policies repeat their group without advancing the random</span>
+<span class="sd">        generator.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        num_samples : int</span>
+<span class="sd">            Positive number of groups to draw.</span>
+<span class="sd">        num_operations : int</span>
+<span class="sd">            Required number of symmetry operations.</span>
+<span class="sd">        seed : int, optional</span>
+<span class="sd">            Nonnegative seed for a local CPU ``torch.Generator``. Without a</span>
+<span class="sd">            seed, sampled policies consume the global CPU generator.</span>
+<span class="sd">        device : torch.device or str, optional</span>
+<span class="sd">            Device for the returned tensor.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        space_groups : torch.Tensor, shape ``[num_samples]``, dtype=torch.int32</span>
+<span class="sd">            Sampled International numbers. Fixed policies repeat their group.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If either count is not a non-boolean integer or ``seed`` is not a</span>
+<span class="sd">            non-boolean integer or ``None``.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a count is not positive, ``seed`` is negative, a fixed group&#39;s</span>
+<span class="sd">            operation count does not match, or no compatible sampled group has</span>
+<span class="sd">            positive weight.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">_validate_positive_integer</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="s2">&quot;num_samples&quot;</span><span class="p">)</span>
+        <span class="n">operations</span> <span class="o">=</span> <span class="n">_validate_positive_integer</span><span class="p">(</span><span class="n">num_operations</span><span class="p">,</span> <span class="s2">&quot;num_operations&quot;</span><span class="p">)</span>
+        <span class="n">seed</span> <span class="o">=</span> <span class="n">_validate_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="n">groups</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">_resolve_space_group_distribution</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operations</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;fixed&quot;</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">samples</span><span class="p">,),</span> <span class="n">groups</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">generator</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">generator</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+                <span class="n">generator</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+            <span class="n">selected</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">multinomial</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">weights</span><span class="p">),</span>
+                <span class="n">samples</span><span class="p">,</span>
+                <span class="n">replacement</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">groups</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)[</span><span class="n">selected</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">result</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_space_group_distribution</span><span class="p">(</span>
+    <span class="n">policy</span><span class="p">:</span> <span class="n">SpaceGroupPolicy</span><span class="p">,</span> <span class="n">num_operations</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve ascending group IDs and normalized relative weights in float64.&quot;&quot;&quot;</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="n">_validate_positive_integer</span><span class="p">(</span><span class="n">num_operations</span><span class="p">,</span> <span class="s2">&quot;num_operations&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">policy</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;fixed&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">policy</span><span class="o">.</span><span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;fixed space-group policy has no group&quot;</span><span class="p">)</span>
+        <span class="n">actual</span> <span class="o">=</span> <span class="n">get_space_group_operation_count</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">group</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">actual</span> <span class="o">!=</span> <span class="n">count</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;fixed group </span><span class="si">{</span><span class="n">policy</span><span class="o">.</span><span class="n">group</span><span class="si">}</span><span class="s2"> has </span><span class="si">{</span><span class="n">actual</span><span class="si">}</span><span class="s2"> operations; </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> required&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">policy</span><span class="o">.</span><span class="n">group</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="n">candidates</span> <span class="o">=</span> <span class="n">_filter_candidates</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">policy</span><span class="o">.</span><span class="n">crystal_system</span><span class="p">,</span> <span class="n">policy</span><span class="o">.</span><span class="n">sohncke_only</span><span class="p">)</span>
+    <span class="n">prior</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_default_probabilities</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">policy</span><span class="o">.</span><span class="n">probabilities</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="n">policy</span><span class="o">.</span><span class="n">probabilities</span>
+    <span class="p">)</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">prior</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">number</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">weights</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">weights</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;at least one compatible space group must have a positive sampling weight&quot;</span>
+        <span class="p">)</span>
+    <span class="n">weights</span> <span class="o">/=</span> <span class="n">weights</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+    <span class="n">weights</span> <span class="o">/=</span> <span class="n">math</span><span class="o">.</span><span class="n">fsum</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">candidates</span><span class="p">,</span> <span class="n">weights</span>
+
+
+<div class="viewcode-block" id="csd_space_group_probabilities">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.csd_space_group_probabilities.html#nvalchemi.csp.csd_space_group_probabilities">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">csd_space_group_probabilities</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return default space-group sampling weights as a fresh copy.</span>
+
+<span class="sd">    These relative weights were derived from the Cambridge Structural</span>
+<span class="sd">    Database (CSD); they are not probabilities until compatible groups are</span>
+<span class="sd">    selected and the remaining positive weights are normalized.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    probabilities : dict[int, float]</span>
+<span class="sd">        Weights for every International space-group number from 1 through 230,</span>
+<span class="sd">        including entries whose weight is zero. The returned mapping is</span>
+<span class="sd">        independent of library state.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The bundled weights use space-group counts from the CCDC report</span>
+<span class="sd">    `CSD Space Group Statistics: Space Group Number Ordering (2026)</span>
+<span class="sd">    &lt;https://www.ccdc.cam.ac.uk/media/CSD-Space-Group-Statistics-Space-Group-Number-Ordering-2026.pdf&gt;`_.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_default_probabilities</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="get_space_group_operations">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.get_space_group_operations.html#nvalchemi.csp.get_space_group_operations">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_space_group_operations</span><span class="p">(</span>
+    <span class="n">space_group</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return standard fractional operations for one space group.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    space_group : int</span>
+<span class="sd">        International space-group number in ``[1, 230]``.</span>
+<span class="sd">    dtype : torch.dtype, default=torch.float32</span>
+<span class="sd">        Floating dtype for the returned operation tensor.</span>
+<span class="sd">    device : torch.device or str, optional</span>
+<span class="sd">        Device for the returned tensor. The bundled table itself remains on CPU.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    operations : torch.Tensor, shape ``[S, 3, 4]``</span>
+<span class="sd">        Fractional rotations in ``[..., :3]`` and translations in ``[..., 3]``.</span>
+<span class="sd">        For row-vector fractional coordinates, ``f_out = f @ R.T + t``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``space_group`` is not a non-boolean integer or ``dtype`` is not a</span>
+<span class="sd">        floating Torch dtype.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the International number is outside ``[1, 230]``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; operations = get_space_group_operations(2)  # P-1 space group.</span>
+<span class="sd">    &gt;&gt;&gt; print(operations)  # Identity, then inversion.</span>
+<span class="sd">    tensor([[[ 1.,  0.,  0.,  0.],</span>
+<span class="sd">             [ 0.,  1.,  0.,  0.],</span>
+<span class="sd">             [ 0.,  0.,  1.,  0.]],</span>
+<span class="sd">    &lt;BLANKLINE&gt;</span>
+<span class="sd">            [[-1.,  0.,  0.,  0.],</span>
+<span class="sd">             [ 0., -1.,  0.,  0.],</span>
+<span class="sd">             [ 0.,  0., -1.,  0.]]])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="n">_validate_space_group</span><span class="p">(</span><span class="n">space_group</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">dtype</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;dtype must be a floating torch dtype&quot;</span><span class="p">)</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">SG_OPS_PTR</span><span class="p">[</span><span class="n">number</span> <span class="o">-</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">end</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">SG_OPS_PTR</span><span class="p">[</span><span class="n">number</span><span class="p">])</span>
+    <span class="n">flat_rows</span> <span class="o">=</span> <span class="n">SYMM_OPS</span><span class="p">[</span><span class="n">SG_OPS_IDX</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]]</span>
+    <span class="n">operations</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">operations</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+        <span class="n">flat_rows</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">9</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span>
+    <span class="p">)</span>
+    <span class="n">operations</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">flat_rows</span><span class="p">[:,</span> <span class="mi">9</span><span class="p">:</span><span class="mi">12</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">operations</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">operations</span></div>
+
+
+
+<div class="viewcode-block" id="get_space_group_operation_count">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.get_space_group_operation_count.html#nvalchemi.csp.get_space_group_operation_count">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_space_group_operation_count</span><span class="p">(</span><span class="n">space_group</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the number of standard operations for a space group.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    space_group : int</span>
+<span class="sd">        International space-group number in ``[1, 230]``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    count : int</span>
+<span class="sd">        Number of operations in the pinned standard-setting table.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``space_group`` is not a non-boolean integer.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the International number is outside ``[1, 230]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="n">_validate_space_group</span><span class="p">(</span><span class="n">space_group</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">SG_OPS_PTR</span><span class="p">[</span><span class="n">number</span><span class="p">]</span> <span class="o">-</span> <span class="n">SG_OPS_PTR</span><span class="p">[</span><span class="n">number</span> <span class="o">-</span> <span class="mi">1</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="get_crystal_system">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.get_crystal_system.html#nvalchemi.csp.get_crystal_system">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_crystal_system</span><span class="p">(</span><span class="n">space_group</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CrystalSystem</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the crystal system for an International space-group number.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    space_group : int</span>
+<span class="sd">        International space-group number in ``[1, 230]``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    crystal_system : CrystalSystem</span>
+<span class="sd">        One of the seven standard crystal systems.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``space_group`` is not a non-boolean integer.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the International number is outside ``[1, 230]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">number</span> <span class="o">=</span> <span class="n">_validate_space_group</span><span class="p">(</span><span class="n">space_group</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">_CRYSTAL_SYSTEM_RANGES</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">first</span> <span class="o">&lt;=</span> <span class="n">number</span> <span class="o">&lt;=</span> <span class="n">last</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">CrystalSystem</span><span class="p">)[</span><span class="n">index</span><span class="p">]</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;valid space group was not assigned to a crystal system&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="is_sohncke_space_group">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.is_sohncke_space_group.html#nvalchemi.csp.is_sohncke_space_group">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">is_sohncke_space_group</span><span class="p">(</span><span class="n">space_group</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether a group&#39;s symmetry preserves molecular handedness.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    space_group : int</span>
+<span class="sd">        International space-group number in ``[1, 230]``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    is_sohncke : bool</span>
+<span class="sd">        Whether all symmetry-generated copies preserve handedness.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``space_group`` is not a non-boolean integer.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the International number is outside ``[1, 230]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_validate_space_group</span><span class="p">(</span><span class="n">space_group</span><span class="p">)</span> <span class="ow">in</span> <span class="n">_SOHNCKE</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_filter_candidates</span><span class="p">(</span>
+    <span class="n">num_operations</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">crystal_system</span><span class="p">:</span> <span class="n">CrystalSystem</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">sohncke_only</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;List groups matching operation count and optional crystallographic filters.&quot;&quot;&quot;</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="n">_validate_positive_integer</span><span class="p">(</span><span class="n">num_operations</span><span class="p">,</span> <span class="s2">&quot;num_operations&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">crystal_system</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">crystal_system</span><span class="p">,</span> <span class="n">CrystalSystem</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;crystal_system must be a CrystalSystem or None&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sohncke_only</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;sohncke_only must be a bool&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="n">number</span>
+        <span class="k">for</span> <span class="n">number</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">231</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">get_space_group_operation_count</span><span class="p">(</span><span class="n">number</span><span class="p">)</span> <span class="o">==</span> <span class="n">count</span>
+        <span class="ow">and</span> <span class="p">(</span><span class="n">crystal_system</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">get_crystal_system</span><span class="p">(</span><span class="n">number</span><span class="p">)</span> <span class="ow">is</span> <span class="n">crystal_system</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">sohncke_only</span> <span class="ow">or</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">_SOHNCKE</span><span class="p">)</span>
+    <span class="p">]</span>
+
+
+<div class="viewcode-block" id="get_space_group_candidates">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.get_space_group_candidates.html#nvalchemi.csp.get_space_group_candidates">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_space_group_candidates</span><span class="p">(</span>
+    <span class="n">num_operations</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">crystal_system</span><span class="p">:</span> <span class="n">CrystalSystem</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">sohncke_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return space-group numbers with a requested operation count.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    num_operations : int</span>
+<span class="sd">        Positive required number of symmetry operations.</span>
+<span class="sd">    crystal_system : CrystalSystem, optional</span>
+<span class="sd">        Restrict results to one crystal system.</span>
+<span class="sd">    sohncke_only : bool, default=False</span>
+<span class="sd">        Keep only groups whose symmetry-generated copies preserve handedness.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    candidates : torch.Tensor, shape ``[K]``, dtype=torch.int32</span>
+<span class="sd">        Compatible International numbers in ascending order; ``K`` may be zero.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``num_operations`` is not a non-boolean integer, or a filter has</span>
+<span class="sd">        the wrong type.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``num_operations`` is not positive.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+        <span class="n">_filter_candidates</span><span class="p">(</span><span class="n">num_operations</span><span class="p">,</span> <span class="n">crystal_system</span><span class="p">,</span> <span class="n">sohncke_only</span><span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="sample_space_groups">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.csp.sample_space_groups.html#nvalchemi.csp.sample_space_groups">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">sample_space_groups</span><span class="p">(</span>
+    <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">num_operations</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">probabilities</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">crystal_system</span><span class="p">:</span> <span class="n">CrystalSystem</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">sohncke_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sample compatible International space-group numbers with replacement.</span>
+
+<span class="sd">    A supplied ``probabilities`` mapping replaces the default relative</span>
+<span class="sd">    sampling weights. Missing group entries have zero weight. After removing</span>
+<span class="sd">    incompatible groups, the remaining weights determine relative sampling</span>
+<span class="sd">    probabilities.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    num_samples : int</span>
+<span class="sd">        Number of samples to draw; must be positive.</span>
+<span class="sd">    num_operations : int</span>
+<span class="sd">        Required number of symmetry operations.</span>
+<span class="sd">    probabilities : Mapping[int, float], optional</span>
+<span class="sd">        Replacement relative weights keyed by group number; values must be</span>
+<span class="sd">        finite and nonnegative.</span>
+<span class="sd">    crystal_system : CrystalSystem, optional</span>
+<span class="sd">        Restrict the compatible groups to one crystal system.</span>
+<span class="sd">    sohncke_only : bool, default=False</span>
+<span class="sd">        Use only groups whose symmetry-generated copies preserve molecular</span>
+<span class="sd">        handedness, such as for chiral molecules.</span>
+<span class="sd">    seed : int, optional</span>
+<span class="sd">        Nonnegative seed for a local CPU ``torch.Generator``.</span>
+<span class="sd">    device : torch.device or str, optional</span>
+<span class="sd">        Device for the returned int32 tensor.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    space_groups : torch.Tensor, shape ``[num_samples]``, dtype=torch.int32</span>
+<span class="sd">        Sampled International numbers.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If the prior, filters, or integer arguments have invalid types.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If no compatible group has positive weight or ``seed`` is negative.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; groups = sample_space_groups(4, 1, seed=7)</span>
+<span class="sd">    &gt;&gt;&gt; groups.dtype</span>
+<span class="sd">    torch.int32</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">samples</span> <span class="o">=</span> <span class="n">_validate_positive_integer</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="s2">&quot;num_samples&quot;</span><span class="p">)</span>
+    <span class="n">seed</span> <span class="o">=</span> <span class="n">_validate_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">policy</span> <span class="o">=</span> <span class="n">SpaceGroupPolicy</span><span class="o">.</span><span class="n">sampled</span><span class="p">(</span>
+        <span class="n">probabilities</span><span class="o">=</span><span class="n">probabilities</span><span class="p">,</span>
+        <span class="n">crystal_system</span><span class="o">=</span><span class="n">crystal_system</span><span class="p">,</span>
+        <span class="n">sohncke_only</span><span class="o">=</span><span class="n">sohncke_only</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">policy</span><span class="o">.</span><span class="n">draw</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">num_operations</span><span class="o">=</span><span class="n">num_operations</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

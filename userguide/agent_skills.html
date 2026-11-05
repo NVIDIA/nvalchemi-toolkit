@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Agent Skills &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Agent Skills &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/agent_skills';</script>
-    <script defer="defer" src="../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Supported Models" href="../models/index.html" />
@@ -383,6 +383,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="training.html">Training</a></li>
 <li class="toctree-l2"><a class="reference internal" href="losses.html">Losses</a></li>
 <li class="toctree-l2"><a class="reference internal" href="finetuning.html">Fine-Tuning Pretrained Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distillation.html">Distilling a Teacher Into a Student</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="serialization.html">Serialization and Reproducibility</a></li>
@@ -390,9 +391,12 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="reporting.html">Reporting</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_mep.html">Reaction Paths and NEB</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="enhanced_sampling.html">Enhanced Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generative.html">Generative Models</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Distributed Simulations</span></p>
 <ul class="nav bd-sidenav">
@@ -400,6 +404,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="distributed_shardtensor.html">ShardTensor: How Per-Atom Fields Flow Across Ranks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_byo.html">Bring Your Own Model: Authoring a Distribution Spec</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed_design.html">Distributed ML Potentials: Design Overview</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Applications</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="csp.html">Crystal structure prediction</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
 <ul class="current nav bd-sidenav">
@@ -490,7 +498,7 @@ your project’s skills directory, or your user-level one (e.g.
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-data-structures</span></code></p></td>
-<td><p>How to use <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> and <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> for representing atomic systems and batching them for GPU computation.</p></td>
+<td><p>How to use <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> and <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> for representing, batching, and grouping atomic systems for GPU computation.</p></td>
 <td><p><a class="reference internal" href="data.html#data-guide"><span class="std std-ref">AtomicData and Batch</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-data-storage</span></code></p></td>
@@ -517,13 +525,21 @@ your project’s skills directory, or your user-level one (e.g.
 <td><p>How to configure fine-tuning workflows and adapt pretrained checkpoints through the CLI or API.</p></td>
 <td><p><a class="reference internal" href="finetuning.html#finetuning-guide"><span class="std std-ref">Fine-Tuning Pretrained Models</span></a></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-api</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-distillation</span></code></p></td>
+<td><p>How to distill a teacher MLIP into a small student with <a class="reference internal" href="../modules/training/generated/nvalchemi.training.distillation.DistillationStrategy.html#nvalchemi.training.distillation.DistillationStrategy" title="nvalchemi.training.distillation.DistillationStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistillationStrategy</span></code></a> — teacher signals, offline labeling, the on-policy segment loop, and evaluation.</p></td>
+<td><p><a class="reference internal" href="distillation.html#distillation-guide"><span class="std std-ref">Distilling a Teacher Into a Student</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-api</span></code></p></td>
 <td><p>How to configure and run dynamics simulations, compose multi-stage pipelines (<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>, <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a>), use inflight batching, and manage data sinks.</p></td>
 <td><p><a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics: Optimization and Molecular Dynamics</span></a></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-implementation</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-implementation</span></code></p></td>
 <td><p>How to implement a dynamics integrator by subclassing <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a> and overriding <code class="docutils literal notranslate"><span class="pre">pre_update()</span></code> and <code class="docutils literal notranslate"><span class="pre">post_update()</span></code>.</p></td>
 <td><p><a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics: Optimization and Molecular Dynamics</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-mep</span></code></p></td>
+<td><p>How to build reaction paths (interpolation, alignment, IDPP) and compute minimum-energy paths with batched NEB via <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.mep.NEB.html#nvalchemi.dynamics.mep.NEB" title="nvalchemi.dynamics.mep.NEB"><code class="xref py py-class docutils literal notranslate"><span class="pre">NEB</span></code></a> or by building it manually with hooks.</p></td>
+<td><p><a class="reference internal" href="dynamics_mep.html#dynamics-mep-guide"><span class="std std-ref">Reaction Paths and NEB</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-hooks</span></code></p></td>
 <td><p>How to use and write dynamics hooks — callbacks that observe or modify batch state at specific points during each simulation step.</p></td>

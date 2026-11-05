@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
-    <title>Basic Examples &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>Basic Examples &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -45,7 +45,7 @@
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -55,7 +55,7 @@
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/basic/index';</script>
-    <script defer="defer" src="../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="AtomicData and Batch: Graph-structured molecular data" href="01_data_structures.html" />
@@ -369,10 +369,11 @@ document.write(`
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Basic Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
 <li class="toctree-l2"><a class="reference internal" href="03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -383,6 +384,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -396,10 +401,16 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/16_adaptive_biasing_force.html">Adaptive Biasing Force Along a Pair Distance</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
@@ -471,16 +482,17 @@ document.write(`
 familiar with tools like ASE.  Each script focuses on one feature set
 and runs end-to-end on a single GPU in under 60 seconds.</p>
 <p><strong>01 — Data Structures</strong>: AtomicData and Batch API.
-<strong>02 — Geometry Optimization</strong>: FIRE optimizer with NeighborListHook and ConvergenceHook.
+<strong>02 — Geometry Optimization</strong>: FIRE2 optimizer with NeighborListHook and ConvergenceHook.
 <strong>03 — ASE Integration</strong>: Loading ASE structures, FreezeAtomsHook on a surface system.
 <strong>04 — NVE MD</strong>: Microcanonical dynamics, WrapPeriodicHook, EnergyDriftMonitorHook.
-<strong>05 — NVT MD</strong>: Langevin thermostat, thermalization, LoggingHook to CSV.</p>
+<strong>05 — NVT MD</strong>: Langevin thermostat, thermalization, LoggingHook to CSV.
+<strong>06 — L-BFGS Optimization</strong>: LBFGS as a drop-in for FIRE2, relaxing a batch of argon clusters.</p>
 <div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example walks through the full API of AtomicData and Batch: construction, properties, indexing, mutation, device movement, and serialization."><img alt="" src="../../_images/sphx_glr_01_data_structures_thumb.png" />
 <p><a class="reference internal" href="01_data_structures.html"><span class="doc">AtomicData and Batch: Graph-structured molecular data</span></a></p>
   <div class="sphx-glr-thumbnail-title">AtomicData and Batch: Graph-structured molecular data</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE algorithm on a batch of argon clusters described by the Lennard-Jones potential."><img alt="" src="../../_images/sphx_glr_02_geometry_optimization_thumb.png" />
-<p><a class="reference internal" href="02_geometry_optimization.html"><span class="doc">FIRE Geometry Optimization with Lennard-Jones Argon</span></a></p>
-  <div class="sphx-glr-thumbnail-title">FIRE Geometry Optimization with Lennard-Jones Argon</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE2 algorithm on a batch of argon clusters described by the Lennard-Jones potential."><img alt="" src="../../_images/sphx_glr_02_geometry_optimization_thumb.png" />
+<p><a class="reference internal" href="02_geometry_optimization.html"><span class="doc">FIRE2 Geometry Optimization with Lennard-Jones Argon</span></a></p>
+  <div class="sphx-glr-thumbnail-title">FIRE2 Geometry Optimization with Lennard-Jones Argon</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="This example shows how to load real atomic structures from ASE into the nvalchemi-toolkit workflow.  ASE provides a rich library of molecular and crystal builders, file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting ase.Atoms objects via AtomicData.from_atoms."><img alt="" src="../../_images/sphx_glr_03_ase_integration_thumb.png" />
 <p><a class="reference internal" href="03_ase_integration.html"><span class="doc">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</span></a></p>
   <div class="sphx-glr-thumbnail-title">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</div>
@@ -490,6 +502,9 @@ and runs end-to-end on a single GPU in under 60 seconds.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="The NVT ensemble (constant Number of atoms, Volume, and Temperature) samples the canonical distribution.  A thermostat couples the system to a heat bath, injecting or removing kinetic energy to maintain the target temperature."><img alt="" src="../../_images/sphx_glr_05_nvt_langevin_thumb.png" />
 <p><a class="reference internal" href="05_nvt_langevin.html"><span class="doc">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</span></a></p>
   <div class="sphx-glr-thumbnail-title">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="LBFGS is a drop-in alternative to FIRE2: same constructor shape, same hooks, same convergence criterion, one force evaluation per step.  It builds a quasi-Newton direction from the last history_size position/force differences, so it usually needs far fewer steps."><img alt="" src="../../_images/sphx_glr_06_geometry_optimization_lbfgs_thumb.png" />
+<p><a class="reference internal" href="06_geometry_optimization_lbfgs.html"><span class="doc">L-BFGS Geometry Optimization with Lennard-Jones Argon</span></a></p>
+  <div class="sphx-glr-thumbnail-title">L-BFGS Geometry Optimization with Lennard-Jones Argon</div>
 </div></div><div class="toctree-wrapper compound">
 </div>
 </section>

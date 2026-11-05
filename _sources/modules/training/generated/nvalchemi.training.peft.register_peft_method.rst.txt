@@ -1,0 +1,6 @@
+﻿nvalchemi.training.peft.register\_peft\_method
+==============================================
+
+.. currentmodule:: nvalchemi.training.peft
+
+.. autofunction:: register_peft_method

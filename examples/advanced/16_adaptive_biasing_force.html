@@ -1,0 +1,917 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Adaptive Biasing Force Along a Pair Distance &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/16_adaptive_biasing_force';</script>
+    <script defer="defer" src="../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Distributed Examples" href="../distributed/index.html" />
+    <link rel="prev" title="xTB-Style RMSD Metadynamics for Structure Exploration" href="15_rmsd_metadynamics.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE2 Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/06_geometry_optimization_lbfgs.html">L-BFGS Geometry Optimization with Lennard-Jones Argon</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/06_ddp_mlp_training.html">Distributed Training: DDPHook with a Dummy MLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/07_rich_training_reporting.html">Rich Training Reporting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/08_lora_finetuning.html">LoRA Fine-Tuning MACE on LPSC dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_generative_samplers.html">Generative workflows: model-owning samplers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/09_offline_distillation.html">Offline Knowledge Distillation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/10_onpolicy_distillation.html">On-Policy Knowledge Distillation</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="09_uma_nve.html">UMA Foundation Model: NVE / NVT / NPT Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="10_mace_training.html">MACE Training with ALCHEMI Training Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="11_batched_neb.html">Batched NEB with AIMNet2-rxn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="12_umbrella_sampling.html">Batched Umbrella Sampling with EnhancedSampling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="13_replica_exchange.html">Temperature Replica Exchange (REMD)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="14_metadynamics.html">Multiple-Walker Well-Tempered Metadynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="15_rmsd_metadynamics.html">xTB-Style RMSD Metadynamics for Structure Exploration</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Adaptive Biasing Force Along a Pair Distance</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE2 → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/03_mace_nvt_distributed.html">MACE NVT Langevin: domain-decomposed MD with xyz snapshot logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/04_byo_pytorch_mpnn.html">Bring your own PyTorch model: from architecture to a saved spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/05_byo_graph_transformer.html">Bring your own model with a Warp kernel: from architecture to spec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/06_mace_npt_distributed.html">MACE NPT: domain-decomposed constant-pressure MD with a barostat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/07_fire_nvt_dd.html">2-D-parallel dynamics: FIRE → NVT, each stage domain-decomposed</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Advanced Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Adaptive...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-advanced-16-adaptive-biasing-force-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="adaptive-biasing-force-along-a-pair-distance">
+<span id="sphx-glr-examples-advanced-16-adaptive-biasing-force-py"></span><h1>Adaptive Biasing Force Along a Pair Distance<a class="headerlink" href="#adaptive-biasing-force-along-a-pair-distance" title="Link to this heading">#</a></h1>
+<p>Umbrella sampling restrains, and metadynamics fills.  ABF does neither: it
+<em>measures</em> the mean force along the collective variable in each bin, and
+applies its negative.  Once a bin is well sampled the residual force along
+the CV averages to zero, so the walker diffuses across the coordinate
+instead of being held or pushed.</p>
+<p>The payoff is that the accumulated quantity already <strong>is</strong> the free-energy
+gradient:</p>
+<div class="math notranslate nohighlight">
+\[\frac{\partial A}{\partial r} = \left\langle
+    -\frac{(\mathbf{F}_j - \mathbf{F}_i)\cdot\hat{\mathbf{u}}}{2}
+    - \frac{2 k_B T}{r} \right\rangle_r\]</div>
+<p>Integrating it gives the PMF directly — no hills to deconvolve, no
+histograms to reweight.</p>
+<p>That second term is the <strong>metric correction</strong>, and it is the part worth
+understanding before using this method.  This example demonstrates it
+numerically against a case with a known answer.</p>
+<section id="key-concepts-demonstrated">
+<h2>Key concepts demonstrated<a class="headerlink" href="#key-concepts-demonstrated" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>The mean-force estimator, checked against an analytic PMF.</p></li>
+<li><p>Why a naive Cartesian force projection is wrong, shown by measuring it.</p></li>
+<li><p>The minimum-sample threshold and force ramp.</p></li>
+<li><p>Force-only biases: no energy, and therefore no replica exchange.</p></li>
+</ul>
+</section>
+<section id="applications">
+<h2>Applications<a class="headerlink" href="#applications" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Potentials of mean force for bond breaking, ion pairing, or unbinding.</p></li>
+<li><p>Flattening a known coordinate so that orthogonal degrees of freedom relax.</p></li>
+<li><p>Free-energy profiles where hill deposition would be too slow to converge.</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">KB_EV</span><span class="p">,</span> <span class="n">NVTLangevin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.enhanced_sampling</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">AdaptiveBiasingForce</span></a><span class="p">,</span> <span class="n">EnhancedSampling</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">BiasContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.lj</span><span class="w"> </span><span class="kn">import</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">LennardJonesModelWrapper</span></a>
+
+<span class="c1"># force=True: an earlier gallery example may have configured logging already.</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">DEVICE</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.is_available.html#torch.cuda.is_available" title="torch.cuda.is_available" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span></a><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+<span class="n">N_STEPS</span> <span class="o">=</span> <span class="mi">40</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;NVALCHEMI_SPHINX_BUILD&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="mi">1500</span>
+
+<span class="n">TEMPERATURE</span> <span class="o">=</span> <span class="mf">120.0</span>  <span class="c1"># K</span>
+<span class="n">KT</span> <span class="o">=</span> <span class="n">KB_EV</span> <span class="o">*</span> <span class="n">TEMPERATURE</span>
+</pre></div>
+</div>
+</section>
+<section id="the-metric-correction-measured">
+<h2>The metric correction, measured<a class="headerlink" href="#the-metric-correction-measured" title="Link to this heading">#</a></h2>
+<p>Take two particles that do not interact at all.  Their Cartesian force is
+zero, so a naive projection reports a mean force of zero and therefore a
+<em>flat</em> free-energy profile.</p>
+<p>The true profile is not flat.  The number of ways to place two particles a
+distance <code class="docutils literal notranslate"><span class="pre">r</span></code> apart grows as the surface of a sphere, <code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">pi</span> <span class="pre">r^2</span></code>, so
+<code class="docutils literal notranslate"><span class="pre">A(r)</span> <span class="pre">=</span> <span class="pre">-2</span> <span class="pre">k_B</span> <span class="pre">T</span> <span class="pre">ln</span> <span class="pre">r</span></code> — purely entropic, and it drives the pair apart.
+Missing it is not noise; it is a smooth, plausible, wrong answer.</p>
+<p>ABF includes the corresponding <code class="docutils literal notranslate"><span class="pre">-2</span> <span class="pre">k_B</span> <span class="pre">T</span> <span class="pre">/</span> <span class="pre">r</span></code> term. Here is the
+difference, on a system whose answer we know exactly.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">FREE_PAIR</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">([[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]])</span>
+<span class="n">free_batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="n">AtomicData</span><span class="p">(</span>
+            <span class="n">positions</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">FREE_PAIR</span></a><span class="p">,</span>
+            <span class="n">atomic_numbers</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.ones.html#torch.ones" title="torch.ones" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">ones</span></a><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">long</span></a><span class="p">),</span>
+            <span class="n">forces</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>  <span class="c1"># non-interacting</span>
+        <span class="p">)</span>
+    <span class="p">]</span>
+<span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+
+<span class="n">demo</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">AdaptiveBiasingForce</span></a><span class="p">(</span>
+    <span class="n">atom_indices</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="n">TEMPERATURE</span><span class="p">,</span>
+    <span class="n">cv_range</span><span class="o">=</span><span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">),</span>
+    <span class="n">n_bins</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+    <span class="n">min_samples</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">full_samples</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;demo&quot;</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+<span class="n">demo</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">BiasContext</span><span class="p">(</span><span class="n">batch</span><span class="o">=</span><span class="n">free_batch</span><span class="p">),</span> <span class="n">demo</span><span class="o">.</span><span class="n">stage</span><span class="p">)</span>
+
+<span class="n">measured</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">demo</span><span class="o">.</span><span class="n">mean_force</span><span class="p">()[</span><span class="nb">int</span><span class="p">(</span><span class="n">demo</span><span class="o">.</span><span class="n">bin_index</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">([</span><span class="mf">3.0</span><span class="p">]))[</span><span class="mi">0</span><span class="p">])])</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Two non-interacting particles at r = 3.0 A:&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;  naive projection      dA/dr = </span><span class="si">%+.6f</span><span class="s2"> eV/A  (flat PMF — wrong)&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;  ABF with correction   dA/dr = </span><span class="si">%+.6f</span><span class="s2"> eV/A&quot;</span><span class="p">,</span> <span class="n">measured</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;  analytic  -2 kT / r         = </span><span class="si">%+.6f</span><span class="s2"> eV/A&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span> <span class="o">*</span> <span class="n">KT</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Two non-interacting particles at r = 3.0 A:
+  naive projection      dA/dr = +0.000000 eV/A  (flat PMF — wrong)
+  ABF with correction   dA/dr = -0.006894 eV/A
+  analytic  -2 kT / r         = -0.006894 eV/A
+</pre></div>
+</div>
+</section>
+<section id="build-the-system">
+<h2>Build the system<a class="headerlink" href="#build-the-system" title="Link to this heading">#</a></h2>
+<p>An argon dimer inside a small cluster.  The CV is the distance between
+atoms 0 and 1; the rest of the cluster is the “environment” whose
+rearrangement the PMF integrates over.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">N_ATOMS</span> <span class="o">=</span> <span class="mi">6</span>
+<span class="n">N_WALKERS</span> <span class="o">=</span> <span class="mi">4</span>
+
+<a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_cluster</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return one argon cluster with the buffers dynamics writes into.&quot;&quot;&quot;</span>
+    <span class="n">spacing</span> <span class="o">=</span> <span class="mf">3.9</span>
+    <span class="n">grid</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">(</span>
+        <span class="p">[[</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">z</span> <span class="ow">in</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)]</span>
+    <span class="p">)</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">grid</span><span class="p">[:</span><span class="n">N_ATOMS</span><span class="p">]</span> <span class="o">*</span> <span class="n">spacing</span> <span class="o">+</span> <span class="mf">0.05</span> <span class="o">*</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="n">N_ATOMS</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.full.html#torch.full" title="torch.full" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full</span></a><span class="p">((</span><span class="n">N_ATOMS</span><span class="p">,),</span> <span class="mi">18</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">long</span></a><span class="p">),</span>
+        <span class="n">atomic_masses</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.full.html#torch.full" title="torch.full" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full</span></a><span class="p">((</span><span class="n">N_ATOMS</span><span class="p">,),</span> <span class="mf">39.948</span><span class="p">),</span>
+        <span class="n">forces</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">N_ATOMS</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="n">energy</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">N_ATOMS</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">data</span>
+
+
+<span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">make_cluster</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N_WALKERS</span><span class="p">)])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="configure-the-bias">
+<h2>Configure the bias<a class="headerlink" href="#configure-the-bias" title="Link to this heading">#</a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">min_samples</span></code> / <code class="docutils literal notranslate"><span class="pre">full_samples</span></code></dt><dd><p>A mean force from three samples is noise, and applying it would drive
+the walker on the strength of that noise.  Below <code class="docutils literal notranslate"><span class="pre">min_samples</span></code> a bin
+applies nothing; between the two the applied fraction ramps linearly to
+one, so no bin ever switches on with a jump.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">cv_range</span></code></dt><dd><p>Outside it, no force is applied and no sample is recorded.  Choose it
+to cover the region you want the profile over — ABF will not tell you
+about coordinates it was never allowed to bin.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">max_force</span></code></dt><dd><p>A bin visited once at an awkward geometry can hold a large estimate.
+The cap bounds what that can do to the trajectory while the average
+settles.</p>
+</dd>
+</dl>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">abf</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">AdaptiveBiasingForce</span></a><span class="p">(</span>
+    <span class="n">atom_indices</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="n">TEMPERATURE</span><span class="p">,</span>
+    <span class="n">cv_range</span><span class="o">=</span><span class="p">(</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">6.5</span><span class="p">),</span>  <span class="c1"># angstrom</span>
+    <span class="n">n_bins</span><span class="o">=</span><span class="mi">28</span><span class="p">,</span>
+    <span class="n">min_samples</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">full_samples</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">max_force</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>  <span class="c1"># eV/A</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>  <span class="c1"># every uncorrelated sample helps</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;abf&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="run">
+<h2>Run<a class="headerlink" href="#run" title="Link to this heading">#</a></h2>
+<p>The bias hook hands ABF its observation at <code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code>, where
+<code class="docutils literal notranslate"><span class="pre">batch.forces</span></code> still holds the <strong>unbiased</strong> physical force.  This is not
+a detail: an estimator shown its own output converges to whatever it had
+already decided, and the resulting profile looks perfectly smooth.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="torch.nn.Module" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">LennardJonesModelWrapper</span></a><span class="p">(</span><span class="n">sigma</span><span class="o">=</span><span class="mf">3.4</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">0.0104</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">8.5</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+
+<span class="n">sampling</span> <span class="o">=</span> <span class="n">EnhancedSampling</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">engine</span><span class="o">=</span><span class="n">NVTLangevin</span><span class="p">,</span>
+    <span class="n">engine_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="n">TEMPERATURE</span><span class="p">,</span> <span class="s2">&quot;friction&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">},</span>
+    <span class="n">biases</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;abf&quot;</span><span class="p">:</span> <span class="n">abf</span><span class="p">},</span>
+    <span class="n">extra_hooks</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">make_neighbor_hooks</span><span class="p">()),</span>
+<span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">sampling</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">N_STEPS</span><span class="p">)</span>
+
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+    <span class="s2">&quot;Samples: </span><span class="si">%d</span><span class="s2"> across </span><span class="si">%d</span><span class="s2"> of </span><span class="si">%d</span><span class="s2"> bins&quot;</span><span class="p">,</span>
+    <span class="nb">int</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">abf</span><span class="o">.</span><span class="n">bin_counts</span></a><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+    <span class="nb">int</span><span class="p">((</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">abf</span><span class="o">.</span><span class="n">bin_counts</span></a> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+    <span class="n">abf</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+    <span class="s2">&quot;Bins past the threshold (applying force): </span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="nb">int</span><span class="p">((</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">abf</span><span class="o">.</span><span class="n">bin_counts</span></a> <span class="o">&gt;</span> <span class="n">abf</span><span class="o">.</span><span class="n">min_samples</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Samples: 160 across 2 of 28 bins
+Bins past the threshold (applying force): 2
+</pre></div>
+</div>
+</section>
+<section id="abf-adds-force-but-no-energy">
+<h2>ABF adds force but no energy<a class="headerlink" href="#abf-adds-force-but-no-energy" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">last_outputs</span></code> carries no <code class="docutils literal notranslate"><span class="pre">bias/abf/energy</span></code> key, and the total energy
+equals the physical energy exactly. That is not an omission — the applied
+force is genuinely not the gradient of any function the bias holds, which
+is what “non-conservative” means here.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">outputs</span> <span class="o">=</span> <span class="n">sampling</span><span class="o">.</span><span class="n">last_outputs</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Diagnostics: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">outputs</span> <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;bias/abf/&quot;</span><span class="p">)))</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Has a bias energy: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;bias/abf/energy&quot;</span> <span class="ow">in</span> <span class="n">outputs</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+    <span class="s2">&quot;total/energy == physical/energy: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="nb">bool</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.allclose.html#torch.allclose" title="torch.allclose" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">allclose</span></a><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="s2">&quot;total/energy&quot;</span><span class="p">],</span> <span class="n">outputs</span><span class="p">[</span><span class="s2">&quot;physical/energy&quot;</span><span class="p">])),</span>
+<span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+    <span class="s2">&quot;Applied bias force magnitude: </span><span class="si">%.3e</span><span class="s2"> eV/A&quot;</span><span class="p">,</span>
+    <span class="nb">float</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="s2">&quot;bias/abf/forces&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Diagnostics: [&#39;bias/abf/applied_gradient&#39;, &#39;bias/abf/bin&#39;, &#39;bias/abf/cv&#39;, &#39;bias/abf/forces&#39;, &#39;bias/abf/in_range&#39;, &#39;bias/abf/ramp&#39;, &#39;bias/abf/samples&#39;, &#39;bias/abf/state_version&#39;]
+Has a bias energy: False
+total/energy == physical/energy: True
+Applied bias force magnitude: 2.224e-03 eV/A
+</pre></div>
+</div>
+</section>
+<section id="the-free-energy-profile">
+<h2>The free-energy profile<a class="headerlink" href="#the-free-energy-profile" title="Link to this heading">#</a></h2>
+<p>Integrating the mean force gives the PMF directly. Bins that were never
+visited come back as <code class="docutils literal notranslate"><span class="pre">nan</span></code> rather than zero — a bin with no samples has
+no estimate, and zero is a perfectly plausible free energy that would hide
+that.</p>
+<p>A short demo run will not have sampled contiguously, and <code class="docutils literal notranslate"><span class="pre">free_energy()</span></code>
+<strong>raises</strong> on an interior gap rather than integrating across it: the
+profile beyond a hole would be wrong by an unknown constant.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">profile</span></a> <span class="o">=</span> <span class="n">abf</span><span class="o">.</span><span class="n">free_energy</span><span class="p">()</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">centers</span></a> <span class="o">=</span> <span class="n">abf</span><span class="o">.</span><span class="n">bin_centers</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Free-energy profile (eV, shifted to zero minimum):&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">r</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">centers</span></a><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">profile</span></a><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;  r = </span><span class="si">%.2f</span><span class="s2"> A   A = </span><span class="si">%+.4f</span><span class="s2"> eV&quot;</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="c1"># A free check that the estimator is not fooling itself: the PMF minimum</span>
+    <span class="c1"># should sit near the Lennard-Jones minimum, 2^(1/6) * sigma.</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sampled</span></a> <span class="o">=</span> <span class="o">~</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.isnan.html#torch.isnan" title="torch.isnan" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">isnan</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">profile</span></a><span class="p">)</span>
+    <span class="n">minimum</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">centers</span></a><span class="p">[</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sampled</span></a><span class="p">][</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">profile</span></a><span class="p">[</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sampled</span></a><span class="p">]</span><span class="o">.</span><span class="n">argmin</span><span class="p">()])</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;PMF minimum at </span><span class="si">%.2f</span><span class="s2"> A; Lennard-Jones minimum 2^(1/6) sigma = </span><span class="si">%.2f</span><span class="s2"> A&quot;</span><span class="p">,</span>
+        <span class="n">minimum</span><span class="p">,</span>
+        <span class="mi">2</span> <span class="o">**</span> <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">6</span><span class="p">)</span> <span class="o">*</span> <span class="mf">3.4</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;free_energy() declined, as it should on a short run:&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;  </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Free-energy profile (eV, shifted to zero minimum):
+  r = 3.81 A   A = +0.0001 eV
+  r = 3.94 A   A = +0.0000 eV
+PMF minimum at 3.94 A; Lennard-Jones minimum 2^(1/6) sigma = 3.82 A
+</pre></div>
+</div>
+</section>
+<section id="why-abf-cannot-join-a-replica-exchange-ladder">
+<h2>Why ABF cannot join a replica-exchange ladder<a class="headerlink" href="#why-abf-cannot-join-a-replica-exchange-ladder" title="Link to this heading">#</a></h2>
+<p>The Metropolis acceptance rule needs each bias’s energy evaluated under
+<em>both</em> states being swapped. A force-only bias has no such energy, so the
+rule cannot be formed. Rather than silently drop the bias from the
+exponent — which would break detailed balance with nothing to show for it
+— the combination is refused at construction.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;supplies_exchange_energy: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">abf</span><span class="o">.</span><span class="n">supplies_exchange_energy</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;A ReplicaExchange ladder will refuse this bias at construction.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>supplies_exchange_energy: False
+A ReplicaExchange ladder will refuse this bias at construction.
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.118 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-16-adaptive-biasing-force-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/0f1df8d70481120f31216fc32516d79a/16_adaptive_biasing_force.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">16_adaptive_biasing_force.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/38a94bb94e0f56da8209e7568a5968fa/16_adaptive_biasing_force.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">16_adaptive_biasing_force.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/8bfee74f66374e5e6f128a8ccafbfb4e/16_adaptive_biasing_force.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">16_adaptive_biasing_force.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="15_rmsd_metadynamics.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">xTB-Style RMSD Metadynamics for Structure Exploration</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../distributed/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Distributed Examples</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#key-concepts-demonstrated">Key concepts demonstrated</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#applications">Applications</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-metric-correction-measured">The metric correction, measured</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#build-the-system">Build the system</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configure-the-bias">Configure the bias</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run">Run</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#abf-adds-force-but-no-energy">ABF adds force but no energy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-free-energy-profile">The free-energy profile</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-abf-cannot-join-a-replica-exchange-ladder">Why ABF cannot join a replica-exchange ladder</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/advanced/16_adaptive_biasing_force.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

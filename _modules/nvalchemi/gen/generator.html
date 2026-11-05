@@ -1,0 +1,1670 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nvalchemi.gen.generator &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/autodoc_pydantic.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=edee6654" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=f129cdf0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/gen/generator';</script>
+    <script defer="defer" src="../../../_static/js/install-matrix.js?v=5598d0cc"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.ge...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for nvalchemi.gen.generator</h1><div class="highlight"><pre>
+<span></span><span class="c1"># SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved.</span>
+<span class="c1"># SPDX-License-Identifier: Apache-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c1"># you may not use this file except in compliance with the License.</span>
+<span class="c1"># You may obtain a copy of the License at</span>
+<span class="c1">#</span>
+<span class="c1"># http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c1">#</span>
+<span class="c1"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c1"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c1"># WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c1"># See the License for the specific language governing permissions and</span>
+<span class="c1"># limitations under the License.</span>
+<span class="sd">&quot;&quot;&quot;Batched generative inference driven by a user-supplied callable.</span>
+
+<span class="sd">``AtomisticGenerator`` (the *driver* throughout this module) wraps your generation</span>
+<span class="sd">code -- a function, or a callable object holding the trained model -- and runs</span>
+<span class="sd">a fixed pipeline per call: optionally condition the inputs, generate, and</span>
+<span class="sd">return a :class:`~nvalchemi.data.Batch`. Any sampling procedure works</span>
+<span class="sd">(diffusion, flow matching, GANs, VAEs, search loops); the callable owns the</span>
+<span class="sd">model and does the sampling.</span>
+
+<span class="sd">The pipeline per :meth:`AtomisticGenerator.sample` looks like::</span>
+
+<span class="sd">    # condition step -- only when a condition callable is provided:</span>
+<span class="sd">    BEFORE_CONDITION   hooks  (edit or replace ctx.inputs)</span>
+<span class="sd">    ctx.inputs = condition(ctx.inputs, num_samples=..., rng=...)</span>
+<span class="sd">    AFTER_CONDITION    hooks  (replace what the function is called with)</span>
+<span class="sd">    # generation and mapping:</span>
+<span class="sd">    ctx.sample = generator_func(ctx.inputs, num_samples=..., rng=...)</span>
+<span class="sd">    if isinstance(ctx.sample, Batch):   # the Batch path:</span>
+<span class="sd">        ctx.batch = ctx.sample</span>
+<span class="sd">        AFTER_GENERATE hooks (filtering = subsetting ctx.batch)</span>
+<span class="sd">        return ctx.batch</span>
+<span class="sd">    return ctx.sample      # any other container passes through as-is</span>
+
+<span class="sd">Conditioning is optional: pass ``condition_func``, or set a ``condition``</span>
+<span class="sd">attribute on the generating function, to transform inputs before generation.</span>
+<span class="sd">It prepares the request -- what the procedure is asked to do -- it does not</span>
+<span class="sd">constrain what comes out (output constraints live in guidance, rejection</span>
+<span class="sd">hooks, or pipeline stages). With neither, the inputs reach the function</span>
+<span class="sd">untouched and the ``BEFORE_CONDITION``/``AFTER_CONDITION`` stages do not</span>
+<span class="sd">fire.</span>
+
+<span class="sd">Hooks registered at the</span>
+<span class="sd">:class:`~nvalchemi.gen.stages.GenerationStage` points receive one shared</span>
+<span class="sd">:class:`~nvalchemi.hooks.GenerationContext` per call and mutate it by</span>
+<span class="sd">replacing its fields; the driver re-reads the context after each dispatch.</span>
+<span class="sd">Hooks run in list order at each stage, and a raising hook aborts the call.</span>
+<span class="sd">See the stage enum for what may change where and when each stage fires.</span>
+<span class="sd">Hooks reach the procedure via ``ctx.workflow.generator_func``;</span>
+<span class="sd">``ctx.model`` is always ``None`` -- the driver has no model field.</span>
+
+<span class="sd">The defaults chain</span>
+<span class="sd">------------------</span>
+<span class="sd">Every cross-cutting knob resolves the same way: an explicit driver argument</span>
+<span class="sd">wins, then the generating function&#39;s attribute, then the module default.</span>
+
+<span class="sd">* conditioning: ``condition_func`` &gt; ``generator_func.condition`` &gt; ``None``</span>
+<span class="sd">  (no condition step; the inputs pass through untouched).</span>
+<span class="sd">* field declarations: constructor ``required_inputs`` / ``outputs`` &gt;</span>
+<span class="sd">  ``generator_func``&#39;s attributes &gt; ``None`` (undeclared;</span>
+<span class="sd">  :class:`~nvalchemi.gen.pipeline.GenerationPipeline` validation fails fast).</span>
+<span class="sd">* device: ``device`` &gt; ``generator_func.device`` &gt; ``None`` (no stream, no</span>
+<span class="sd">  device-residency check, CPU session RNG).</span>
+
+<span class="sd">Materialization is the function&#39;s own, and the output contract is a</span>
+<span class="sd">:class:`~nvalchemi.data.Batch`: the driver fires the ``AFTER_GENERATE``</span>
+<span class="sd">hooks on it, validates it, and pipelines compose it (including driving</span>
+<span class="sd">dynamics). A function may return any other container, but then</span>
+<span class="sd">``sample()`` passes it through untouched: no ``AFTER_GENERATE`` hooks, and</span>
+<span class="sd">no feeding dynamics stages.</span>
+
+<span class="sd">Examples</span>
+<span class="sd">--------</span>
+<span class="sd">A GAN, one forward pass, returning a batch directly::</span>
+
+<span class="sd">    def gan_generate(inputs=None, *, num_samples=1, rng=None, **kwargs):</span>
+<span class="sd">        z = torch.randn(num_samples, latent_dim, generator=rng)</span>
+<span class="sd">        positions = decode(z).reshape(num_samples, num_atoms, 3)</span>
+<span class="sd">        numbers = torch.full((num_atoms,), 6)</span>
+<span class="sd">        return Batch.from_data_list(</span>
+<span class="sd">            [AtomicData(positions=x, atomic_numbers=numbers) for x in positions]</span>
+<span class="sd">        )</span>
+
+<span class="sd">    gan = AtomisticGenerator(generator_func=gan_generate)</span>
+
+<span class="sd">Model-owning procedures -- a callable object carries the model (plus</span>
+<span class="sd">``device`` and field declarations the driver reads as defaults); the tests</span>
+<span class="sd">and examples ship such objects::</span>
+
+<span class="sd">    gen = AtomisticGenerator(generator_func=GANGenerate(gan_model))</span>
+
+<span class="sd">Streaming -- one ``sample()`` call per input item; ``None`` means repeated</span>
+<span class="sd">unconditional draws (an infinite stream unless capped)::</span>
+
+<span class="sd">    for batch in gen.stream(None, max_batches=10):</span>
+<span class="sd">        ...</span>
+
+<span class="sd">Composition -- sequential pipelines mirror the dynamics ``|`` sugar</span>
+<span class="sd">(:class:`~nvalchemi.gen.pipeline.GenerationPipeline`)::</span>
+
+<span class="sd">    pipe = gen_a | gen_b</span>
+<span class="sd">    out = pipe(inputs)</span>
+
+<span class="sd">Sessions: streams, RNG, and compile -- the driver is a context manager.</span>
+<span class="sd">Entering a session (``with gen:``) creates a dedicated CUDA stream when the</span>
+<span class="sd">resolved device is CUDA (unless ``dedicated_stream=False``), seeds a</span>
+<span class="sd">session-scoped :class:`torch.Generator` (advanced per draw), compiles the</span>
+<span class="sd">generating function when ``compile_generate`` is set, and opens</span>
+<span class="sd">context-manager hooks; exiting unwinds all of it::</span>
+
+<span class="sd">    with gen.compile():</span>
+<span class="sd">        for batch in gen.stream(inputs):</span>
+<span class="sd">            ...</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExitStack</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TYPE_CHECKING</span><span class="p">,</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">Protocol</span><span class="p">,</span>
+    <span class="n">TypeVar</span><span class="p">,</span>
+    <span class="n">runtime_checkable</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseModel</span><span class="p">,</span>
+    <span class="n">ConfigDict</span><span class="p">,</span>
+    <span class="n">Field</span><span class="p">,</span>
+    <span class="n">FieldSerializationInfo</span><span class="p">,</span>
+    <span class="n">field_serializer</span><span class="p">,</span>
+    <span class="n">field_validator</span><span class="p">,</span>
+    <span class="n">model_validator</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._serialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">_wrap_custom_type</span><span class="p">,</span> <span class="n">capture_callable_spec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen._device</span><span class="w"> </span><span class="kn">import</span> <span class="n">normalize_device</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen.stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">GenerationStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">GenerationContext</span><span class="p">,</span> <span class="n">Hook</span><span class="p">,</span> <span class="n">HookRegistryMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_model_spec</span><span class="p">,</span> <span class="n">create_model_spec_from_json</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">GenerationPipeline</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;GeneratingFunction&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ConditionFunction&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AtomisticGenerator&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">InputT</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;InputT&quot;</span><span class="p">)</span>
+<span class="n">SampleT</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;SampleT&quot;</span><span class="p">)</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_PreparedGeneration</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolved per-call state after generation preparation.&quot;&quot;&quot;</span>
+
+    <span class="n">ctx</span><span class="p">:</span> <span class="n">GenerationContext</span>
+    <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+
+
+<span class="n">_SerializableOptionalDevice</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">_wrap_custom_type</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="sd">&quot;&quot;&quot;Field annotation for ``device`` on spec-serializable models.</span>
+
+<span class="sd">A plain ``torch.device | None`` cannot be dumped to JSON by pydantic, so</span>
+<span class="sd">this alias routes the field through the ``torch.device`` serializer</span>
+<span class="sd">registered in :mod:`nvalchemi._serialization`.</span>
+
+<span class="sd">Round-trips via :func:`str` / :class:`torch.device` — the pair registered in</span>
+<span class="sd">:mod:`nvalchemi._serialization` (``register_type_serializer``).&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="GeneratingFunction">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.GeneratingFunction.html#nvalchemi.gen.GeneratingFunction">[docs]</a>
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">GeneratingFunction</span><span class="p">(</span><span class="n">Protocol</span><span class="p">[</span><span class="n">InputT</span><span class="p">,</span> <span class="n">SampleT</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Callable that encapsulates a family-specific generation strategy.</span>
+
+<span class="sd">    A :class:`GeneratingFunction` owns everything generation needs --</span>
+<span class="sd">    including the model, when there is one (held as a closure or an</span>
+<span class="sd">    attribute of a callable object) -- samples from it, and returns the</span>
+<span class="sd">    generated artifact.</span>
+
+<span class="sd">    Conditioning may live inside the function, or as a ``condition``</span>
+<span class="sd">    attribute the driver calls before generation (see below); with neither,</span>
+<span class="sd">    the inputs pass through untouched as the first positional argument.</span>
+
+<span class="sd">    ``num_samples`` semantics are the function&#39;s own (per-conditioning-entry</span>
+<span class="sd">    draws vs an unconditional total); the driver passes its ``num_samples``</span>
+<span class="sd">    straight through.</span>
+
+<span class="sd">    ``rng`` is ``None`` unless the driver has a ``seed``, a session, or a</span>
+<span class="sd">    per-call ``rng=`` -- handle ``None`` (torch sampling ops accept it).</span>
+<span class="sd">    Outside a session the resolved RNG is CPU-resident even when generating</span>
+<span class="sd">    on CUDA; inside a session it lives on the resolved device. When you draw</span>
+<span class="sd">    on a device, make sure the generator matches it (e.g.</span>
+<span class="sd">    ``torch.randn(..., generator=rng, device=...)``).</span>
+
+<span class="sd">    Return a :class:`~nvalchemi.data.Batch`: that is the output contract.</span>
+<span class="sd">    The driver fires the ``AFTER_GENERATE`` hooks on it, validates its device</span>
+<span class="sd">    and declared ``outputs``, and pipelines compose it (including</span>
+<span class="sd">    driving dynamics on it). Any other container is a fallback with real</span>
+<span class="sd">    losses: ``sample()`` passes it through untouched, the ``AFTER_GENERATE``</span>
+<span class="sd">    hooks are skipped, and it cannot feed dynamics stages. Inside the</span>
+<span class="sd">    function, a :class:`~tensordict.TensorDict` survives ``torch.compile``</span>
+<span class="sd">    where arbitrary containers graph-break under ``compile_generate``;</span>
+<span class="sd">    convert it to a ``Batch`` before returning.</span>
+<span class="sd">    Library-native sampling loops (e.g. PhysicsNeMo diffusion samplers) plug</span>
+<span class="sd">    in through a thin adapter with this signature.</span>
+
+<span class="sd">    **Optional attributes.** A callable object (rather than a plain function)</span>
+<span class="sd">    may carry attributes the :class:`AtomisticGenerator` reads as defaults when</span>
+<span class="sd">    the driver does not set them explicitly:</span>
+
+<span class="sd">    - ``condition`` -- a :class:`ConditionFunction` mapping the call&#39;s raw</span>
+<span class="sd">      inputs to the conditioned value the function is then called with</span>
+<span class="sd">      (e.g. tiling a conditioning :class:`~nvalchemi.data.Batch` so each</span>
+<span class="sd">      graph gets ``num_samples`` draws). The driver runs it between the</span>
+<span class="sd">      ``BEFORE_CONDITION`` and ``AFTER_CONDITION`` dispatches, which fire</span>
+<span class="sd">      only when a condition step is provided; an explicit driver</span>
+<span class="sd">      ``condition_func`` takes precedence over this attribute. There is no</span>
+<span class="sd">      default condition: functions implement their own per use case, binding</span>
+<span class="sd">      any extra context in their closure.</span>
+<span class="sd">    - ``device`` -- a :class:`torch.device` (or parseable device string),</span>
+<span class="sd">      used when the driver&#39;s ``device`` is unset.</span>
+<span class="sd">    - ``required_inputs`` / ``outputs`` -- batch-field declarations,</span>
+<span class="sd">      used when the driver does not pass them at construction.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">InputT</span> <span class="o">|</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SampleT</span><span class="p">:</span> <span class="o">...</span></div>
+
+
+
+<div class="viewcode-block" id="ConditionFunction">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.ConditionFunction.html#nvalchemi.gen.ConditionFunction">[docs]</a>
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConditionFunction</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Translate a call&#39;s raw request into the generating function&#39;s working input.</span>
+
+<span class="sd">    Receives the raw inputs, the resolved ``num_samples``, and the resolved</span>
+<span class="sd">    ``rng``; returns the conditioned value the generating function is then</span>
+<span class="sd">    called with. The return type is the procedure&#39;s own -- conditioning may</span>
+<span class="sd">    change the type (e.g. a SMILES string becomes a</span>
+<span class="sd">    :class:`~nvalchemi.data.Batch`). There is no default: procedures</span>
+<span class="sd">    implement their own per use case.</span>
+
+<span class="sd">    The job is preparation, not enforcement: conditioning decides what the</span>
+<span class="sd">    procedure is *asked* to do, not what it must emit. Constraints on the</span>
+<span class="sd">    output (e.g. &quot;structures with a carboxyl group&quot;) live elsewhere --</span>
+<span class="sd">    guidance inside the generating function, rejection via hooks at</span>
+<span class="sd">    :class:`~nvalchemi.gen.stages.GenerationStage.AFTER_GENERATE` or a</span>
+<span class="sd">    wrapper generating function, or an explicit stage in a</span>
+<span class="sd">    :class:`~nvalchemi.gen.pipeline.GenerationPipeline`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span> <span class="o">...</span></div>
+
+
+
+<div class="viewcode-block" id="AtomisticGenerator">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AtomisticGenerator</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">HookRegistryMixin</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Generative inference driver: optionally condition the inputs, generate,</span>
+<span class="sd">    optionally materialize to a :class:`~nvalchemi.data.Batch`.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    generator_func</span>
+<span class="sd">        The :class:`GeneratingFunction` driving generation. Required; the</span>
+<span class="sd">        function owns the model when there is one.</span>
+<span class="sd">    condition_func</span>
+<span class="sd">        Optional :class:`ConditionFunction` run before generation: maps the</span>
+<span class="sd">        call&#39;s raw inputs to the conditioned value the generating function is</span>
+<span class="sd">        then called with. It prepares the request -- it does not constrain</span>
+<span class="sd">        what comes out. Takes precedence over the generating function&#39;s own</span>
+<span class="sd">        ``condition`` attribute. When neither is provided, no conditioning</span>
+<span class="sd">        happens -- the inputs pass through untouched and the</span>
+<span class="sd">        ``BEFORE_CONDITION``/``AFTER_CONDITION`` stages do not fire.</span>
+<span class="sd">    device</span>
+<span class="sd">        Optional execution device. When unset, the generating function&#39;s</span>
+<span class="sd">        ``device`` attribute is used. Bare ``&quot;cuda&quot;`` is resolved to the</span>
+<span class="sd">        current GPU at construction, and that GPU remains fixed for this</span>
+<span class="sd">        generator. If neither declares a device, no managed device or</span>
+<span class="sd">        output-device check applies.</span>
+<span class="sd">    dedicated_stream</span>
+<span class="sd">        When ``True`` (default), entering a session creates a dedicated CUDA</span>
+<span class="sd">        stream if the resolved device is CUDA. When ``False``, no stream is</span>
+<span class="sd">        created even then.</span>
+<span class="sd">    hooks</span>
+<span class="sd">        Generation hooks, each with a :class:`GenerationStage` ``stage``.</span>
+<span class="sd">        Validated at registration; see :class:`~nvalchemi.hooks.HookRegistryMixin`.</span>
+<span class="sd">        Serialized as attribute-faithful class specs (each ``__init__``</span>
+<span class="sd">        parameter read back from the same-named attribute).</span>
+<span class="sd">    required_inputs</span>
+<span class="sd">        Batch fields this generator&#39;s input reads (empty means</span>
+<span class="sd">        unconditional). Defaults from the generating function&#39;s</span>
+<span class="sd">        ``required_inputs`` attribute; required by</span>
+<span class="sd">        :class:`~nvalchemi.gen.pipeline.GenerationPipeline` for link</span>
+<span class="sd">        validation.</span>
+<span class="sd">    outputs</span>
+<span class="sd">        Batch fields this generator&#39;s output carries (written or forwarded).</span>
+<span class="sd">        Defaults from the generating function&#39;s ``outputs`` attribute.</span>
+<span class="sd">    num_samples</span>
+<span class="sd">        Independent draws requested per call, passed straight through to the</span>
+<span class="sd">        generating function (per-entry vs total-draw semantics are the</span>
+<span class="sd">        function&#39;s own). Per-call override via :meth:`sample`&#39;s</span>
+<span class="sd">        ``num_samples`` keyword.</span>
+<span class="sd">    seed</span>
+<span class="sd">        Optional base seed. Inside a session (``with gen:``) one</span>
+<span class="sd">        :class:`torch.Generator` is seeded at entry and advanced per draw;</span>
+<span class="sd">        outside a session each call derives</span>
+<span class="sd">        ``torch.Generator().manual_seed(seed + step_count)``. A per-call</span>
+<span class="sd">        ``rng=`` kwarg overrides both.</span>
+<span class="sd">    step_count</span>
+<span class="sd">        Runtime counter of generation calls -- incremented in a ``finally``,</span>
+<span class="sd">        so failed calls count too. Drives hook frequency gating. Excluded from</span>
+<span class="sd">        serialization.</span>
+<span class="sd">    compile_generate</span>
+<span class="sd">        Compile the generating function with ``torch.compile`` -- immediately</span>
+<span class="sd">        via :meth:`compile`, or lazily at session entry. Default ``False``.</span>
+<span class="sd">    compile_kwargs</span>
+<span class="sd">        Keyword arguments forwarded to ``torch.compile``.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    ``generator_func`` and the other callables are held as arbitrary types</span>
+<span class="sd">    (``arbitrary_types_allowed=True``).</span>
+
+<span class="sd">    ``AtomisticGenerator`` is a context manager (``with gen:``): a session owns a</span>
+<span class="sd">    dedicated CUDA stream (when the resolved device is CUDA and</span>
+<span class="sd">    ``dedicated_stream`` is set), a session-scoped RNG, lazy compilation, and</span>
+<span class="sd">    context-manager hooks. See :meth:`__enter__`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="n">generator_func</span><span class="p">:</span> <span class="n">GeneratingFunction</span>
+    <span class="n">condition_func</span><span class="p">:</span> <span class="n">ConditionFunction</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">_SerializableOptionalDevice</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Execution device, defaulting to generator_func.device. Bare CUDA &quot;</span>
+            <span class="s2">&quot;is pinned to the current GPU at construction; CUDA availability &quot;</span>
+            <span class="s2">&quot;and index bounds are validated.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">dedicated_stream</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Create a dedicated CUDA stream at session entry when the resolved &quot;</span>
+            <span class="s2">&quot;device is CUDA. Set False to suppress stream creation.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hook</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Generation hooks, fired at GenerationStage points with a shared &quot;</span>
+            <span class="s2">&quot;GenerationContext per call.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">required_inputs</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Batch fields the input carries (empty = unconditional). &quot;</span>
+            <span class="s2">&quot;Defaults from generator_func.required_inputs when available. &quot;</span>
+            <span class="s2">&quot;Checked against the (conditioned) inputs on every call.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">outputs</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Batch fields the output carries (written or forwarded). &quot;</span>
+            <span class="s2">&quot;Defaults from generator_func.outputs when available. &quot;</span>
+            <span class="s2">&quot;Checked against the materialized batch before each return.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Independent draws per call, passed straight through to the generating function.&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Base seed for per-draw RNGs (seed + step_count per call).&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">enable_inference_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Run generation under `torch.inference_mode` in the context manager. &quot;</span>
+            <span class="s2">&quot;This disables gradient tracking; enable it for workflows that do &quot;</span>
+            <span class="s2">&quot;not need gradients.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">exclude</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Runtime counter of generation calls (hook frequency).&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">compile_generate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Compile the generating function with torch.compile (immediate via &quot;</span>
+            <span class="s2">&quot;compile(), or lazily at session entry).&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">compile_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Keyword arguments forwarded to torch.compile; validated against &quot;</span>
+            <span class="s2">&quot;its signature at construction and in compile().&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_stage_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">[</span><span class="n">GenerationStage</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Hook stage enum accepted by this engine (see :class:`HookRegistryMixin`).</span>
+
+<span class="sd">        A property rather than a class attribute: pydantic collects the</span>
+<span class="sd">        mixin&#39;s ``_stage_type`` annotation as a private attribute initialised</span>
+<span class="sd">        to ``None``, and a plain class assignment does not override that on</span>
+<span class="sd">        instances.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">GenerationStage</span>
+
+<div class="viewcode-block" id="AtomisticGenerator.model_post_init">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator.model_post_init">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">model_post_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">__context</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Bind the execution device, register hooks, and initialize run state.</span>
+
+<span class="sd">        Hook ``stage`` values arriving as raw ints or name strings (e.g.</span>
+<span class="sd">        deserialized from a spec payload) are coerced to :class:`GenerationStage`</span>
+<span class="sd">        before registration.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">declared_device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">generator_func</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">declared_device</span><span class="p">,</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">normalize_device</span><span class="p">(</span><span class="n">declared_device</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">:</span>
+            <span class="n">stage</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;stage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">hook</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">GenerationStage</span><span class="p">[</span><span class="n">stage</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+                <span class="n">hook</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">GenerationStage</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_hooks</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ctx</span><span class="p">:</span> <span class="n">GenerationContext</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_session_rng</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_generate</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span><span class="p">:</span> <span class="n">ExitStack</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_device</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Normalize an optional device and validate CUDA availability.</span>
+
+<span class="sd">        ``None`` leaves placement to the generating function. CUDA devices are</span>
+<span class="sd">        resolved to an explicit GPU index at construction. Other device types</span>
+<span class="sd">        are accepted as parsed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        value</span>
+<span class="sd">            The raw ``device`` input: ``None``, a device string, or a</span>
+<span class="sd">            :class:`torch.device`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.device | None</span>
+<span class="sd">            The normalized device.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the string cannot be parsed, the input is neither a string nor</span>
+<span class="sd">            a :class:`torch.device`, or a CUDA device is requested that the</span>
+<span class="sd">            host cannot provide.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">normalize_device</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;generator_func&quot;</span><span class="p">,</span> <span class="s2">&quot;condition_func&quot;</span><span class="p">,</span> <span class="s2">&quot;hooks&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_deserialize_spec_payloads</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild live objects from spec payloads at load time.</span>
+
+<span class="sd">        A ``dict`` value is a :class:`~nvalchemi.training.BaseSpec` payload</span>
+<span class="sd">        captured at dump time and is deserialized with the training spec</span>
+<span class="sd">        machinery (:func:`~nvalchemi.training.create_model_spec_from_json`;</span>
+<span class="sd">        ``build`` resolves nested spec payloads recursively). ``hooks``</span>
+<span class="sd">        arrives as a list of payloads, each deserialized the same way. Live</span>
+<span class="sd">        callables and hook instances pass through unchanged.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        v</span>
+<span class="sd">            The raw field input.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Any</span>
+<span class="sd">            The rebuilt object(s), or ``v`` unchanged.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">create_model_spec_from_json</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[</span>
+                <span class="n">create_model_spec_from_json</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+                <span class="k">else</span> <span class="n">item</span>
+                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">v</span>
+            <span class="p">]</span>
+        <span class="k">return</span> <span class="n">v</span>
+
+    <span class="nd">@field_serializer</span><span class="p">(</span><span class="s2">&quot;generator_func&quot;</span><span class="p">,</span> <span class="s2">&quot;condition_func&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_serialize_callable</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">info</span><span class="p">:</span> <span class="n">FieldSerializationInfo</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Capture a callable field as a JSON-safe spec payload.</span>
+
+<span class="sd">        The object&#39;s own ``to_spec()`` when it provides one, else a</span>
+<span class="sd">        dotted-path capture of the module-level callable through the</span>
+<span class="sd">        :func:`~nvalchemi._serialization._return_importable` identity</span>
+<span class="sd">        factory. Lambdas, closures, and ``functools.partial`` objects carry</span>
+<span class="sd">        no import path and are rejected by</span>
+<span class="sd">        :func:`~nvalchemi._serialization._callable_path_of`. Fires for both</span>
+<span class="sd">        ``model_dump()`` and ``model_dump_json()``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fn</span>
+<span class="sd">            The live callable, or ``None``.</span>
+<span class="sd">        info</span>
+<span class="sd">            Field metadata (the field name labels capture errors).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any] | None</span>
+<span class="sd">            The serialized :class:`~nvalchemi.training.BaseSpec` payload.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``fn.to_spec()`` does not return a</span>
+<span class="sd">            :class:`~nvalchemi.training.BaseSpec`, or ``fn`` has no</span>
+<span class="sd">            importable dotted path.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">capture_callable_spec</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">field_name</span><span class="o">=</span><span class="n">info</span><span class="o">.</span><span class="n">field_name</span><span class="p">)</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;json&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@field_serializer</span><span class="p">(</span><span class="s2">&quot;hooks&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_serialize_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Capture each hook as a JSON-safe attribute-faithful spec payload.</span>
+
+<span class="sd">        The payload is the hook class path plus its ``__init__`` keyword</span>
+<span class="sd">        arguments, each read back from the same-named attribute (the</span>
+<span class="sd">        attribute-faithful convention). Values must be JSON-serializable —</span>
+<span class="sd">        keep hook state out of the constructor.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        hooks</span>
+<span class="sd">            The live hook list.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[dict[str, Any]]</span>
+<span class="sd">            One :class:`~nvalchemi.training.BaseSpec` payload per hook.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If an ``__init__`` parameter cannot be read back from an</span>
+<span class="sd">            attribute.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">payloads</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">hooks</span><span class="p">:</span>
+            <span class="bp">cls</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">values</span><span class="p">())[</span><span class="mi">1</span><span class="p">:]:</span>
+                <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span>
+                    <span class="n">inspect</span><span class="o">.</span><span class="n">Parameter</span><span class="o">.</span><span class="n">VAR_POSITIONAL</span><span class="p">,</span>
+                    <span class="n">inspect</span><span class="o">.</span><span class="n">Parameter</span><span class="o">.</span><span class="n">VAR_KEYWORD</span><span class="p">,</span>
+                <span class="p">):</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Cannot capture </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> in a spec: __init__ &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;parameter </span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not stored as a same-named &quot;</span>
+                        <span class="s2">&quot;attribute on the instance. Hook classes must be &quot;</span>
+                        <span class="s2">&quot;attribute-faithful to be spec-able.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="n">payloads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">create_model_spec</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">payloads</span>
+
+    <span class="nd">@field_serializer</span><span class="p">(</span><span class="s2">&quot;required_inputs&quot;</span><span class="p">,</span> <span class="s2">&quot;outputs&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_serialize_field_declarations</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dump the declarations as sorted lists.</span>
+
+<span class="sd">        Frozenset order varies between processes, so unsorted output would</span>
+<span class="sd">        make two dumps of the same generator compare unequal.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        value</span>
+<span class="sd">            The declared field set, or ``None``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[str] | None</span>
+<span class="sd">            The sorted declaration list, or ``None``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_default_field_declarations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomisticGenerator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Default field declarations from ``generator_func`` attributes when present.</span>
+
+<span class="sd">        Explicit constructor values always win; declarations stay ``None``</span>
+<span class="sd">        (undeclared) when the generating function carries no such attributes --</span>
+<span class="sd">        :class:`~nvalchemi.gen.pipeline.GenerationPipeline` validation then</span>
+<span class="sd">        fails fast on the undeclared stage.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        AtomisticGenerator</span>
+<span class="sd">            The generator with declarations defaulted.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">consumes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">required_inputs</span>
+        <span class="k">if</span> <span class="n">consumes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">consumes</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">generator_func</span><span class="p">,</span> <span class="s2">&quot;required_inputs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">consumes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">required_inputs</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">consumes</span><span class="p">)</span>
+        <span class="n">produces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span>
+        <span class="k">if</span> <span class="n">produces</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">produces</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">generator_func</span><span class="p">,</span> <span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">produces</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">produces</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_compile_kwargs</span><span class="p">(</span><span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise ``ValueError`` for kwargs that are not ``torch.compile`` keywords.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        kwargs</span>
+<span class="sd">            The kwargs to check against the installed ``torch.compile``</span>
+<span class="sd">            signature.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a key is not a keyword argument of ``torch.compile``, or is</span>
+<span class="sd">            ``model`` (the compile target, filled by :meth:`compile` with the</span>
+<span class="sd">            generating function).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="s2">&quot;model&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;compile_kwargs must not contain &#39;model&#39;: compile() passes the &quot;</span>
+                <span class="s2">&quot;generating function as the torch.compile target.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">kind</span> <span class="ow">is</span> <span class="n">inspect</span><span class="o">.</span><span class="n">Parameter</span><span class="o">.</span><span class="n">KEYWORD_ONLY</span>
+        <span class="p">}</span>
+        <span class="n">invalid</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-</span> <span class="n">valid</span>
+        <span class="k">if</span> <span class="n">invalid</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;compile_kwargs </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">invalid</span><span class="p">)</span><span class="si">}</span><span class="s2"> are not keyword arguments of &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;torch.compile; valid options: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">valid</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_compile_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomisticGenerator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check ``compile_kwargs`` against the installed ``torch.compile`` signature.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        AtomisticGenerator</span>
+<span class="sd">            The validated generator.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_compile_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+<div class="viewcode-block" id="AtomisticGenerator.compile">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator.compile">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomisticGenerator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compile the generating function with ``torch.compile``.</span>
+
+<span class="sd">        Merges *kwargs* with :attr:`compile_kwargs` (values passed here win),</span>
+<span class="sd">        sets :attr:`compile_generate`, and wraps ``generator_func``.</span>
+<span class="sd">        Calling again re-compiles with the new kwargs.</span>
+
+<span class="sd">        Only the generating function is compiled; hook dispatch runs eagerly</span>
+<span class="sd">        because it builds data structures and would graph-break anyway. Note</span>
+<span class="sd">        the boundary: a function returning a :class:`~nvalchemi.data.Batch`</span>
+<span class="sd">        builds it through pydantic, which dynamo cannot trace -- driver-level</span>
+<span class="sd">        compile captures the tensor-pure prefix and breaks at materialization,</span>
+<span class="sd">        and ``fullgraph=True`` cannot work there at all. For real capture,</span>
+<span class="sd">        compile the model inside the generating function and leave the driver</span>
+<span class="sd">        eager. Non-tensor-pure generating functions will</span>
+<span class="sd">        graph-break under ``torch.compile``; compile the model inside such</span>
+<span class="sd">        functions directly instead.</span>
+
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to ``torch.compile``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        AtomisticGenerator</span>
+<span class="sd">            This instance, for fluent chaining.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">merged</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_compile_kwargs</span><span class="p">(</span><span class="n">merged</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compile_kwargs</span> <span class="o">=</span> <span class="n">merged</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compile_generate</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_generate</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">generator_func</span><span class="p">,</span> <span class="o">**</span><span class="n">merged</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomisticGenerator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enter a generation session.</span>
+
+<span class="sd">        Creates and enters a dedicated CUDA stream when the resolved device</span>
+<span class="sd">        is CUDA and :attr:`dedicated_stream` is set (skipped when a pipeline</span>
+<span class="sd">        has already supplied a stream), seeds the session RNG from</span>
+<span class="sd">        :attr:`seed`, compiles the generating function when</span>
+<span class="sd">        :attr:`compile_generate` is set, enters :func:`torch.inference_mode`</span>
+<span class="sd">        when :attr:`enable_inference_mode` is set, and opens any</span>
+<span class="sd">        context-manager hooks. The new stream waits on the caller&#39;s current</span>
+<span class="sd">        stream at entry. Exiting does not synchronize the session stream:</span>
+<span class="sd">        enqueue a ``wait_stream`` or ``synchronize`` before consuming results</span>
+<span class="sd">        from a different stream.</span>
+<span class="sd">        When no device resolves -- the driver has no ``device`` and the</span>
+<span class="sd">        generating function declares none -- no stream is created, and the</span>
+<span class="sd">        session owns only the RNG (when :attr:`seed` is set) and hook</span>
+<span class="sd">        lifecycles.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        AtomisticGenerator</span>
+<span class="sd">            This instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;AtomisticGenerator sessions do not nest: this instance is &quot;</span>
+                <span class="s2">&quot;already in a session (duplicate pipeline stage or a manual &quot;</span>
+                <span class="s2">&quot;double-enter). Exit the active session first.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">stack</span> <span class="o">=</span> <span class="n">ExitStack</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable_inference_mode</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_inference_mode_enabled</span><span class="p">():</span>
+                <span class="c1"># generation produces no autograd history inside a session</span>
+                <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">inference_mode</span><span class="p">())</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span>
+                    <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">dedicated_stream</span>
+                <span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+                    <span class="c1"># order the session stream after the caller&#39;s in-flight work</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(</span><span class="n">device</span><span class="p">))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
+                    <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session_rng</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="n">rng_device</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">device</span> <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_session_rng</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">rng_device</span><span class="p">)</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">seed</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_generate</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_generate</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">compile</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">:</span>
+                <span class="n">enter</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__enter__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">enter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">enter</span><span class="p">()</span>
+                <span class="c1"># hooks unwind with (None, None, None): the lifecycle convention</span>
+                <span class="c1"># matches dynamics (no exception triple); close-having hooks</span>
+                <span class="c1"># without __exit__ unwind through close()</span>
+                <span class="n">exit_</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__exit__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">exit_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">stack</span><span class="o">.</span><span class="n">callback</span><span class="p">(</span><span class="n">exit_</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">close</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">close</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">stack</span><span class="o">.</span><span class="n">callback</span><span class="p">(</span><span class="n">close</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">stack</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_session_rng</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">raise</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">pop_all</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exit the session: close hooks, exit the stream, drop session RNG.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        exc_type, exc_val, exc_tb</span>
+<span class="sd">            The active exception, if any.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_session_stack</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream_ctx</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_session_rng</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GenerationContext</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the live per-call context built by :meth:`sample`.</span>
+
+<span class="sd">        Hooks always see the same context object within a call, so mutations</span>
+<span class="sd">        made at one stage are visible to later stages and to the core steps</span>
+<span class="sd">        in between. Outside a call, a minimal context is built on demand.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch | None</span>
+<span class="sd">            Current batch; used only when no per-call context is live.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        GenerationContext</span>
+<span class="sd">            The live or freshly built context.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ctx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ctx</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_rank</span>
+
+        <span class="k">return</span> <span class="n">GenerationContext</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span>
+            <span class="n">global_rank</span><span class="o">=</span><span class="n">get_rank</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span>
+            <span class="n">workflow</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+            <span class="n">step_count</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_prepare_generation</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_PreparedGeneration</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build and install the context, then resolve per-call generation state.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.training.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_rank</span>
+
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">GenerationContext</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">=</span><span class="n">inputs</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">Batch</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">global_rank</span><span class="o">=</span><span class="n">get_rank</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span>
+            <span class="n">workflow</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="n">inputs</span><span class="p">,</span>
+            <span class="n">step_count</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ctx</span> <span class="o">=</span> <span class="n">ctx</span>
+
+        <span class="n">n_draws</span> <span class="o">=</span> <span class="n">num_samples</span> <span class="k">if</span> <span class="n">num_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span>
+        <span class="k">if</span> <span class="n">n_draws</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;num_samples must be positive, got </span><span class="si">{</span><span class="n">n_draws</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Resolve RNG: per-call override, then session, then seed-derived.</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;rng&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session_rng</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">rng</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session_rng</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="n">rng</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">(</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">device</span> <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="o">+</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">)</span>
+
+        <span class="c1"># Resolve condition: driver&#39;s condition_func &gt; generator_func.condition.</span>
+        <span class="n">condition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">condition_func</span>
+        <span class="k">if</span> <span class="n">condition</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">condition</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">generator_func</span><span class="p">,</span> <span class="s2">&quot;condition&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">condition</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span><span class="n">condition</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">GenerationStage</span><span class="o">.</span><span class="n">BEFORE_CONDITION</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">inputs</span> <span class="o">=</span> <span class="n">condition</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">inputs</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="n">n_draws</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">rng</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">GenerationStage</span><span class="o">.</span><span class="n">AFTER_CONDITION</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">required_inputs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">inputs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">ctx</span><span class="o">.</span><span class="n">inputs</span><span class="p">,</span> <span class="p">(</span><span class="n">Batch</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;AtomisticGenerator declares required_inputs=&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">required_inputs</span><span class="p">)</span><span class="si">}</span><span class="s2">, but the call&#39;s inputs &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">inputs</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">) are not a &quot;</span>
+                    <span class="s2">&quot;field-addressable container (Batch, TensorDict, or a &quot;</span>
+                    <span class="s2">&quot;string-keyed mapping). Pass inputs carrying those &quot;</span>
+                    <span class="s2">&quot;fields, or fix the declaration.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">required_inputs</span><span class="p">)</span> <span class="k">if</span> <span class="n">f</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">inputs</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;AtomisticGenerator declares required_inputs but the &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;call&#39;s inputs lack </span><span class="si">{</span><span class="n">missing</span><span class="si">}</span><span class="s2">. Provide the fields in the &quot;</span>
+                    <span class="s2">&quot;inputs or in the condition step, or fix the declaration.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">_PreparedGeneration</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">n_draws</span><span class="p">,</span> <span class="n">rng</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_finish_preparation</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">prepared</span><span class="p">:</span> <span class="n">_PreparedGeneration</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_PreparedGeneration</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return prepared call state, or re-raise its preparation error.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">error</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">error</span>
+        <span class="k">if</span> <span class="n">prepared</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;generation preparation returned no call state&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">prepared</span>
+
+<div class="viewcode-block" id="AtomisticGenerator.sample">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate samples for the given inputs.</span>
+
+<span class="sd">        Runs the per-call pipeline shown in the module docstring: condition</span>
+<span class="sd">        (only if a condition callable resolved for the call), generate on the</span>
+<span class="sd">        session&#39;s CUDA stream, and the ``Batch`` path (hooks, device and field</span>
+<span class="sd">        checks) when the sample is a :class:`~nvalchemi.data.Batch`. Hooks</span>
+<span class="sd">        fire at the</span>
+<span class="sd">        :class:`~nvalchemi.gen.stages.GenerationStage` points -- each stage</span>
+<span class="sd">        only when the step it brackets ran -- and share one</span>
+<span class="sd">        :class:`~nvalchemi.hooks.GenerationContext` for the whole call.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        inputs</span>
+<span class="sd">            The input for this call -- a :class:`~nvalchemi.data.Batch`,</span>
+<span class="sd">            another tensor container, or ``None`` for unconditional</span>
+<span class="sd">            generation. When a condition step resolved for the call it runs on</span>
+<span class="sd">            this value first and the generating function receives the</span>
+<span class="sd">            conditioned result; otherwise the input is forwarded untouched.</span>
+<span class="sd">        num_samples</span>
+<span class="sd">            Per-call override for :attr:`num_samples`, passed straight</span>
+<span class="sd">            through to the generating function.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Per-call options forwarded to the generating function (e.g.</span>
+<span class="sd">            ``mask`` for inpainting). One reserved kwarg, ``rng=``, is</span>
+<span class="sd">            consumed by ``sample`` itself to override the session/seeded RNG</span>
+<span class="sd">            for this call.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Any</span>
+<span class="sd">            The generating function&#39;s output: a</span>
+<span class="sd">            :class:`~nvalchemi.data.Batch` on the contract path --</span>
+<span class="sd">            ``AFTER_GENERATE`` hooks have run (post-filter, so possibly with</span>
+<span class="sd">            fewer graphs than were sampled), and the device and declared-field</span>
+<span class="sd">            checks passed. A zero-graph ``Batch`` (built via</span>
+<span class="sd">            :meth:`~nvalchemi.data.Batch.empty`) passes through as-is</span>
+<span class="sd">            (subsetting a batch to zero graphs still raises ``IndexError``).</span>
+<span class="sd">            Any other container forfeits the ``Batch`` machinery: returned</span>
+<span class="sd">            untouched, ``AFTER_GENERATE`` hooks skipped, and it cannot feed</span>
+<span class="sd">            dynamics stages in a pipeline.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If the call declares ``required_inputs`` but the inputs cannot</span>
+<span class="sd">            carry fields, or ``AFTER_GENERATE`` hooks leave ``ctx.batch`` as</span>
+<span class="sd">            something other than a :class:`~nvalchemi.data.Batch`.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``num_samples`` resolves to less than 1, declared fields are</span>
+<span class="sd">            missing from the inputs or the returned batch, or a device</span>
+<span class="sd">            resolved (via ``device`` or ``generator_func.device``) but the</span>
+<span class="sd">            returned batch lives on a different device.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">prepared</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_generation</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+                <span class="n">prepared</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finish_preparation</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">prepared</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finish_preparation</span><span class="p">(</span><span class="n">prepared</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+            <span class="n">ctx</span> <span class="o">=</span> <span class="n">prepared</span><span class="o">.</span><span class="n">ctx</span>
+            <span class="n">gen_fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_generate</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">generator_func</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">sample</span> <span class="o">=</span> <span class="n">gen_fn</span><span class="p">(</span>
+                <span class="n">ctx</span><span class="o">.</span><span class="n">inputs</span><span class="p">,</span>
+                <span class="n">num_samples</span><span class="o">=</span><span class="n">prepared</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span>
+                <span class="n">rng</span><span class="o">=</span><span class="n">prepared</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">prepared</span><span class="o">.</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">sample</span><span class="p">,</span> <span class="n">Batch</span><span class="p">):</span>
+                <span class="c1"># raw passthrough: AFTER_GENERATE hooks are Batch-level</span>
+                <span class="k">return</span> <span class="n">ctx</span><span class="o">.</span><span class="n">sample</span>
+            <span class="c1"># at this point, we should be able to treat the</span>
+            <span class="c1"># sample as the batch now,</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">sample</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">GenerationStage</span><span class="o">.</span><span class="n">AFTER_GENERATE</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">is_compiling</span><span class="p">()</span>
+                <span class="c1"># a zero-graph batch (total rejection) carries no device state</span>
+                <span class="ow">and</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="p">):</span>
+                <span class="n">batch_device</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span>
+                <span class="k">if</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">batch_device</span><span class="o">.</span><span class="n">type</span> <span class="ow">or</span> <span class="p">(</span>
+                    <span class="n">device</span><span class="o">.</span><span class="n">index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="n">batch_device</span><span class="o">.</span><span class="n">index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">index</span> <span class="o">!=</span> <span class="n">batch_device</span><span class="o">.</span><span class="n">index</span>
+                <span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;the generated batch lives on device &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">batch_device</span><span class="si">}</span><span class="s2">&#39;, but the resolved device is &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">&#39;. Move the batch onto the resolved device &quot;</span>
+                        <span class="s2">&quot;inside the generating function, or &quot;</span>
+                        <span class="s2">&quot;fix the device chain (AtomisticGenerator.device / &quot;</span>
+                        <span class="s2">&quot;generator_func.device).&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputs</span> <span class="ow">and</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">)</span> <span class="k">if</span> <span class="n">f</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;AtomisticGenerator declares outputs but the &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;returned batch lacks </span><span class="si">{</span><span class="n">missing</span><span class="si">}</span><span class="s2">. Add the fields in the &quot;</span>
+                        <span class="s2">&quot;generating function, or fix the &quot;</span>
+                        <span class="s2">&quot;declaration.&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">return</span> <span class="n">batch</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ctx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ctx</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">step_count</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Syntactic sugar for :meth:`sample`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        inputs</span>
+<span class="sd">            The input for this call; forwarded to :meth:`sample`.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Forwarded to :meth:`sample`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Any</span>
+<span class="sd">            The generated batch, or the raw sample when the function returns</span>
+<span class="sd">            a non-``Batch`` container.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AtomisticGenerator.stream">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.gen.AtomisticGenerator.html#nvalchemi.gen.AtomisticGenerator.stream">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">max_batches</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Iterate over inputs, calling :meth:`sample` once per item.</span>
+
+<span class="sd">        Pass any iterable of inputs, or ``None`` for repeated unconditional</span>
+<span class="sd">        draws. ``stream(None)`` without ``max_batches`` is an infinite</span>
+<span class="sd">        iterator.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        inputs</span>
+<span class="sd">            Iterable of inputs, or ``None`` for unconditional draws.</span>
+<span class="sd">        max_batches</span>
+<span class="sd">            Stop after this many batches; ``None`` follows ``inputs``. When</span>
+<span class="sd">            ``inputs`` is ``None`` and ``max_batches`` is unset the stream is</span>
+<span class="sd">            unbounded.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Per-call options forwarded to :meth:`sample`.</span>
+
+<span class="sd">        Yields</span>
+<span class="sd">        ------</span>
+<span class="sd">        Any</span>
+<span class="sd">            Each :meth:`sample` result exactly as produced: a</span>
+<span class="sd">            :class:`~nvalchemi.data.Batch` when the function returns one,</span>
+<span class="sd">            otherwise the raw sample. A function may signal total rejection</span>
+<span class="sd">            with :meth:`~nvalchemi.data.Batch.empty` -- that zero-graph batch</span>
+<span class="sd">            is yielded, so rejection-aware consumers should check</span>
+<span class="sd">            ``num_graphs == 0``. Retrying rejected draws is the consumer&#39;s job.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">inputs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">inputs</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">inputs</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">max_batches</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="n">max_batches</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Thin sugar for :meth:`stream` with default arguments.</span>
+
+<span class="sd">        Warnings</span>
+<span class="sd">        --------</span>
+<span class="sd">        This is an unbounded stream: ``list(gen)`` or a bare ``for`` loop</span>
+<span class="sd">        never terminates. Bound it with ``stream(max_batches=...)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Iterator</span>
+<span class="sd">            ``self.stream()`` -- an unbounded stream of unconditional draws.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__or__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GenerationPipeline</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compose sequentially into a :class:`GenerationPipeline`.</span>
+
+<span class="sd">        Mirrors :meth:`nvalchemi.dynamics.base.BaseDynamics.__or__`. (``+``</span>
+<span class="sd">        stays reserved for concurrent/fused composition, as in dynamics.)</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        other</span>
+<span class="sd">            A :class:`AtomisticGenerator`, a dynamics engine, a ``Batch -&gt; Batch``</span>
+<span class="sd">            callable, or an existing pipeline.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        GenerationPipeline</span>
+<span class="sd">            ``self`` followed by ``other`` (prepended when ``other`` is</span>
+<span class="sd">            already a pipeline).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.gen.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">GenerationPipeline</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">GenerationPipeline</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">GenerationPipeline</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">other</span><span class="o">.</span><span class="n">stages</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">GenerationPipeline</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">])</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

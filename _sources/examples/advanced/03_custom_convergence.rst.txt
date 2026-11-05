@@ -38,7 +38,7 @@ Key concepts demonstrated
 * Multi-criteria convergence combining force norm **and** a second criterion.
 * ``custom_op`` — a callable that receives the raw tensor and returns a ``[B]``
   bool mask, used here to implement an energy-change criterion.
-* Combining force-norm and energy-change criteria in a FIRE optimisation.
+* Combining force-norm and energy-change criteria in a FIRE2 optimisation.
 
 .. GENERATED FROM PYTHON SOURCE LINES 38-53
 
@@ -52,7 +52,7 @@ Key concepts demonstrated
     import torch
 
     from nvalchemi.data import AtomicData, Batch
-    from nvalchemi.dynamics import FIRE
+    from nvalchemi.dynamics import FIRE2
     from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
     from nvalchemi.hooks import DynamicsContext
     from nvalchemi.models.lj import LennardJonesModelWrapper
@@ -275,7 +275,7 @@ tensor of shape ``[B, 1]``.
 Practical example: dual force + energy-change convergence
 ----------------------------------------------------------
 Combine a force-norm criterion with the energy-change criterion so that
-FIRE stops only when the optimizer has truly converged — both forces are
+FIRE2 stops only when the optimizer has truly converged — both forces are
 small AND the energy is stable.
 
 The energy-change guard prevents early exit when the optimizer happens to
@@ -286,7 +286,7 @@ take a near-zero force step during a large momentum phase.
 .. code-block:: Python
 
 
-    print("\n=== FIRE with dual force+energy-change convergence ===")
+    print("\n=== FIRE2 with dual force+energy-change convergence ===")
 
     # Reset the shared closure state for a clean run.
     prev_energy.clear()
@@ -314,9 +314,9 @@ take a near-zero force step during a large momentum phase.
         ]
     )
 
-    fire = FIRE(
+    fire = FIRE2(
         model=model,
-        dt=0.5,
+        dt=0.05,
         n_steps=500,
         convergence_hook=dual_custom_hook,
     )
@@ -351,7 +351,7 @@ take a near-zero force step during a large momentum phase.
 
     fire.register_hook(_LogHook())
     batch = fire.run(batch)
-    print(f"\nCompleted {fire.step_count} FIRE steps (dual convergence).")
+    print(f"\nCompleted {fire.step_count} FIRE2 steps (dual convergence).")
 
     final_energy = batch.energy.squeeze(-1)
     for i in range(batch.num_graphs):
@@ -365,22 +365,25 @@ take a near-zero force step during a large momentum phase.
  .. code-block:: none
 
 
-    === FIRE with dual force+energy-change convergence ===
+    === FIRE2 with dual force+energy-change convergence ===
     Batch: 2 systems, 16 atoms total
 
     [step    1]
-      sys0: E=-0.14072 eV  fmax=0.01609 eV/Å
+      sys0: E=-0.14073 eV  fmax=0.01609 eV/Å
       sys1: E=-0.07711 eV  fmax=0.01232 eV/Å
     [step   51]
-      sys0: E=-0.15918 eV  fmax=0.00185 eV/Å
-      sys1: E=-0.15530 eV  fmax=0.01766 eV/Å
+      sys0: E=-0.14638 eV  fmax=0.01497 eV/Å
+      sys1: E=-0.08108 eV  fmax=0.01288 eV/Å
     [step  101]
-      sys0: E=-0.19725 eV  fmax=0.00136 eV/Å
-      sys1: E=-0.18039 eV  fmax=0.01052 eV/Å
+      sys0: E=-0.15910 eV  fmax=0.00197 eV/Å
+      sys1: E=-0.10331 eV  fmax=0.01540 eV/Å
+    [step  151]
+      sys0: E=-0.15916 eV  fmax=0.00148 eV/Å
+      sys1: E=-0.15550 eV  fmax=0.01285 eV/Å
 
-    Completed 143 FIRE steps (dual convergence).
-      sys0: final E = -0.197351 eV
-      sys1: final E = -0.196677 eV
+    Completed 159 FIRE2 steps (dual convergence).
+      sys0: final E = -0.159177 eV
+      sys1: final E = -0.158224 eV
 
 
 
@@ -388,7 +391,7 @@ take a near-zero force step during a large momentum phase.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.164 seconds)
+   **Total running time of the script:** (0 minutes 0.102 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_03_custom_convergence.py:

@@ -1,0 +1,6 @@
+﻿nvalchemi.csp.get\_crystal\_system
+==================================
+
+.. currentmodule:: nvalchemi.csp
+
+.. autofunction:: get_crystal_system

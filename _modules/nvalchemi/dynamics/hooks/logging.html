@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nvalchemi.dynamics.hooks.logging &#8212; ALCHEMI Toolkit 0.2.0 documentation</title>
+    <title>nvalchemi.dynamics.hooks.logging &#8212; ALCHEMI Toolkit 0.3.0 documentation</title>
   
   
   
@@ -44,7 +44,7 @@
 <link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
   <script src="../../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
 
-    <script src="../../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../../_static/documentation_options.js?v=f129cdf0"></script>
     <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>let toggleHintShow = 'Click to show';</script>
@@ -54,7 +54,7 @@
     <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/nvalchemi/dynamics/hooks/logging';</script>
-    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=67f68b41"></script>
+    <script defer="defer" src="../../../../_static/js/install-matrix.js?v=5598d0cc"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -426,10 +426,10 @@ document.write(`
 <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">Logging hook for recording per-sample simulation observables.</span>
 
-<span class="sd">Provides :class:`LoggingHook`, which computes and logs per-graph scalar</span>
-<span class="sd">statistics (energy, temperatures, max forces, etc.) at a configurable</span>
-<span class="sd">frequency.  Each graph in the batch is written as an individual row,</span>
-<span class="sd">together with the current step and status (stage) information.</span>
+<span class="sd">Provides :class:`LoggingHook`, which computes and logs scalar statistics at a</span>
+<span class="sd">configurable frequency. By default, each graph in the batch is written as an</span>
+<span class="sd">individual row. With ``by_group=True``, logging instead writes one row per</span>
+<span class="sd">group and accepts custom scalars with one value per group.</span>
 
 <span class="sd">I/O is offloaded to a background thread via :class:`ThreadPoolExecutor`</span>
 <span class="sd">so that file writes do not block the simulation loop.  When the batch</span>
@@ -471,10 +471,6 @@ document.write(`
     <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-<span class="c1"># Boltzmann constant in eV/K — consistent with typical atomistic MD unit</span>
-<span class="c1"># systems (positions in Å, masses in amu, velocities in Å/fs, energy in eV).</span>
-<span class="n">_KB_EV_PER_K</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">8.617333262e-5</span>
-
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;LoggingHook&quot;</span><span class="p">]</span>
 
 <span class="n">LogBackend</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span> <span class="s2">&quot;tensorboard&quot;</span><span class="p">,</span> <span class="s2">&quot;custom&quot;</span><span class="p">]</span>
@@ -483,11 +479,10 @@ document.write(`
 <div class="viewcode-block" id="LoggingHook">
 <a class="viewcode-back" href="../../../../modules/dynamics/generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">LoggingHook</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Log per-sample scalar observables from the simulation.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Log scalar observables with one row per graph or group.</span>
 
-<span class="sd">    At each firing step, this hook computes per-graph scalars from the</span>
-<span class="sd">    :class:`~nvalchemi.data.Batch` and writes **one row per graph** to the</span>
-<span class="sd">    configured logging backend.  Each row includes:</span>
+<span class="sd">    At each firing step, this hook writes one row per graph by default. Graph</span>
+<span class="sd">    rows include:</span>
 
 <span class="sd">    * **step** — the current ``dynamics.step_count``.</span>
 <span class="sd">    * **graph_idx** — the graph&#39;s index within the batch.</span>
@@ -500,10 +495,16 @@ document.write(`
 <span class="sd">      (from ``batch.velocities`` and ``batch.atomic_masses`` via the</span>
 <span class="sd">      equipartition theorem), if velocities are present.</span>
 
-<span class="sd">    Users can extend or replace this set by providing a ``custom_scalars``</span>
-<span class="sd">    mapping of ``{name: callable}`` pairs, where each callable has</span>
-<span class="sd">    signature ``(ctx) -&gt; Tensor`` of shape ``(B,)`` (one</span>
-<span class="sd">    value per graph) or a plain ``float`` (broadcast to all graphs).</span>
+<span class="sd">    With ``by_group=True``, the batch must have a</span>
+<span class="sd">    :class:`~nvalchemi.data.GroupLayout`. Group rows contain ``step``,</span>
+<span class="sd">    ``group_idx``, and the status of the first graph in each group. Graph-level</span>
+<span class="sd">    energy, force, and temperature are not reduced automatically because their</span>
+<span class="sd">    group-level meanings are application dependent.</span>
+
+<span class="sd">    Users can extend or replace the logged scalars by providing a</span>
+<span class="sd">    ``custom_scalars`` mapping of ``{name: callable}`` pairs. Each callable has</span>
+<span class="sd">    signature ``(ctx) -&gt; Tensor`` and returns one value per row, or returns a</span>
+<span class="sd">    plain ``float`` that is broadcast to every row.</span>
 
 <span class="sd">    **Asynchronous I/O.** Scalar computation and the GPU-to-CPU transfer</span>
 <span class="sd">    run on a dedicated CUDA side stream (set up in :meth:`__enter__`) so</span>
@@ -536,14 +537,22 @@ document.write(`
 <span class="sd">        File path for file-based backends (``&quot;csv&quot;``,</span>
 <span class="sd">        ``&quot;tensorboard&quot;``).  Default ``None``.</span>
 <span class="sd">    custom_scalars : dict[str, Callable] | None, optional</span>
-<span class="sd">        Additional named scalars to compute and log.  Each callable</span>
-<span class="sd">        receives ``(ctx,)`` — a :class:`DynamicsContext` — and returns</span>
-<span class="sd">        either a ``(B,)`` tensor (per-graph values) or a ``float``</span>
-<span class="sd">        (broadcast to all graphs).  Name collisions override defaults.</span>
-<span class="sd">        Default ``None``.</span>
+<span class="sd">        Additional named scalars to compute and log. Each callable receives</span>
+<span class="sd">        ``(ctx,)`` — a :class:`DynamicsContext` — and returns one tensor</span>
+<span class="sd">        value per selected row, shape ``(B,)`` for graph rows or ``(G,)`` for</span>
+<span class="sd">        group rows. A ``float`` is broadcast to every</span>
+<span class="sd">        row. Name collisions override defaults. Default ``None``.</span>
 <span class="sd">    writer_fn : Callable[[int, list[dict[str, float]]], None] | None, optional</span>
 <span class="sd">        Custom writer function, required when ``backend=&quot;custom&quot;``.</span>
 <span class="sd">        Receives ``(step_count, rows)``.  Default ``None``.</span>
+<span class="sd">    stage : enum.Enum, optional</span>
+<span class="sd">        Dynamics stage at which to log. Default</span>
+<span class="sd">        :attr:`~nvalchemi.dynamics.base.DynamicsStage.AFTER_STEP`.</span>
+<span class="sd">        Logging at ``ON_GRADUATE`` still respects ``frequency``.</span>
+<span class="sd">    by_group : bool, optional</span>
+<span class="sd">        Write one row per group instead of one row per graph. Group logging</span>
+<span class="sd">        requires the batch to have a group layout and expects tensor-valued</span>
+<span class="sd">        custom scalars with shape ``(num_groups,)``. Default ``False``.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -573,8 +582,6 @@ document.write(`
 <span class="sd">      contention.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="LoggingHook.__init__">
-<a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">backend</span><span class="p">:</span> <span class="n">LogBackend</span><span class="p">,</span>
@@ -585,6 +592,8 @@ document.write(`
         <span class="p">)</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">writer_fn</span><span class="p">:</span> <span class="p">(</span><span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">by_group</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
@@ -606,12 +615,11 @@ document.write(`
                 <span class="sa">f</span><span class="s2">&quot;LoggingHook only supports backends: &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">get_args</span><span class="p">(</span><span class="n">LogBackend</span><span class="p">)</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">backend</span><span class="si">!r}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">backend</span> <span class="o">=</span> <span class="n">backend</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log_path</span> <span class="o">=</span> <span class="n">log_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">by_group</span> <span class="o">=</span> <span class="n">by_group</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">custom_scalars</span> <span class="o">=</span> <span class="n">custom_scalars</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">writer_fn</span> <span class="o">=</span> <span class="n">writer_fn</span></div>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">writer_fn</span> <span class="o">=</span> <span class="n">writer_fn</span>
 
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Context manager</span>
@@ -658,7 +666,7 @@ document.write(`
         <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute per-graph scalars and dispatch to the logging backend.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute one scalar value per output row and dispatch to the backend.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -668,6 +676,15 @@ document.write(`
 <span class="sd">            The current step number.</span>
 <span class="sd">        ctx : DynamicsContext</span>
 <span class="sd">            The hook context (required for custom_scalars).</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If group logging is requested without valid grouping metadata, or a</span>
+<span class="sd">            tensor-valued custom scalar does not have one value per output row.</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If group logging is requested and ``batch.group_idx`` does not have</span>
+<span class="sd">            an integer dtype.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">device</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span>
         <span class="n">use_stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span>
@@ -684,13 +701,22 @@ document.write(`
         <span class="k">with</span> <span class="n">stream_ctx</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">use_stream</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="n">main_stream</span><span class="p">)</span>
-            <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">cpu_td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">use_stream</span><span class="p">:</span>
+                <span class="c1"># Keep each CUDA snapshot&#39;s storage alive until its asynchronous</span>
+                <span class="c1"># copy on the logging stream has completed.</span>
+                <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">is_cuda</span><span class="p">:</span>
+                        <span class="n">value</span><span class="o">.</span><span class="n">record_stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">step_count</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dispatch</span><span class="p">,</span> <span class="n">cpu_td</span><span class="p">,</span> <span class="n">step_count</span><span class="p">)</span>
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Log scalar observables for the current step.&quot;&quot;&quot;</span>
+        <span class="c1"># Graduation dispatch bypasses the engine&#39;s normal frequency gate.</span>
+        <span class="k">if</span> <span class="n">stage</span> <span class="o">==</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_GRADUATE</span> <span class="ow">and</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
 
     <span class="c1"># ------------------------------------------------------------------</span>
@@ -703,7 +729,7 @@ document.write(`
         <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">ctx</span><span class="p">:</span> <span class="n">DynamicsContext</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a ``TensorDict(batch_size=[B])`` of per-graph scalars.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build scalar columns with one tensor element per output row.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -713,14 +739,35 @@ document.write(`
 <span class="sd">            The current step number.</span>
 <span class="sd">        ctx : DynamicsContext</span>
 <span class="sd">            The hook context (required for custom_scalars).</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If group logging is requested without valid grouping metadata, or a</span>
+<span class="sd">            tensor-valued custom scalar does not have one value per output row.</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If group logging is requested and ``batch.group_idx`` does not have</span>
+<span class="sd">            an integer dtype.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">dev</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span>
-        <span class="n">num_graphs</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="n">row_kind</span> <span class="o">=</span> <span class="s2">&quot;group&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">by_group</span> <span class="k">else</span> <span class="s2">&quot;graph&quot;</span>
+        <span class="n">index_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">row_kind</span><span class="si">}</span><span class="s2">_idx&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">by_group</span><span class="p">:</span>
+            <span class="n">layout</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">group_layout</span>
+            <span class="n">num_rows</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">num_groups</span>
+            <span class="n">status_index</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">group_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">num_rows</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+            <span class="n">status_index</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-            <span class="n">step</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">num_graphs</span><span class="p">,),</span> <span class="n">step_count</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
-            <span class="n">graph_idx</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
-            <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">num_graphs</span><span class="p">],</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;step&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                    <span class="p">(</span><span class="n">num_rows</span><span class="p">,),</span> <span class="n">step_count</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+                <span class="p">),</span>
+                <span class="n">index_name</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">num_rows</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="p">},</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">num_rows</span><span class="p">],</span>
         <span class="p">)</span>
 
         <span class="c1"># Status (stage code) — 0 if not present</span>
@@ -728,34 +775,36 @@ document.write(`
             <span class="n">status</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">batch</span><span class="o">.</span><span class="n">status</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">batch</span><span class="o">.</span><span class="n">status</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">batch</span><span class="o">.</span><span class="n">status</span>
             <span class="p">)</span>
+            <span class="k">if</span> <span class="n">status_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">status</span> <span class="o">=</span> <span class="n">status</span><span class="p">[</span><span class="n">status_index</span><span class="p">]</span>
             <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="n">status</span><span class="o">.</span><span class="n">float</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">))</span>
+            <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_rows</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">))</span>
 
-        <span class="k">if</span> <span class="n">batch</span><span class="o">.</span><span class="n">energy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">by_group</span> <span class="ow">and</span> <span class="n">batch</span><span class="o">.</span><span class="n">energy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># ``reshape`` (not ``squeeze(-1)``): per-graph energy arrives as</span>
             <span class="c1"># ``[num_graphs, 1]`` single-process but ``[num_graphs]`` after the DD</span>
             <span class="c1"># forward consolidates it — squeezing the latter yields a 0-D scalar</span>
             <span class="c1"># that mismatches the per-graph TensorDict batch size.</span>
-            <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">num_graphs</span><span class="p">))</span>
+            <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">num_rows</span><span class="p">))</span>
 
-        <span class="k">if</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">by_group</span> <span class="ow">and</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">norms</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">vector_norm</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
             <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
                 <span class="s2">&quot;fmax&quot;</span><span class="p">,</span>
                 <span class="n">scatter_reduce_per_graph</span><span class="p">(</span>
-                    <span class="n">norms</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_graphs</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">&quot;amax&quot;</span>
+                    <span class="n">norms</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">num_rows</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">&quot;amax&quot;</span>
                 <span class="p">),</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">by_group</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
                 <span class="s2">&quot;temperature&quot;</span><span class="p">,</span>
                 <span class="n">temperature_per_graph</span><span class="p">(</span>
                     <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="p">,</span>
                     <span class="n">batch</span><span class="o">.</span><span class="n">atomic_masses</span><span class="p">,</span>
                     <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span>
-                    <span class="n">num_graphs</span><span class="p">,</span>
+                    <span class="n">num_rows</span><span class="p">,</span>
                     <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="p">,</span>
                 <span class="p">),</span>
             <span class="p">)</span>
@@ -765,9 +814,15 @@ document.write(`
                 <span class="c1"># custom_scalars receive (ctx,) — a DynamicsContext</span>
                 <span class="n">val</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">num_rows</span><span class="p">,):</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;custom scalar </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> must return shape &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">num_rows</span><span class="si">}</span><span class="s2">,) for </span><span class="si">{</span><span class="n">row_kind</span><span class="si">}</span><span class="s2"> rows, &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
                     <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">num_graphs</span><span class="p">,),</span> <span class="n">val</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">))</span>
+                    <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">num_rows</span><span class="p">,),</span> <span class="n">val</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">))</span>
 
         <span class="k">return</span> <span class="n">td</span>
 
@@ -809,12 +864,14 @@ document.write(`
             <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.tensorboard</span><span class="w"> </span><span class="kn">import</span> <span class="n">SummaryWriter</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_tb_writer</span> <span class="o">=</span> <span class="n">SummaryWriter</span><span class="p">(</span><span class="n">log_dir</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_path</span><span class="p">))</span>
+        <span class="n">row_kind</span> <span class="o">=</span> <span class="s2">&quot;group&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">by_group</span> <span class="k">else</span> <span class="s2">&quot;graph&quot;</span>
+        <span class="n">index_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">row_kind</span><span class="si">}</span><span class="s2">_idx&quot;</span>
         <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
-            <span class="n">graph_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;graph_idx&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="n">row_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">index_name</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">row</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="s2">&quot;graph_idx&quot;</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="n">index_name</span><span class="p">):</span>
                     <span class="k">continue</span>
-                <span class="n">tag</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">/graph_</span><span class="si">{</span><span class="n">graph_idx</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">key</span>
+                <span class="n">tag</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">row_kind</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">row_idx</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">key</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_tb_writer</span><span class="o">.</span><span class="n">add_scalar</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span></div>
 
 
@@ -828,11 +885,12 @@ document.write(`
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_tensordict_to_rows</span><span class="p">(</span><span class="n">td</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a ``TensorDict(batch_size=[B])`` into a list of dicts.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a row-aligned ``TensorDict(batch_size=[B])`` or</span>
+<span class="sd">    ``TensorDict(batch_size=[G])`` into a list of dictionaries.&quot;&quot;&quot;</span>
     <span class="n">cols</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">td</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
-    <span class="n">num_graphs</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">num_rows</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">cols</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-    <span class="k">return</span> <span class="p">[{</span><span class="n">k</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">cols</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_graphs</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="p">[{</span><span class="n">k</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">cols</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_rows</span><span class="p">)]</span>
 </pre></div>
 
                 </article>

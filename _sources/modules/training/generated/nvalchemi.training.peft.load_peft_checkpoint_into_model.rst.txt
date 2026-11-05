@@ -1,0 +1,6 @@
+﻿nvalchemi.training.peft.load\_peft\_checkpoint\_into\_model
+===========================================================
+
+.. currentmodule:: nvalchemi.training.peft
+
+.. autofunction:: load_peft_checkpoint_into_model
