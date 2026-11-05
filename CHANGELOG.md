@@ -591,6 +591,16 @@
   `batch_cluster_tile` was used, which the method selector picks by default
   for batched float32 full lists. The per-system tile state that
   toolkit-ops needs for partial rebuilds is now allocated.
+- Validate a tensor `atom_categories` as a tensor first, instead of trying
+  `list[AtomCategory]` element by element. This removes one `Tensor.item()`
+  (a device sync on CUDA) per atom from `AtomicData` construction,
+  `AtomicData.to` and `Batch.get_data` / `Batch.to_data_list`.
+- `NeighborListHook` capped the cell list of a single system at 8192 cells,
+  the toolkit-ops default for batches. toolkit-ops supports up to 524288
+  cells for a single system, and its method selection assumes that cap.
+  Large single systems were therefore given a coarse grid, which made
+  neighbor-list builds considerably slower. The single-system cap is now used
+  when the hook builds a cell list for one system.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain

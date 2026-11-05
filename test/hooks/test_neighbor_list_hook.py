@@ -390,6 +390,48 @@ class TestAllocNlKwargs:
             f"Missing keys: {expected_keys - set(hook._buf_nl_kwargs.keys())}"
         )
 
+    @pytest.mark.parametrize("n_graphs", [1, 2])
+    def test_cell_list_cell_cap_matches_selector(self, device: str, n_graphs: int):
+        """Cell lists use the selector's per-system cell cap.
+
+        The cost model assumes 524288 cells for a single system and 8192 per
+        system for a batch. A 40 A box with a 1 A cutoff needs about 40^3 =
+        64000 cells, so a single system must not be capped at 8192.
+        """
+        from nvalchemiops.neighbors.base_dispatch import (
+            DEFAULT_BATCH_MAX_NBINS,
+            DEFAULT_SINGLE_MAX_NBINS,
+        )
+
+        gen = torch.Generator().manual_seed(0)
+        box, n_atoms = 40.0, 2000
+        data_list = [
+            AtomicData(
+                positions=torch.rand(n_atoms, 3, generator=gen) * box,
+                atomic_numbers=torch.ones(n_atoms, dtype=torch.long),
+                cell=torch.eye(3).unsqueeze(0) * box,
+                pbc=torch.tensor([[True, True, True]]),
+            )
+            for _ in range(n_graphs)
+        ]
+        batch = Batch.from_data_list(data_list).to(device)
+
+        counts = {}
+        for method in ("cell_list", "naive"):
+            hook = NeighborListHook(
+                _cfg(cutoff=1.0), method=method, stage=DynamicsStage.BEFORE_COMPUTE
+            )
+            hook(_ctx(batch), _STAGE)
+            counts[method] = batch.num_neighbors.clone()
+            if method == "cell_list":
+                n_cells = hook._buf_nl_kwargs["cell_atom_start_indices"].numel()
+
+        cap = DEFAULT_SINGLE_MAX_NBINS if n_graphs == 1 else DEFAULT_BATCH_MAX_NBINS
+        assert n_cells <= n_graphs * cap
+        if n_graphs == 1:
+            assert n_cells > DEFAULT_BATCH_MAX_NBINS
+        torch.testing.assert_close(counts["cell_list"], counts["naive"])
+
     def test_kwargs_are_tensors(self, device: str):
         """Tensor-valued pre-allocated kwargs must be torch.Tensor objects.
 

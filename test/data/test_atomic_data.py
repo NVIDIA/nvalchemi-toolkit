@@ -309,6 +309,38 @@ class TestAtomicDataValidation:
         assert data.atom_categories.shape == (3,)
         assert data.atom_categories.dtype == torch.long
 
+    def test_atom_categories_tensor_not_validated_per_element(self, monkeypatch):
+        """A tensor ``atom_categories`` is validated without per-atom work.
+
+        Validating it element by element against ``list[AtomCategory]``
+        costs one ``Tensor.item`` (a device sync on CUDA) per atom, which
+        made ``AtomicData.to`` and ``Batch.get_data`` scale with the number
+        of atoms.
+        """
+        calls = 0
+        original_item = torch.Tensor.item
+
+        def counting_item(self):
+            nonlocal calls
+            calls += 1
+            return original_item(self)
+
+        def count_item_calls(n_atoms: int) -> int:
+            nonlocal calls
+            data = AtomicData(
+                positions=torch.randn(n_atoms, 3),
+                atomic_numbers=torch.ones(n_atoms, dtype=torch.long),
+                atom_categories=torch.zeros(n_atoms, dtype=torch.long),
+            )
+            calls = 0
+            with monkeypatch.context() as m:
+                m.setattr(torch.Tensor, "item", counting_item)
+                moved = data.to("cpu")
+            assert torch.equal(moved.atom_categories, data.atom_categories)
+            return calls
+
+        assert count_item_calls(4) == count_item_calls(64)
+
     def test_use_default_velocities(self):
         """When velocities is None, validator sets zeros like positions."""
         data = AtomicData(
