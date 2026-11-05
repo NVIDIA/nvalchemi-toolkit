@@ -652,8 +652,17 @@ def grade(entry: dict, code: dict[str, str], ev: dict) -> dict:
                     f"{r['id']}={'pass' if r['passed'] else 'FAIL'}" for r in rows
                 ),
             }
+    # SkillEvaluator's reward contract needs every declared metric in every
+    # reward. A metric this task does not check is reported as 1.0 and marked
+    # not_checked, so reports can leave it out of their averages.
+    reward_metrics = dict(metrics)
+    for m in METRICS:
+        if m not in reward_metrics:
+            reward_metrics[m] = 1.0
+            details[m] = {"score": 1.0, "not_checked": True, "reason": "no check"}
     return {
         "metrics": metrics,
+        "reward_metrics": reward_metrics,
         "details": details,
         "checks": results,
         "code_files": sorted(code),
@@ -676,7 +685,12 @@ def verifier_main() -> int:
         reward = Path(os.environ.get("HARBOR_REWARD_JSON", verifier / "reward.json"))
         reward.parent.mkdir(parents=True, exist_ok=True)
         reward.write_text(
-            json.dumps({"custom_metrics": {}, "grader_error": str(exc)[:500]})
+            json.dumps(
+                {
+                    "custom_metrics": {m: 0.0 for m in METRICS},
+                    "grader_error": str(exc)[:500],
+                }
+            )
         )
         return 0
 
@@ -709,7 +723,7 @@ def _verifier_main() -> int:
     reward.parent.mkdir(parents=True, exist_ok=True)
     reward.write_text(
         json.dumps(
-            {"custom_metrics": result["metrics"], "details": result["details"]},
+            {"custom_metrics": result["reward_metrics"], "details": result["details"]},
             indent=2,
         )
     )

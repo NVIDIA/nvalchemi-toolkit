@@ -30,3 +30,10 @@ harbor:
 # trial. SkillEvaluator's overall is unchanged by them.
 grading:
   mode: default_plus_custom
+  # Metric names that evals/grader.py writes under custom_metrics.
+  custom_metrics:
+    - batched
+    - device_aware
+    - loop_syncs
+    - reuse
+    - outcome
