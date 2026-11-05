@@ -67,6 +67,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.distributed._core.context import current_dd_context
 from nvalchemi.distributed._core.enums import Scope
 from nvalchemi.distributed.helpers import (
+    distributed_method,
     localize,
     refresh_neighbors,
     system_sum,
@@ -89,6 +90,9 @@ __all__ = ["AIMNet2Wrapper"]
 
 
 _AIMNET2_HALO_SPEC_CACHE: Any = None
+# Stock ``aimnet.nbops.mol_sum``, captured before any adapter replaces it, for
+# plain calls made while a decomposed model has the replacement installed.
+_STOCK_MOL_SUM: Any = None
 
 
 def _aimnet2_halo_spec() -> Any:
@@ -101,11 +105,12 @@ def _aimnet2_halo_spec() -> Any:
         their ghost rows before running locally, and the per-system sum
         counts owned atoms only.
     """
-    global _AIMNET2_HALO_SPEC_CACHE
+    global _AIMNET2_HALO_SPEC_CACHE, _STOCK_MOL_SUM
     if _AIMNET2_HALO_SPEC_CACHE is not None:
         return _AIMNET2_HALO_SPEC_CACHE
     from dataclasses import replace  # noqa: PLC0415
 
+    from aimnet import nbops  # noqa: PLC0415
     from aimnet.modules.aev import ConvSV  # noqa: PLC0415
     from aimnet.modules.lr import LRCoulomb, SRCoulomb  # noqa: PLC0415
 
@@ -121,6 +126,7 @@ def _aimnet2_halo_spec() -> Any:
         Reduce,
     )
 
+    _STOCK_MOL_SUM = nbops.mol_sum
     helpers = (
         PythonAdapter(
             module_path="aimnet.nbops",
@@ -761,16 +767,20 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
 # ======================================================================
 
 
+@distributed_method
 def _distributed_coulomb_forward(
-    original: Any, head_self: Any, data: dict[str, Any]
+    ctx: Any, original: Any, head_self: Any, data: dict[str, Any]
 ) -> Any:
     """Adapter for AIMNet2's Coulomb heads (LRCoulomb / SRCoulomb).
 
     Refreshes the input charges so boundary owners see up-to-date ghost values,
     then runs the stock head. Serves both eager and compiled.
+    ``@distributed_method`` runs the stock head off any distributed path.
 
     Parameters
     ----------
+    ctx : Any
+        The live decomposition context (supplied by ``distributed_method``).
     original : Any
         The unbound stock ``forward`` being wrapped.
     head_self : Any
@@ -786,7 +796,6 @@ def _distributed_coulomb_forward(
     key_in = getattr(head_self, "key_in", "charges")
     data_p = localize(data)
     q = data_p.get(key_in)
-    ctx = current_dd_context()
     if q is not None and (ctx.compiling or q.shape[0] >= ctx.n_padded):
         data_p[key_in] = refresh_neighbors(q)
     return original(head_self, data_p)
@@ -810,8 +819,12 @@ def _distributed_mol_sum(x: Any, data: dict[str, Any]) -> Any:
     Any
         A plain ``[n_systems_global, *F]`` tensor replicated on every rank.
     """
-    n_sys = int(current_dd_context().n_systems_global)
-    return system_sum(to_local(x), data["mol_idx"], n_sys, scope=Scope.OWNED)
+    ctx = current_dd_context()
+    if not ctx.is_distributed:  # a plain call while the adapter is installed
+        return _STOCK_MOL_SUM(x, data)
+    return system_sum(
+        to_local(x), data["mol_idx"], int(ctx.n_systems_global), scope=Scope.OWNED
+    )
 
 
 def _distributed_conv_sv_forward(
