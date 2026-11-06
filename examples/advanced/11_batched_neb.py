@@ -57,9 +57,13 @@ Run on a single CUDA 12 GPU through ``uv``:
 
 For CUDA 13, replace ``--extra cu12`` with ``--extra cu13``.
 
+The final section demonstrates in-flight batching, which replaces completed
+paths with new paths while the remaining paths continue optimization. This
+example processes four paths at a time to illustrate how the batch is refilled.
+
 The default method is improved tangent. Set ``method = "dneb"`` below to try
 the custom doubly nudged force equation. The example writes
-``neb.csv`` and ``neb_energy_profiles.png``. Set
+``neb.csv``, ``neb_inflight.csv`` and ``neb_energy_profiles.png``. Set
 ``NVALCHEMI_SHOW_INITIAL_PATHS=0`` to omit the linear and post-IDPP curves and
 skip their additional model evaluations.
 
@@ -85,6 +89,7 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics import HostMemory, SizeAwareSampler
 from nvalchemi.dynamics.mep import (
     NEB,
     ClimbingImageConfig,
@@ -640,3 +645,131 @@ try:
     plt.show()
 except ImportError:
     print("matplotlib not available — skipping plot.")
+
+# %%
+# Run NEB with in-flight batching
+# -------------------------------
+# Different reaction paths can require different numbers of optimization
+# steps. In the fixed batch above, completed paths remain in the batch, and
+# their images continue to be evaluated by the model until the remaining paths
+# finish. Replacing completed paths with waiting paths may improve efficiency,
+# especially when processing many paths.
+#
+# At each refill check, the engine writes completed paths to an output sink,
+# removes them from the working batch, and adds new paths from the sampler.
+# Paths that are still being optimized retain their current state and continue
+# alongside the newly added paths.
+#
+# This example processes four of the eight paths at a time to demonstrate
+# refilling. All eight fit on this GPU, so processing them together may be
+# faster. For larger workloads, choose a working batch size that uses the GPU
+# efficiently.
+#
+# We reuse the IDPP-relaxed paths prepared earlier, exposing one complete path
+# per dataset item. This dataset assumes a fixed number of images per path.
+# For variable image counts, pass the actual group boundaries to the dataset
+# and use them to select each complete path.
+#
+# With ``by_group=True``, :class:`~nvalchemi.dynamics.SizeAwareSampler` keeps
+# each path together. ``max_batch_size`` limits the number of paths, while
+# ``max_atoms`` limits the total number of atoms across all images in the
+# working batch.
+#
+# Completed paths are collected in :class:`~nvalchemi.dynamics.HostMemory`,
+# an output sink that stores the results in CPU memory for later inspection.
+#
+# .. note::
+#
+#    All molecules in this example contain seven atoms, so the
+#    ``AIMNet2rxnWrapper`` can be reused without changes. When streaming
+#    molecules of different sizes, including molecules with more than 17 atoms,
+#    AIMNet2's adaptive short-range neighbor buffer may be too small for a
+#    larger molecule added during refilling. For such datasets, size the
+#    buffer to accommodate the largest molecule.
+
+
+class PreparedPathDataset:
+    """Serve each prepared NEB path as one complete group."""
+
+    def __init__(self, band: Batch, images_per_path: int) -> None:
+        """Split a grouped band into one batch per path."""
+        self.paths = [
+            band.index_select(list(range(start, start + images_per_path)))
+            for start in range(0, band.num_graphs, images_per_path)
+        ]
+
+    def __len__(self) -> int:
+        """Return the number of paths."""
+        return len(self.paths)
+
+    def get_metadata(self, index: int) -> tuple[int, int]:
+        """Return the total atom and edge counts for one path."""
+        path = self.paths[index]
+        return path.num_nodes, path.num_edges
+
+    def __getitem__(self, index: int) -> tuple[Batch, dict[str, Any]]:
+        """Return one path and empty metadata."""
+        return self.paths[index], {}
+
+
+streaming_band: Batch = linear_band.clone()
+streaming_band.positions.copy_(idpp_band.positions)
+initialize_dynamics_fields(streaming_band)
+
+# Process up to four paths at a time for this demonstration. Increase
+# max_batch_size to suit the GPU; max_atoms provides an additional limit
+# on the total number of atoms across all images in the working batch.
+sampler = SizeAwareSampler(
+    PreparedPathDataset(streaming_band, NUM_IMAGES),
+    by_group=True,
+    max_atoms=10_000,
+    max_batch_size=4,
+)
+finished_paths = HostMemory(capacity=streaming_band.num_graphs)
+INFLIGHT_LOG = Path("neb_inflight.csv")
+
+# Check for completed paths and refill the batch every ten optimization steps.
+# With n_steps=None, the run continues until the dataset is exhausted and all
+# paths have completed.
+inflight_neb = NEB(
+    model=model,
+    spring=0.1,
+    method=method,
+    fmax=0.05,
+    n_steps=None,
+    climbing=ClimbingImageConfig(regular_fmax=0.5),
+    refill_frequency=10,
+    diagnostics_log_path=INFLIGHT_LOG,
+)
+remaining = inflight_neb.run(sampler=sampler, sinks=[finished_paths])
+if remaining is not None:
+    raise RuntimeError("in-flight NEB stopped before every path finished")
+
+# %%
+# Compare the in-flight and static runs
+# -------------------------------------
+# Completed paths are written to the sink in completion order. Each image
+# retains a ``group_id`` identifying its original dataset path. We use this
+# identifier to restore the dataset order before comparing energy barriers.
+#
+# The energy barriers from the static and in-flight runs agree closely in
+# this example, up to small numerical differences from changes in batch
+# composition and floating-point operation order.
+
+inflight_band = finished_paths.read()
+finish_order = inflight_band.group_id.reshape(n_paths, NUM_IMAGES)[:, 0]
+print(f"In-flight finish order (dataset path indices): {finish_order.tolist()}")
+
+# Compare barriers after restoring the dataset order of the streamed paths.
+inflight_energies = torch.empty(n_paths, NUM_IMAGES)
+inflight_energies[finish_order] = inflight_band.energy.reshape(
+    n_paths, NUM_IMAGES
+).cpu()
+inflight_barriers = (inflight_energies - inflight_energies[:, :1]).max(dim=1).values
+static_barriers = relative_energies.max(dim=1).values.cpu()
+barrier_difference = (inflight_barriers - static_barriers).abs().max().item()
+print(
+    f"In-flight paths finished: {int((inflight_band.status == 2).sum()) // NUM_IMAGES}"
+    f"/{n_paths}; max barrier difference from static run: "
+    f"{barrier_difference:.2e} eV"
+)

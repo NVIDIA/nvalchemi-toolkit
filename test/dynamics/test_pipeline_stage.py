@@ -31,12 +31,15 @@ import torch
 from torch import distributed as dist
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data.level_storage import SegmentedLevelStorage
 from nvalchemi.dynamics.base import (
+    BaseDynamics,
     BufferConfig,
     DistributedPipeline,
     _CommunicationMixin,
 )
 from nvalchemi.dynamics.sinks import HostMemory
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 _DEFAULT_CFG = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
 
@@ -226,64 +229,71 @@ class TestBufferRouting:
         incoming = _make_batch(num_graphs=3)
         stage._buffer_to_batch(incoming)
         assert stage.active_batch_size == 5
+        assert stage._pending_graph_indices.tolist() == [0, 1, -1, -1, -1]
         assert stage._admission_initialized is False
         assert stage._forces_primed is False
 
     def test_buffer_to_batch_overflow_to_sinks(self) -> None:
-        """Verify excess samples go to sinks when active batch is full."""
+        """Verify excess samples go to overflow sinks when active batch is full."""
         batch = _make_batch(num_graphs=4)
         sink = HostMemory(capacity=50)
+        results = HostMemory(capacity=50)
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=5,
-            sinks=[sink],
+            overflow_sinks=[sink],
+            sinks=[results],
         )
         incoming = _make_batch(num_graphs=3)
         stage._buffer_to_batch(incoming)
         # 4 + 1 fit = 5 in batch, 2 overflow to sink
         assert stage.active_batch_size == 5
         assert len(sink) == 2
+        assert len(results) == 0
 
     def test_buffer_to_batch_no_room_all_to_sinks(self) -> None:
-        """Verify all go to sinks when active batch is completely full."""
+        """Verify all go to overflow sinks when active batch is completely full."""
         batch = _make_batch(num_graphs=5)
         sink = HostMemory(capacity=50)
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=5,
-            sinks=[sink],
+            overflow_sinks=[sink],
         )
+        stage._admission_initialized = True
         incoming = _make_batch(num_graphs=2)
         stage._buffer_to_batch(incoming)
         assert stage.active_batch_size == 5
         assert len(sink) == 2
+        assert stage._admission_initialized
+        assert stage._pending_graph_indices is None
 
     def test_buffer_to_batch_no_active_overflow(self) -> None:
         """Verify incoming > max_batch_size causes overflow when no batch."""
         sink = HostMemory(capacity=50)
-        stage = _CommunicationMixin(max_batch_size=2, sinks=[sink])
+        stage = _CommunicationMixin(max_batch_size=2, overflow_sinks=[sink])
         incoming = _make_batch(num_graphs=5)
         stage._buffer_to_batch(incoming)
         assert stage.active_batch_size == 2
         assert len(sink) == 3
 
     def test_overflow_to_sinks_raises_when_full(self) -> None:
-        """Verify RuntimeError when all sinks are full."""
+        """Verify RuntimeError when all overflow sinks are full."""
         sink = HostMemory(capacity=1)
         # Fill the sink
         sink.write(_make_batch(num_graphs=1))
-        stage = _CommunicationMixin(sinks=[sink])
+        stage = _CommunicationMixin(overflow_sinks=[sink])
         with pytest.raises(RuntimeError, match="All sinks are full"):
             stage._overflow_to_sinks(_make_batch(num_graphs=1))
 
     def test_overflow_to_sinks_uses_first_available(self) -> None:
-        """Verify overflow goes to the first non-full sink."""
-        sink1 = HostMemory(capacity=1)
+        """Skip a partly filled sink without room for the whole write."""
+        sink1 = HostMemory(capacity=10)
         sink2 = HostMemory(capacity=50)
-        # Fill sink1
-        sink1.write(_make_batch(num_graphs=1))
-        stage = _CommunicationMixin(sinks=[sink1, sink2])
+        sink1.write(_make_batch(num_graphs=9))
+        stage = _CommunicationMixin(overflow_sinks=[sink1, sink2])
         stage._overflow_to_sinks(_make_batch(num_graphs=2))
+        assert len(sink1) == 9
         assert len(sink2) == 2
 
 
@@ -295,103 +305,111 @@ class TestBufferRouting:
 class TestBatchExtraction:
     """Test _batch_to_buffer for moving graduated samples into send buffer."""
 
-    def test_extract_some_samples(self) -> None:
-        """Verify extracting a subset of samples from active batch into send_buffer."""
-        batch = _make_batch(num_graphs=5)
-        stage = _CommunicationMixin(active_batch=batch)
+    @pytest.mark.parametrize("selected", [[1, 3], [0, 1, 2, 3, 4], [2]])
+    def test_extract_selected_samples(self, selected: list[int], device: str) -> None:
+        """Real buffer copies and removes exactly the selected graphs."""
+        batch = _make_batch_with_system(num_graphs=5).to(device)
+        batch["system_id"] = torch.arange(5, device=device).unsqueeze(-1)
+        stage = _CommunicationMixin(active_batch=batch, device_type=device)
+        stage.send_buffer = Batch.empty(
+            num_systems=5,
+            num_nodes=15,
+            num_edges=0,
+            template=batch,
+            device=device,
+        )
         stage._admission_initialized = True
         stage._forces_primed = True
+        mask = torch.zeros(5, dtype=torch.bool, device=device)
+        mask[selected] = True
 
-        # Create a mock send_buffer
-        mock_send_buffer = Mock()
-        stage.send_buffer = mock_send_buffer
+        stage._batch_to_buffer(mask, num_requested=len(selected))
 
-        # Build a boolean mask (indices 1 and 3 are True)
-        mask = torch.zeros(5, dtype=torch.bool)
-        mask[torch.tensor([1, 3])] = True
-
-        # Mock defrag to simulate removal of 2 graphs
-        original_num_graphs = batch.num_graphs
-
-        def mock_defrag(copied_mask: torch.Tensor | None = None) -> Batch:
-            # Simulate that defrag removes the graphs where mask is True
-            remaining = [i for i in range(original_num_graphs) if not mask[i]]
-            stage.active_batch = batch.index_select(remaining)
-            return stage.active_batch
-
-        with patch.object(Batch, "defrag", side_effect=mock_defrag):
-            stage._batch_to_buffer(mask)
-
-        # send_buffer.put was called with the active batch and mask
-        mock_send_buffer.put.assert_called_once()
-        call_args = mock_send_buffer.put.call_args
-        assert call_args[0][0] is batch  # first positional arg is the batch
-        assert torch.equal(call_args[1]["mask"], mask)  # mask keyword arg
-
-        # After defrag, active_batch should have 3 remaining graphs
-        assert stage.active_batch_size == 3
+        assert (
+            stage.send_buffer.system_id[: len(selected)].flatten().tolist() == selected
+        )
+        remaining = sorted(set(range(5)) - set(selected))
+        if remaining:
+            assert stage.active_batch.system_id.flatten().tolist() == remaining
+            assert stage._pending_graph_indices.tolist() == remaining
+        else:
+            assert stage.active_batch is None
+            assert stage._pending_graph_indices is None
         assert stage._admission_initialized is False
         # Removal keeps retained graphs' forces valid.
         assert stage._forces_primed is True
 
-    def test_extract_all_samples(self) -> None:
-        """Verify extracting all samples sets active_batch to None."""
-        batch = _make_batch(num_graphs=3)
-        stage = _CommunicationMixin(active_batch=batch)
+    @pytest.mark.parametrize("limit", ["atoms", "edges"])
+    @pytest.mark.parametrize("selected", [[0, 1, 2], [0, 2], [1]])
+    def test_insufficient_capacity_raises_before_trim_or_send(
+        self, limit: str, selected: list[int], device: str
+    ) -> None:
+        """Incomplete copies fail without removing graphs or invalidating state."""
+        data = [
+            AtomicData(
+                positions=torch.full((8, 3), float(i)),
+                atomic_numbers=torch.ones(8, dtype=torch.long),
+                energy=torch.tensor([[float(i)]]),
+                neighbor_list=torch.tensor([[j, (j + 1) % 8] for j in range(8)]),
+                shifts=torch.zeros(8, 3),
+            )
+            for i in range(3)
+        ]
+        batch = Batch.from_data_list(data, device=device)
+        capacity = 10 if len(selected) > 1 else 7
+        cfg = BufferConfig(
+            num_systems=4,
+            num_nodes=capacity if limit == "atoms" else 24,
+            num_edges=capacity if limit == "edges" else 24,
+        )
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=cfg,
+            device_type=device,
+        )
+        stage._ensure_buffers(batch)
+        stage._admission_initialized = stage._forces_primed = True
+        indices = torch.tensor(selected, device=device)
+        stage._last_converged = indices
+        copied = 1 if len(selected) > 1 else 0
 
-        mock_send_buffer = Mock()
-        stage.send_buffer = mock_send_buffer
+        with patch.object(Batch, "isend") as send:
+            with pytest.raises(
+                ValueError, match=f"copied {copied} of {len(selected)} requested graphs"
+            ) as error:
+                stage._poststep_sync_buffers(indices)
+            send.assert_not_called()
 
-        # All samples are True in mask
-        mask = torch.ones(3, dtype=torch.bool)
+        assert "Increase BufferConfig capacities" in str(error.value)
+        assert f"buffer_config={cfg}" in str(error.value)
+        assert stage.active_batch is batch
+        assert batch.num_graphs == 3
+        assert batch.energy.flatten().tolist() == [0.0, 1.0, 2.0]
+        assert stage.send_buffer.num_graphs == copied
+        assert stage._admission_initialized and stage._forces_primed
+        assert stage._last_converged is indices
 
-        # We need to mock defrag to return self but modify num_graphs to 0
-        # Since Batch.num_graphs checks actual data, we mock the property
-        original_batch = batch
+    def test_full_buffer_raises_without_removing_source(self) -> None:
+        """An occupied buffer must not cause an uncopied graph to be removed."""
+        batch = _make_batch_with_system(num_graphs=1)
+        stage = _CommunicationMixin(active_batch=batch, device_type="cpu")
+        stage.send_buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=3,
+            num_edges=0,
+            template=batch,
+        )
+        mask = torch.ones(1, dtype=torch.bool)
+        stage.send_buffer.put(batch, mask)
+        stage._admission_initialized = stage._forces_primed = True
 
-        def mock_defrag(copied_mask: torch.Tensor | None = None) -> Batch:
-            # Return the same batch but it will be checked for num_graphs == 0
-            # We need to simulate defrag removing all graphs
-            # The simplest way: patch num_graphs on the batch
-            return original_batch
-
-        with (
-            patch.object(Batch, "defrag", side_effect=mock_defrag),
-            patch.object(
-                type(original_batch),
-                "num_graphs",
-                new_callable=lambda: property(lambda s: 0),
-            ),
-        ):
+        with pytest.raises(ValueError, match="copied 0 of 1 requested graphs"):
             stage._batch_to_buffer(mask)
 
-        mock_send_buffer.put.assert_called_once()
-        # After defrag with all True, active_batch should be None
-        assert stage.active_batch is None
-
-    def test_extract_single_sample(self) -> None:
-        """Verify extracting a single sample works correctly."""
-        batch = _make_batch(num_graphs=4)
-        stage = _CommunicationMixin(active_batch=batch)
-
-        mock_send_buffer = Mock()
-        stage.send_buffer = mock_send_buffer
-
-        # Only index 2 is True
-        mask = torch.zeros(4, dtype=torch.bool)
-        mask[2] = True
-        original_num_graphs = batch.num_graphs
-
-        def mock_defrag(copied_mask: torch.Tensor | None = None) -> Batch:
-            remaining = [i for i in range(original_num_graphs) if not mask[i]]
-            stage.active_batch = batch.index_select(remaining)
-            return stage.active_batch
-
-        with patch.object(Batch, "defrag", side_effect=mock_defrag):
-            stage._batch_to_buffer(mask)
-
-        mock_send_buffer.put.assert_called_once()
-        assert stage.active_batch_size == 3
+        assert stage.active_batch is batch
+        assert stage.send_buffer.num_graphs == 1
+        assert stage._admission_initialized and stage._forces_primed
 
     def test_extract_no_active_batch_raises(self) -> None:
         """Verify RuntimeError when no active batch exists."""
@@ -450,6 +468,28 @@ class TestDistributedPipelineConstruction:
         pipeline = DistributedPipeline(stages=stages)
         assert len(pipeline.stages) == 2
         assert pipeline.synchronized is False
+
+    @staticmethod
+    def _stage(by_group: bool) -> _CommunicationMixin:
+        stage = _CommunicationMixin()
+        stage.by_group = by_group
+        return stage
+
+    def test_grouped_stages_are_accepted(self) -> None:
+        """Stages that all keep groups together can form a pipeline."""
+        stages = {0: self._stage(True), 1: self._stage(True)}
+        assert DistributedPipeline(stages=stages).stages is stages
+
+    def test_mixed_group_modes_raise(self) -> None:
+        """A grouped stage cannot send to an ungrouped one, or the reverse."""
+        stages = {0: self._stage(True), 1: self._stage(False)}
+        with pytest.raises(ValueError, match="same by_group"):
+            DistributedPipeline(stages=stages)
+
+    def test_grouped_stages_with_mesh_raise(self) -> None:
+        """Grouped stages are not supported with domain decomposition."""
+        with pytest.raises(NotImplementedError, match="mesh"):
+            DistributedPipeline(stages={0: self._stage(True)}, mesh=Mock())
 
     def test_synchronized_flag(self) -> None:
         """Verify synchronized flag is stored."""
@@ -1205,7 +1245,7 @@ class TestEdgelessBuffers:
         expected_edges = [residents.get_data(i).neighbor_list for i in range(2)]
         stage = _CommunicationMixin(active_batch=residents, max_batch_size=4)
         sink = HostMemory(capacity=10)
-        stage.sinks = [sink]
+        stage.overflow_sinks = [sink]
 
         stage._buffer_to_batch(_make_batch(num_graphs=3))
 
@@ -1228,6 +1268,39 @@ class TestEdgelessBuffers:
 
         assert stage.active_batch.num_graphs == 4
         assert stage.active_batch.device.type == "cuda"
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_buffer_to_batch_cross_device_arrivals_are_independent(self) -> None:
+        """Arrivals moved to another device never share the caller's storage."""
+        stage = _CommunicationMixin(active_batch=None, max_batch_size=10)
+        stage.device_type = "cuda"
+        incoming = _make_batch(num_graphs=2)
+        expected = incoming.positions.clone()
+
+        stage._buffer_to_batch(incoming)
+        stage.active_batch.positions.zero_()
+
+        assert stage.active_batch.device.type == "cuda"
+        torch.testing.assert_close(incoming.positions, expected)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_buffer_to_batch_trims_padded_cross_device_buffer(self) -> None:
+        """A preallocated buffer on another device joins without its padding."""
+        stage = _CommunicationMixin(active_batch=None, max_batch_size=10)
+        stage.device_type = "cuda"
+        incoming = _make_batch(num_graphs=2)
+        buffer = Batch.empty(
+            num_systems=4, num_nodes=20, num_edges=0, template=incoming
+        )
+        buffer.put(incoming, mask=torch.ones(2, dtype=torch.bool))
+
+        stage._buffer_to_batch(buffer)
+
+        assert stage.active_batch.num_graphs == 2
+        assert stage.active_batch.num_nodes == incoming.num_nodes
+        torch.testing.assert_close(
+            stage.active_batch.positions.cpu(), incoming.positions
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1497,7 +1570,7 @@ class TestPrestepZerosSendBuffer:
             comm_mode="sync",
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             buffer_config=cfg,
         )
 
@@ -1589,20 +1662,18 @@ class TestPrestepZerosSendBuffer:
 
 
 # ---------------------------------------------------------------------------
-# TestRecvToBatch — _recv_to_batch staging behavior
+# TestRecvToBatch — _recv_to_batch routing behavior
 # ---------------------------------------------------------------------------
 
 
 class TestRecvToBatch:
-    """Test that _recv_to_batch correctly stages data through recv_buffer."""
+    """Test how _recv_to_batch routes received data into the active batch."""
 
-    def test_recv_to_batch_uses_recv_buffer(self) -> None:
-        """Verify _recv_to_batch copies incoming to recv_buffer, routes, then zeros.
+    def test_recv_to_batch_routes_incoming_directly(self) -> None:
+        """Verify _recv_to_batch routes incoming without staging it in recv_buffer.
 
-        When recv_buffer is present:
-        1. recv_buffer.put(incoming, mask=all_true) is called
-        2. _buffer_to_batch(recv_buffer) is called
-        3. recv_buffer.zero() is called
+        The recv buffer's fields follow its template, so staging could add
+        placeholder outputs the prior stage never sent.
         """
         batch = _make_batch(num_graphs=3)
         cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
@@ -1615,7 +1686,6 @@ class TestRecvToBatch:
             buffer_config=cfg,
         )
 
-        # Create a mock recv_buffer
         mock_recv_buffer = Mock()
         stage.recv_buffer = mock_recv_buffer
 
@@ -1624,20 +1694,9 @@ class TestRecvToBatch:
         with patch.object(stage, "_buffer_to_batch") as mock_b2b:
             stage._recv_to_batch(incoming)
 
-            # Verify recv_buffer.put was called with incoming and all-True mask
-            mock_recv_buffer.put.assert_called_once()
-            call_args = mock_recv_buffer.put.call_args
-            assert call_args[0][0] is incoming  # First positional arg is incoming
-            mask_arg = call_args[1]["mask"]
-            assert mask_arg.dtype == torch.bool
-            assert mask_arg.shape == (2,)
-            assert mask_arg.all()
-
-            # Verify _buffer_to_batch was called with recv_buffer
-            mock_b2b.assert_called_once_with(mock_recv_buffer)
-
-            # Verify recv_buffer.zero() was called after routing
-            mock_recv_buffer.zero.assert_called_once()
+            mock_b2b.assert_called_once_with(incoming)
+            mock_recv_buffer.put.assert_not_called()
+            mock_recv_buffer.zero.assert_not_called()
 
     def test_recv_to_batch_falls_back_on_empty_incoming(self) -> None:
         """Verify _recv_to_batch routes directly when incoming has 0 graphs.
@@ -1685,6 +1744,63 @@ class TestRecvToBatch:
 
 class TestPoststepBackPressure:
     """Test that _poststep_sync_buffers respects send buffer capacity (back-pressure)."""
+
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_plain_stage_retries_graduates_without_new_convergence(
+        self, comm_mode: str
+    ) -> None:
+        """Retained graduates leave even when later steps report none."""
+        batch = _make_batch_with_system(num_graphs=4)
+        batch["status"] = torch.tensor([[0], [2], [3], [0]])
+        batch["system_id"] = torch.arange(4).view(-1, 1)
+        retained_positions = batch.positions[9:].clone()
+        stage = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            active_batch=batch,
+            exit_status=2,
+            prior_rank=None,
+            next_rank=1,
+            buffer_config=BufferConfig(num_systems=1, num_nodes=3, num_edges=0),
+            device_type="cpu",
+            comm_mode=comm_mode,
+        )
+        stage._ensure_buffers(batch)
+
+        with patch.object(Batch, "isend", return_value=Mock()):
+            for expected_id, indices in enumerate(
+                (torch.tensor([0, 1]), None, torch.empty(0, dtype=torch.long))
+            ):
+                stage._poststep_sync_buffers(indices)
+                assert stage.send_buffer.num_graphs == 1
+                assert stage.send_buffer.system_id.view(-1).tolist() == [expected_id]
+
+            stage._poststep_sync_buffers(None)
+
+        assert stage.send_buffer.num_graphs == 0
+        assert stage.active_batch.system_id.view(-1).tolist() == [3]
+        torch.testing.assert_close(stage.active_batch.positions, retained_positions)
+
+    def test_plain_final_stage_combines_reported_and_retained_graduates(self) -> None:
+        """The final stage stores both reported and status-marked graduates once."""
+        batch = _make_batch_with_system(num_graphs=3)
+        batch["status"] = torch.tensor([[0], [2], [0]])
+        batch["system_id"] = torch.arange(3).view(-1, 1)
+        sink = HostMemory(capacity=3)
+        stage = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            active_batch=batch,
+            exit_status=2,
+            prior_rank=None,
+            next_rank=None,
+            sinks=[sink],
+            device_type="cpu",
+        )
+
+        stage._poststep_sync_buffers(torch.tensor([2]))
+        stage._poststep_sync_buffers(None)
+
+        assert sink.read().system_id.view(-1).tolist() == [1, 2]
+        assert stage.active_batch.system_id.view(-1).tolist() == [0]
 
     def test_poststep_respects_send_buffer_capacity(self) -> None:
         """Verify only as many converged samples as buffer capacity are extracted.
@@ -1793,10 +1909,11 @@ class TestPoststepBackPressure:
         converged_indices = torch.tensor([0, 1, 2])
 
         # Patch _batch_to_buffer to simulate the new behavior
-        def selective_extract(mask: torch.Tensor) -> None:
+        def selective_extract(mask: torch.Tensor, *, num_requested: int) -> None:
             """Extract based on boolean mask, simulating defrag."""
             # Due to capacity=1, only index 0 should be True
             assert mask.dtype == torch.bool
+            assert num_requested == 1
             assert mask.sum().item() == 1  # Only first one due to capacity
             assert mask[0].item() is True
             # Simulate defrag: remove the graph where mask is True
@@ -1831,17 +1948,17 @@ class TestPoststepBackPressure:
         stage._forces_primed = True
 
         # Note: final stage does NOT use _batch_to_buffer anymore.
-        # It uses inline index_select and _overflow_to_sinks directly.
+        # It uses inline index_select and _write_to_sinks directly.
         # Even if we set a send_buffer (shouldn't be used), it shouldn't matter
         mock_send_buffer = Mock()
         mock_send_buffer.system_capacity = 1  # Would limit to 1 if used
         mock_send_buffer.num_graphs = 0
         stage.send_buffer = mock_send_buffer
 
-        with patch.object(stage, "_overflow_to_sinks") as mock_overflow:
+        with patch.object(stage, "_write_to_sinks") as mock_overflow:
             stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 1, 2]))
 
-            # _overflow_to_sinks should be called with a graduated batch
+            # _write_to_sinks should be called with a graduated batch
             mock_overflow.assert_called_once()
             graduated_batch = mock_overflow.call_args[0][0]
             # All 3 converged indices should be in the graduated batch
@@ -1849,6 +1966,7 @@ class TestPoststepBackPressure:
 
         # Active batch should have 2 remaining
         assert stage.active_batch_size == 2
+        assert stage._pending_graph_indices.tolist() == [3, 4]
         assert stage._admission_initialized is False
         # Removal keeps retained graphs' forces valid.
         assert stage._forces_primed is True
@@ -1930,6 +2048,49 @@ class TestPoststepBackPressure:
 class TestOverflowDrainBack:
     """Test _drain_sinks_to_batch for pulling overflow back into active batch."""
 
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    @pytest.mark.parametrize("max_batch_size", [1, 2])
+    @pytest.mark.parametrize("recv_buffer_exists", [False, True])
+    def test_receive_skips_staging_without_changing_admission_order(
+        self, comm_mode: str, max_batch_size: int, recv_buffer_exists: bool
+    ) -> None:
+        """Bypass staging at any occupancy, preserving arrival-first admission."""
+        batch = _make_batch_with_system(num_graphs=5)
+        batch["system_id"] = torch.arange(5).view(-1, 1)
+        pending = HostMemory(capacity=10)
+        pending.write(batch.index_select([1, 2]))
+        incoming = batch.index_select([3, 4])
+        stage = _CommunicationMixin(
+            active_batch=batch.index_select([0]),
+            max_batch_size=max_batch_size,
+            overflow_sinks=[pending],
+            prior_rank=0,
+            next_rank=None,
+            comm_mode=comm_mode,
+            device_type="cpu",
+            buffer_config=BufferConfig(num_systems=2, num_nodes=6, num_edges=0),
+        )
+        if recv_buffer_exists:
+            stage._ensure_buffers(incoming)
+        handle = Mock()
+        handle.wait.return_value = incoming
+
+        with (
+            patch.object(Batch, "irecv", return_value=handle),
+            patch.object(Batch, "put", autospec=True, side_effect=Batch.put) as put,
+        ):
+            stage._prestep_sync_buffers()
+            stage._complete_pending_recv()
+
+        put.assert_not_called()
+        assert stage.active_batch.system_id.view(-1).tolist() == (
+            [0, 3] if max_batch_size == 2 else [0]
+        )
+        assert pending.read().system_id.view(-1).tolist() == (
+            [1, 2, 4] if max_batch_size == 2 else [1, 2, 3, 4]
+        )
+        handle.wait.assert_called_once()
+
     def test_drain_pulls_from_sinks_when_room(self) -> None:
         """Verify sink data is pulled into active batch when there's room."""
         # Active batch with 5 graphs, room for 5 more
@@ -1938,7 +2099,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
         )
 
         # Put 3 graphs into the sink
@@ -1953,14 +2114,14 @@ class TestOverflowDrainBack:
         assert len(sink) == 0  # Sink should be empty
 
     def test_drain_does_not_overfill(self) -> None:
-        """Verify drain respects max_batch_size and overflows remainder."""
+        """Verify drain respects max_batch_size and leaves the remainder."""
         # Active batch with 8 graphs, room for 2 more
         batch = _make_batch(num_graphs=8)
         sink = HostMemory(capacity=50)
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
         )
 
         # Put 5 graphs into the sink
@@ -1974,6 +2135,27 @@ class TestOverflowDrainBack:
         assert stage.active_batch_size == 10  # Full
         assert len(sink) == 3  # 5 - 2 = 3 remaining
 
+    def test_drain_leaves_samples_that_do_not_fit_in_place(self) -> None:
+        """Only admitted samples leave the sink, so the queue is not rewritten."""
+        batch = _make_batch_with_system(num_graphs=5)
+        batch["system_id"] = torch.arange(5).view(-1, 1)
+        sink = HostMemory(capacity=50)
+        sink.write(batch.index_select([0, 1, 2]))
+        sink.write(batch.index_select([3, 4]))
+        stage = _CommunicationMixin(
+            active_batch=None, max_batch_size=2, overflow_sinks=[sink]
+        )
+
+        with patch.object(sink, "write", wraps=sink.write) as write:
+            stage._drain_sinks_to_batch()
+            assert stage.active_batch.system_id.view(-1).tolist() == [0, 1]
+            stage.active_batch = None
+            stage._drain_sinks_to_batch()
+
+        write.assert_not_called()
+        assert stage.active_batch.system_id.view(-1).tolist() == [2, 3]
+        assert sink.read().system_id.view(-1).tolist() == [4]
+
     def test_drain_skips_empty_sinks(self) -> None:
         """Verify drain handles empty sinks without error."""
         batch = _make_batch(num_graphs=5)
@@ -1982,7 +2164,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink1, sink2],
+            overflow_sinks=[sink1, sink2],
         )
 
         # Both sinks empty
@@ -2002,7 +2184,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink1, sink2],
+            overflow_sinks=[sink1, sink2],
         )
 
         # Put data in both sinks
@@ -2027,7 +2209,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink1, sink2],
+            overflow_sinks=[sink1, sink2],
         )
 
         # Put data in both sinks
@@ -2038,7 +2220,7 @@ class TestOverflowDrainBack:
         stage._drain_sinks_to_batch()
 
         assert stage.active_batch_size == 10  # Full
-        assert len(sink1) == 1  # 3 - 2 = 1 remaining (overflowed back)
+        assert len(sink1) == 1  # 3 - 2 = 1 remaining
         # sink2 should not be touched since batch is full
         assert len(sink2) == 3
 
@@ -2048,7 +2230,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=None,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
         )
 
         # Put data in sink
@@ -2069,12 +2251,13 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             prior_rank=0,
             comm_mode="sync",
             buffer_config=_DEFAULT_CFG,
         )
 
+        stage._admission_initialized = True
         # Put data in sink
         sink.write(_make_batch(num_graphs=2))
         assert len(sink) == 2
@@ -2089,6 +2272,7 @@ class TestOverflowDrainBack:
 
         # Should have drained: 5 original + 1 from recv + 2 from sink = 8
         assert stage.active_batch_size == 8
+        assert stage._pending_graph_indices.tolist() == [0, 1, 2, 3, 4, -1, -1, -1]
         assert len(sink) == 0
 
     def test_prestep_drains_without_prior_rank(self) -> None:
@@ -2098,7 +2282,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             prior_rank=None,  # First stage
             comm_mode="sync",
         )
@@ -2120,7 +2304,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             prior_rank=0,
             comm_mode="async_recv",
             buffer_config=_DEFAULT_CFG,
@@ -2151,7 +2335,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             comm_mode="async_recv",
         )
 
@@ -2166,3 +2350,460 @@ class TestOverflowDrainBack:
 
         assert stage.active_batch_size == 7
         assert len(sink) == 0
+
+
+# ---------------------------------------------------------------------------
+# Test Overflow Storage Kept Separate from Result Sinks
+# ---------------------------------------------------------------------------
+
+
+class TestOverflowTransfer:
+    """CPU overflow is selected before arrivals move to the target device."""
+
+    @pytest.mark.parametrize("has_active_batch", [False, True])
+    def test_only_admitted_graphs_move_to_device(
+        self, device: str, has_active_batch: bool
+    ) -> None:
+        """Partial admission and repeated refill never transfer the waiting tail."""
+        sizes = [2, 5, 3, 4, 6]
+        pending = Batch.from_data_list([_make_atomic_data(n) for n in sizes])
+        pending.sample_id = torch.arange(5).view(-1, 1)
+        sink = HostMemory(capacity=10)
+        sink.write(pending)
+        resident = None
+        if has_active_batch:
+            resident = _make_batch(1, num_atoms=2).to(device)
+            resident.sample_id = torch.tensor([[99]], device=device)
+        stage = _CommunicationMixin(
+            active_batch=resident,
+            max_batch_size=3,
+            overflow_sinks=[sink],
+            device_type=device,
+        )
+        transfers = []
+        original_to = Batch.to
+
+        def record_transfer(batch, target, *args, **kwargs):
+            if batch.device.type == "cpu" and torch.device(target).type == "cuda":
+                transfers.append(batch.sample_id.flatten().tolist())
+            return original_to(batch, target, *args, **kwargs)
+
+        admitted = 2 if has_active_batch else 3
+        selected = list(range(admitted))
+        waiting = list(range(admitted, 5))
+        with patch.object(Batch, "to", autospec=True, side_effect=record_transfer):
+            stage._drain_sinks_to_batch()
+
+            assert stage.active_batch.device.type == device
+            assert stage.active_batch.sample_id.flatten().tolist() == (
+                ([99] if has_active_batch else []) + selected
+            )
+            assert stage.active_batch.num_nodes_list == (
+                ([2] if has_active_batch else []) + sizes[:admitted]
+            )
+            assert len(sink) == len(waiting)
+            assert sink.read().device.type == "cpu"
+            assert sink.read().sample_id.flatten().tolist() == waiting
+
+            stage.active_batch = None
+            stage._drain_sinks_to_batch()
+
+        assert stage.active_batch.device.type == device
+        assert stage.active_batch.sample_id.flatten().tolist() == waiting
+        assert len(sink) == 0
+        assert transfers == ([selected, waiting] if device == "cuda" else [])
+
+
+class TestOverflowSinksSeparation:
+    """Pending arrivals use ``overflow_sinks``; finished results use ``sinks``."""
+
+    @pytest.mark.parametrize("sink_kind", ["result", "overflow"])
+    @pytest.mark.parametrize("masked", [False, True])
+    def test_neighbor_width_changes_do_not_break_sink_read(
+        self, device: str, sink_kind: str, masked: bool
+    ) -> None:
+        """Sink writes omit neighbors without altering live data or selection."""
+        sink = HostMemory(capacity=10)
+        stage = _CommunicationMixin(
+            sinks=[sink] if sink_kind == "result" else [],
+            overflow_sinks=[sink] if sink_kind == "overflow" else [],
+            device_type=device,
+        )
+        write = (
+            stage._write_to_sinks if sink_kind == "result" else stage._overflow_to_sinks
+        )
+        neighbor_keys = {
+            "neighbor_matrix",
+            "num_neighbors",
+            "neighbor_matrix_shifts",
+            "neighbor_list",
+            "neighbor_list_shifts",
+        }
+        expected_ids = []
+        for start, width in [(0, 16), (2, 32)]:
+            batch = _make_batch_with_system(num_graphs=2).to(device)
+            batch.sample_id = torch.arange(start, start + 2, device=device).view(-1, 1)
+            batch.forces = torch.full_like(batch.positions, float(start + 1))
+            batch._atoms_group["neighbor_matrix"] = torch.full(
+                (batch.num_nodes, width),
+                batch.num_nodes,
+                dtype=torch.int32,
+                device=device,
+            )
+            batch._atoms_group["num_neighbors"] = torch.zeros(
+                batch.num_nodes, dtype=torch.int32, device=device
+            )
+            batch._atoms_group["neighbor_matrix_shifts"] = torch.zeros(
+                batch.num_nodes, width, 3, dtype=torch.int32, device=device
+            )
+            batch.set_level(
+                "edges",
+                SegmentedLevelStorage(
+                    data={
+                        "neighbor_list": torch.tensor([[0, 1], [3, 4]], device=device),
+                        "neighbor_list_shifts": torch.zeros(
+                            2, 3, dtype=torch.int32, device=device
+                        ),
+                    },
+                    segment_lengths=torch.tensor(
+                        [1, 1], dtype=torch.int32, device=device
+                    ),
+                    device=device,
+                ),
+            )
+            before = {key: batch[key].clone() for key in neighbor_keys}
+            mask = torch.tensor([False, True], device=device) if masked else None
+
+            write(batch, mask=mask)
+
+            for key, value in before.items():
+                torch.testing.assert_close(batch[key], value)
+            expected_ids.extend([start + 1] if masked else [start, start + 1])
+
+        for stored in (sink.read(), sink.drain()):
+            assert stored.sample_id.view(-1).tolist() == expected_ids
+            assert all(key not in stored for key in neighbor_keys)
+            assert "energy" in stored
+            assert "forces" in stored
+            expected_forces = (
+                torch.tensor(
+                    [1.0] * (3 if masked else 6) + [3.0] * (3 if masked else 6)
+                )
+                .view(-1, 1)
+                .expand(-1, 3)
+            )
+            torch.testing.assert_close(stored.forces, expected_forces)
+
+    def test_drain_reads_only_overflow_sinks(self) -> None:
+        """Draining refills the batch from pending storage, never results."""
+        results = HostMemory(capacity=50)
+        pending = HostMemory(capacity=50)
+        results.write(_make_batch(num_graphs=2))
+        pending.write(_make_batch(num_graphs=2))
+        stage = _CommunicationMixin(
+            active_batch=_make_batch(num_graphs=1),
+            max_batch_size=10,
+            sinks=[results],
+            overflow_sinks=[pending],
+        )
+        stage._drain_sinks_to_batch()
+
+        assert stage.active_batch_size == 3
+        assert len(pending) == 0
+        assert len(results) == 2
+
+    def test_default_overflow_drains_back_to_stage_device(self, device) -> None:
+        """Host-side default overflow returns to the active batch's device."""
+        results = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=_make_batch(num_graphs=2).to(device),
+            max_batch_size=2,
+            device_type=device,
+            sinks=[results],
+        )
+        stage._buffer_to_batch(_make_batch(num_graphs=2).to(device))
+        assert len(results) == 0
+        assert sum(len(sink) for sink in stage.overflow_sinks) == 2
+        assert all(sink not in stage.sinks for sink in stage.overflow_sinks)
+
+        # Every resident graph was sent downstream.
+        stage.active_batch = None
+        stage._drain_sinks_to_batch()
+
+        assert stage.active_batch_size == 2
+        assert stage.active_batch.positions.device.type == device
+        assert sum(len(sink) for sink in stage.overflow_sinks) == 0
+        assert len(results) == 0
+
+    def test_result_write_skips_sink_without_room_for_whole_write(self) -> None:
+        """Result writes also choose a sink that can hold every result."""
+        nearly_full = HostMemory(capacity=10)
+        nearly_full.write(_make_batch(num_graphs=9))
+        spare = HostMemory(capacity=10)
+        stage = _CommunicationMixin(
+            active_batch=_make_batch(num_graphs=3),
+            next_rank=None,
+            sinks=[nearly_full, spare],
+        )
+        stage._remove_converged_final_stage(torch.tensor([0, 1]))
+
+        assert len(nearly_full) == 9
+        assert len(spare) == 2
+
+    def test_downstream_not_done_while_overflow_pending(self) -> None:
+        """A stage with pending overflow keeps running after upstream ends."""
+        pending = HostMemory(capacity=50)
+        pending.write(_make_batch(num_graphs=2))
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(
+            buffer_config=_DEFAULT_CFG,
+            overflow_sinks=[pending],
+        )
+        s0.model = Mock()
+        pipeline = DistributedPipeline(stages={0: s0, 1: s1})
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
+        pipeline._done_tensor[0] = 1
+
+        with (
+            patch.object(dist, "is_initialized", return_value=True),
+            patch.object(dist, "get_rank", return_value=1),
+            patch.object(s1, "_prestep_sync_buffers"),
+            patch.object(s1, "_complete_pending_recv"),
+            patch.object(s1, "_poststep_sync_buffers"),
+        ):
+            pipeline.step()
+
+        assert s1.active_batch is None
+        assert not s1.done
+
+    def test_downstream_done_with_results_stored(self) -> None:
+        """Stored results do not keep a finished downstream stage running."""
+        results = HostMemory(capacity=50)
+        results.write(_make_batch(num_graphs=2))
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG, sinks=[results])
+        s0.model = Mock()
+        pipeline = DistributedPipeline(stages={0: s0, 1: s1})
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
+        pipeline._done_tensor[0] = 1
+
+        with (
+            patch.object(dist, "is_initialized", return_value=True),
+            patch.object(dist, "get_rank", return_value=1),
+            patch.object(s1, "_prestep_sync_buffers"),
+            patch.object(s1, "_complete_pending_recv"),
+            patch.object(s1, "_poststep_sync_buffers"),
+        ):
+            pipeline.step()
+
+        assert s1.done
+        assert len(results) == 2
+
+
+# ---------------------------------------------------------------------------
+# Test Transfers of Complete Groups
+# ---------------------------------------------------------------------------
+
+
+def _make_groups(group_sizes: list[int], num_atoms: int = 2) -> Batch:
+    """Build one group per entry. Graph ``j`` of group ``i`` sits at ``10 * i + j``."""
+    batch = None
+    for group_index, num_graphs in enumerate(group_sizes):
+        group = Batch.from_data_list(
+            [
+                AtomicData(
+                    atomic_numbers=torch.ones(num_atoms, dtype=torch.long),
+                    positions=torch.full((num_atoms, 3), 10.0 * group_index + graph),
+                    energy=torch.zeros(1, 1),
+                )
+                for graph in range(num_graphs)
+            ]
+        )
+        group.set_group_layout(torch.zeros(num_graphs, dtype=torch.long))
+        if batch is None:
+            batch = group
+        else:
+            batch.append(group)
+    return batch
+
+
+def _graph_ids(batch: Batch) -> list[float]:
+    """Return each graph's ``10 * group_index + graph`` tag."""
+    return batch.positions[batch.batch_ptr[:-1].long(), 0].tolist()
+
+
+class TestGroupedTransfers:
+    """Sends, receives, and final-stage removal keep groups complete."""
+
+    def _sender(self, group_sizes: list[int], num_systems: int) -> _CommunicationMixin:
+        batch = _make_groups(group_sizes)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=BufferConfig(
+                num_systems=num_systems, num_nodes=100, num_edges=0
+            ),
+            device_type="cpu",
+        )
+        stage._ensure_buffers(batch)
+        return stage
+
+    def test_send_moves_complete_groups_when_all_selected_graphs_fit(self) -> None:
+        """Selected groups leave together when the send buffer can hold them."""
+        stage = self._sender([2, 3, 2], num_systems=7)
+
+        with patch.object(Batch, "isend") as send:
+            stage._poststep_sync_buffers(torch.arange(5))
+            send.assert_called_once()
+
+        sent = stage.send_buffer.index_select(list(range(stage.send_buffer.num_graphs)))
+        assert _graph_ids(sent) == [0.0, 1.0, 10.0, 11.0, 12.0]
+        assert _graph_ids(stage.active_batch) == [20.0, 21.0]
+        assert stage.active_batch.group_idx.flatten().tolist() == [0, 0]
+
+    @pytest.mark.parametrize(
+        ("capacity", "selected", "sent_ids"),
+        [
+            (4, list(range(7)), [0.0, 1.0]),
+            (5, list(range(7)), [0.0, 1.0, 10.0, 11.0, 12.0]),
+            (4, [0, 1, 5, 6], [0.0, 1.0, 20.0, 21.0]),
+            (3, [6, 5, 1, 0], [0.0, 1.0]),
+        ],
+    )
+    def test_graph_capacity_limits_complete_groups(
+        self, capacity: int, selected: list[int], sent_ids: list[float]
+    ) -> None:
+        """Select complete groups in batch order without exceeding graph capacity."""
+        stage = self._sender([2, 3, 2], num_systems=capacity)
+        original_ids = _graph_ids(stage.active_batch)
+
+        with patch.object(Batch, "isend") as send:
+            stage._poststep_sync_buffers(torch.tensor(selected))
+            send.assert_called_once()
+
+        sent = stage.send_buffer.index_select(list(range(stage.send_buffer.num_graphs)))
+        assert _graph_ids(sent) == sent_ids
+        assert _graph_ids(stage.active_batch) == [
+            graph for graph in original_ids if graph not in sent_ids
+        ]
+        assert stage.send_buffer.num_graphs <= capacity
+
+    def test_group_larger_than_buffer_raises(self) -> None:
+        """An unsendable first group raises instead of waiting indefinitely."""
+        stage = self._sender([5, 2], num_systems=4)
+        batch = stage.active_batch
+
+        with patch.object(Batch, "isend") as send:
+            with pytest.raises(ValueError, match="first converged group"):
+                stage._poststep_sync_buffers(torch.arange(7))
+            send.assert_not_called()
+
+        assert stage.active_batch is batch
+        assert stage.send_buffer.num_graphs == 0
+
+    def test_grouped_atom_shortfall_still_raises(self) -> None:
+        """Graph-count back-pressure does not allow incomplete atom copies."""
+        stage = self._sender([2, 2], num_systems=4)
+        batch = stage.active_batch
+        stage.send_buffer = Batch.empty(
+            num_systems=4, num_nodes=5, num_edges=0, template=batch
+        )
+
+        with patch.object(Batch, "isend") as send:
+            with pytest.raises(ValueError, match="copied 2 of 4 requested graphs"):
+                stage._poststep_sync_buffers(torch.arange(4))
+            send.assert_not_called()
+
+        assert stage.active_batch is batch
+
+    def test_send_rejects_part_of_a_group(self) -> None:
+        """Converged graphs must form complete groups."""
+        stage = self._sender([2, 2], num_systems=4)
+        batch = stage.active_batch
+
+        with patch.object(Batch, "isend"):
+            with pytest.raises(ValueError, match="complete groups"):
+                stage._poststep_sync_buffers(torch.tensor([0]))
+
+        assert stage.active_batch is batch
+
+    def test_receive_admits_whole_groups_and_overflows_the_rest(self) -> None:
+        """max_batch_size counts groups, whatever their graph counts."""
+        overflow = HostMemory(capacity=10)
+        stage = _CommunicationMixin(
+            active_batch=_make_groups([2]), max_batch_size=3, overflow_sinks=[overflow]
+        )
+
+        stage._buffer_to_batch(_make_groups([5, 1, 3]))
+
+        assert stage.room_in_active_batch == 0
+        assert stage.active_batch.group_layout.num_groups == 3
+        assert _graph_ids(stage.active_batch) == [
+            0.0,
+            1.0,
+            0.0,
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            10.0,
+        ]
+        pending = overflow.read()
+        assert _graph_ids(pending) == [20.0, 21.0, 22.0]
+        assert pending.group_idx.flatten().tolist() == [0, 0, 0]
+
+    def test_receive_without_room_overflows_all(self) -> None:
+        """A full grouped batch sends every arriving group to overflow."""
+        overflow = HostMemory(capacity=10)
+        stage = _CommunicationMixin(
+            active_batch=_make_groups([1, 1]),
+            max_batch_size=2,
+            overflow_sinks=[overflow],
+        )
+
+        stage._buffer_to_batch(_make_groups([2]))
+
+        assert stage.active_batch.num_graphs == 2
+        assert len(overflow) == 2
+
+    def test_active_batch_size_counts_groups(self) -> None:
+        """A grouped batch's size is its group count, matching max_batch_size."""
+        stage = _CommunicationMixin(active_batch=_make_groups([2, 3]), max_batch_size=3)
+
+        assert stage.active_batch_size == 2
+        assert stage.room_in_active_batch == 1
+        assert stage.active_batch_has_room
+
+    def test_receive_admits_group_with_more_graphs_than_max_batch_size(self) -> None:
+        """One group fits max_batch_size=1 however many graphs it has."""
+        stage = _CommunicationMixin(max_batch_size=1)
+
+        stage._buffer_to_batch(_make_groups([3]))
+
+        assert stage.active_batch.num_graphs == 3
+        assert stage.room_in_active_batch == 0
+
+    def test_final_stage_removes_complete_groups(self) -> None:
+        """Finished groups go to result sinks and the rest stay grouped."""
+        results = HostMemory(capacity=10)
+        stage = _CommunicationMixin(active_batch=_make_groups([2, 3]), sinks=[results])
+
+        stage._remove_converged_final_stage(torch.tensor([2, 3, 4]))
+
+        assert _graph_ids(results.read()) == [10.0, 11.0, 12.0]
+        assert _graph_ids(stage.active_batch) == [0.0, 1.0]
+        assert stage.active_batch.group_idx.flatten().tolist() == [0, 0]
+
+    def test_final_stage_rejects_part_of_a_group(self) -> None:
+        """Partial groups are neither removed nor stored."""
+        results = HostMemory(capacity=10)
+        batch = _make_groups([2, 3])
+        stage = _CommunicationMixin(active_batch=batch, sinks=[results])
+
+        with pytest.raises(ValueError, match="complete groups"):
+            stage._remove_converged_final_stage(torch.tensor([0]))
+
+        assert stage.active_batch is batch
+        assert len(results) == 0

@@ -72,7 +72,9 @@ from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import Batch
+from nvalchemi.data.group_layout import _complete_group_mask
 from nvalchemi.data.level_storage import SegmentedLevelStorage
+from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks._context import DynamicsContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
@@ -82,6 +84,20 @@ if TYPE_CHECKING:
     from nvalchemi.dynamics.sampler import SizeAwareSampler
     from nvalchemi.dynamics.sinks import DataSink
 
+
+# Neighbor data keys to strip before writing to the sink.
+# Neighbor tensors are ephemeral (rebuilt by NeighborListHook each step)
+# and their K-dimension can change between rebuilds due to adaptive
+# sizing, causing shape mismatches when the sink concatenates snapshots.
+_NEIGHBOR_KEYS = frozenset(
+    {
+        "neighbor_matrix",
+        "num_neighbors",
+        "neighbor_matrix_shifts",
+        "neighbor_list",
+        "neighbor_list_shifts",
+    }
+)
 
 __all__ = [
     "Hook",
@@ -470,8 +486,8 @@ class _CommunicationMixin:
     ``BaseDynamics`` inherits from this class, so all dynamics subclasses
     automatically have communication capabilities for pipeline execution.
 
-    This class manages active batch buffers, overflow sinks, and inter-rank
-    communication for distributed pipeline execution.
+    This class manages active batch buffers, result and overflow sinks, and
+    inter-rank communication for distributed pipeline execution.
 
     Parameters
     ----------
@@ -487,11 +503,17 @@ class _CommunicationMixin:
         ``-1`` (unset), with the same auto-assignment semantics as
         ``prior_rank``.
     sinks : list[DataSink] | None
-        Priority-ordered overflow sinks.
+        Priority-ordered sinks for finished results.
+    overflow_sinks : list[DataSink] | None
+        Priority-ordered storage for received samples that do not fit in
+        the active batch yet. ``None`` uses a private unbounded
+        :class:`~nvalchemi.dynamics.sinks.HostMemory`.
     active_batch : Batch | None
         The currently active working batch.
     max_batch_size : int
-        Maximum samples in the active batch.
+        Maximum samples in the active batch: graphs, or complete groups when
+        ``by_group`` is True. Limits how many received samples a pipeline
+        stage admits.
     done : bool
         Whether this stage has no more work.
     device_type : str
@@ -519,11 +541,15 @@ class _CommunicationMixin:
         Rank of the next pipeline stage, with the same conventions
         as ``prior_rank``.
     sinks : list[DataSink]
-        Overflow sinks in priority order.
+        Result sinks in priority order. Never read back into computation.
+    overflow_sinks : list[DataSink]
+        Pending-sample storage in priority order, drained back into the
+        active batch when it has room.
     active_batch : Batch | None
         Current working batch.
     max_batch_size : int
-        Maximum active batch capacity.
+        Maximum samples in the active batch: graphs, or complete groups when
+        ``by_group`` is True.
     done : bool
         Whether this stage is finished.
     sampler : SizeAwareSampler | None
@@ -572,6 +598,7 @@ class _CommunicationMixin:
         prior_rank: int | None = -1,
         next_rank: int | None = -1,
         sinks: Sequence[DataSink] | None = None,
+        overflow_sinks: Sequence[DataSink] | None = None,
         active_batch: Batch | None = None,
         max_batch_size: int = 100,
         done: bool = False,
@@ -592,11 +619,18 @@ class _CommunicationMixin:
         next_rank : int | None, optional
             Rank to send graduated samples to (next stage). Default None.
         sinks : Sequence[DataSink] | None, optional
-            Priority-ordered overflow sinks. Default None (empty list).
+            Priority-ordered sinks for finished results. Default None
+            (empty list).
+        overflow_sinks : Sequence[DataSink] | None, optional
+            Priority-ordered storage for received samples that do not fit
+            in the active batch yet. Default None, which uses a private
+            unbounded :class:`~nvalchemi.dynamics.sinks.HostMemory`.
         active_batch : Batch | None, optional
             The currently active working batch. Default None.
         max_batch_size : int, optional
-            Maximum samples in the active batch. Default 100.
+            Maximum samples in the active batch: graphs, or complete groups
+            when ``by_group`` is True, as in ``SizeAwareSampler``. Limits how
+            many received samples a pipeline stage admits. Default 100.
         done : bool, optional
             Whether this stage has no more work. Default False.
         sampler : SizeAwareSampler | None, optional
@@ -635,11 +669,19 @@ class _CommunicationMixin:
         self.prior_rank = prior_rank
         self.next_rank = next_rank
         self.sinks: list[DataSink] = list(sinks) if sinks is not None else []
+        # Pending work is drained back into computation, so it must never
+        # share storage with results.
+        self.overflow_sinks: list[DataSink] = (
+            list(overflow_sinks)
+            if overflow_sinks is not None
+            else [HostMemory(capacity=sys.maxsize)]
+        )
         self.active_batch = active_batch
         self.max_batch_size = max_batch_size
         self.done = done
         self.sampler = sampler
         self.refill_frequency = refill_frequency
+        self._pending_graph_indices: torch.Tensor | None = None
         self._admission_initialized: bool = False
         self._forces_primed: bool = False
         # Host-side mirror of ``reprime_pending.any()`` after refill or admission.
@@ -992,13 +1034,18 @@ class _CommunicationMixin:
     def active_batch_size(self) -> int:
         """Return the number of samples currently in the active batch.
 
+        Samples are graphs, or complete groups for a grouped batch, the
+        same unit as ``max_batch_size``.
+
         Returns
         -------
         int
-            Number of graphs in the active batch, or 0 if no batch.
+            Number of samples in the active batch, or 0 if no batch.
         """
         if self.active_batch is None:
             return 0
+        if "group_idx" in self.active_batch:
+            return self.active_batch.group_layout.num_groups
         return self.active_batch.num_graphs or 0
 
     def _stream_scope(self, device: torch.device):
@@ -1045,7 +1092,9 @@ class _CommunicationMixin:
 
     @property
     def room_in_active_batch(self) -> int:
-        """Return the number of additional samples the active batch can hold.
+        """Return how many more samples the active batch can hold.
+
+        Samples are graphs, or complete groups for a grouped batch.
 
         Returns
         -------
@@ -1072,12 +1121,64 @@ class _CommunicationMixin:
             return sys.maxsize
         return self.send_buffer.system_capacity - self.send_buffer.num_graphs
 
+    def _record_batch_change(
+        self,
+        current: Batch | None,
+        retained_graphs: torch.Tensor,
+    ) -> None:
+        """Record retained graphs followed by arrivals relative to the last dispatch.
+
+        ``retained_graphs`` indexes the immediately previous batch in current
+        order. Group-aware callers must retain whole groups and graph order.
+        Removal-only changes can reuse this tensor, so callers must not mutate it.
+        This bookkeeping does not change integrator state or force priming.
+
+        Examples
+        --------
+        If hooks last saw graphs A, B, and C, removing B and appending D and E
+        records the retained graphs first and marks arrivals with ``-1``::
+
+            previous = [A, B, C]
+            current = [A, C, D, E]
+            retained_graphs = [0, 2]
+            graph_indices = [0, 2, -1, -1]
+
+        A further change to ``[C, D, E, F]`` before admission hooks run composes
+        the mapping to ``[2, -1, -1, -1]``, still relative to the last dispatch.
+        """
+        pending_graphs = self._pending_graph_indices
+        observed = self._admission_initialized or pending_graphs is not None
+        self._admission_initialized = False
+        if current is None or current.num_graphs == 0:
+            self._pending_graph_indices = None
+            return
+
+        retained_indices = (
+            pending_graphs[retained_graphs]
+            if pending_graphs is not None
+            else retained_graphs
+        )
+        if observed and retained_indices.numel() == current.num_graphs:
+            self._pending_graph_indices = retained_indices
+            return
+
+        graph_indices = torch.full(
+            (current.num_graphs,), -1, dtype=torch.long, device=current.device
+        )
+        if observed:
+            graph_indices[: retained_indices.numel()] = retained_indices
+        self._pending_graph_indices = graph_indices
+
     def _buffer_to_batch(self, incoming_batch: Batch) -> None:
         """Route received data into the active batch or overflow sinks.
 
         If the active batch has room, samples are appended directly.
         Otherwise, excess samples are written to overflow sinks in
-        priority order.
+        priority order. Arrivals use the active batch's device, or the
+        stage's device when creating the first active batch.
+        Grouped samples are admitted as complete groups:
+        the leading groups that fit join the batch, and the remaining groups
+        wait in overflow sinks.
 
         Parameters
         ----------
@@ -1091,18 +1192,38 @@ class _CommunicationMixin:
         if callable(ensure_bookkeeping):
             ensure_bookkeeping(incoming_batch)
 
-        n_existing = self.active_batch_size
+        n_existing = (
+            self.active_batch.num_graphs if self.active_batch is not None else 0
+        )
+        n_incoming = incoming_batch.num_graphs
         room = self.room_in_active_batch
-        if room <= 0:
+        if "group_idx" in incoming_batch:
+            # room counts groups, so admit that many leading groups.
+            layout = incoming_batch.group_layout
+            n_groups = min(room, layout.num_groups)
+            n_admitted = int(layout.group_ptr[n_groups])
+        else:
+            n_admitted = min(room, n_incoming)
+        if n_admitted == 0:
             self._overflow_to_sinks(incoming_batch)
             return
 
-        n_incoming = incoming_batch.num_graphs
-        n_admitted = min(room, n_incoming)
-        # index_select copies, which matters because callers such as
-        # _recv_to_batch zero the incoming buffer right after this call.
-        arrivals = incoming_batch.index_select(list(range(n_admitted)))
-        self._admission_initialized = False
+        # Count resident state rows before the active batch changes below.
+        sync_state = getattr(self, "_sync_state_to_batch", None)
+        n_existing_rows = (
+            self._num_update_units(self.active_batch)
+            if callable(sync_state) and n_existing > 0
+            else 0
+        )
+        target_device = (
+            self.device if self.active_batch is None else self.active_batch.device
+        )
+        if n_admitted == n_incoming and incoming_batch.device != target_device:
+            # Use views here because the device transfer below already copies
+            # the tensors, so the active and incoming batches do not share memory.
+            arrivals = incoming_batch._without_padding()
+        else:
+            arrivals = incoming_batch.index_select(list(range(n_admitted)))
         # Reuse upstream outputs only when this stage has not opted into
         # reprime and arrivals carry every output it needs. Otherwise this
         # stage computes them before their first update.
@@ -1115,6 +1236,8 @@ class _CommunicationMixin:
             )
         )
         if n_existing == 0:
+            if arrivals.device != self.device:
+                arrivals = arrivals.to(self.device)
             self.active_batch = arrivals
             self._forces_primed = reuse_forces
         else:
@@ -1136,20 +1259,26 @@ class _CommunicationMixin:
             )
             if not reuse_forces:
                 self._prime_arrivals(n_existing)
+        existing_indices = torch.arange(
+            n_existing, dtype=torch.long, device=self.active_batch.device
+        )
+        self._record_batch_change(self.active_batch, existing_indices)
 
         if n_admitted < n_incoming:
             self._overflow_to_sinks(
                 incoming_batch.index_select(list(range(n_admitted, n_incoming)))
             )
 
-        # Received graphs extend the active-batch layout. Preserve state for
-        # resident graphs and append freshly initialized state for arrivals.
-        sync_state = getattr(self, "_sync_state_to_batch", None)
+        # Preserve resident state rows and initialize rows for arrivals:
+        # one per group when by_group=True, otherwise one per graph.
         if callable(sync_state):
-            existing_indices = torch.arange(
-                n_existing, dtype=torch.long, device=self.active_batch.device
+            sync_state(
+                torch.arange(n_existing_rows, device=self.active_batch.device),
+                self._num_update_units(arrivals),
+                self.active_batch,
             )
-            sync_state(existing_indices, n_admitted, self.active_batch)
+        if hasattr(self, "_last_converged"):
+            self._last_converged = None
 
     def _on_receive(self, incoming: Batch) -> None:
         """Normalize freshly received samples before they join the active batch.
@@ -1192,13 +1321,12 @@ class _CommunicationMixin:
             self._forces_primed = False
 
     def _recv_to_batch(self, incoming: Batch) -> None:
-        """Stage incoming data through the recv buffer into the active batch.
+        """Route received data into the active batch or overflow sinks.
 
-        When ``recv_buffer`` is available, copies *incoming* data into the
-        pre-allocated receive buffer via :meth:`Batch.put`, then routes the
-        buffer contents into the active batch via :meth:`_buffer_to_batch`.
-        When ``recv_buffer`` is ``None``, falls back to routing *incoming*
-        directly.
+        *incoming* is routed directly rather than through ``recv_buffer``.
+        The buffer's fields follow its template, so a copy could carry
+        placeholder outputs the prior stage never sent and hide that
+        arrivals need repriming.
 
         Parameters
         ----------
@@ -1206,43 +1334,97 @@ class _CommunicationMixin:
             Batch received from the prior stage (via ``irecv`` / ``wait``).
         """
         if incoming.num_graphs > 0 and self._recv_template is None:
-            self._recv_template = incoming
+            # Keep a separate template so bookkeeping fields later added to
+            # incoming do not change the layout expected by future receives.
+            self._recv_template = Batch.empty_like(incoming)
         if incoming.num_graphs > 0:
             self._on_receive(incoming)
-        if self.recv_buffer is not None and incoming.num_graphs > 0:
-            mask = torch.ones(incoming.num_graphs, dtype=torch.bool, device=self.device)
-            self.recv_buffer.put(incoming, mask=mask)
-            self._buffer_to_batch(self.recv_buffer)
-            self.recv_buffer.zero()
-        else:
-            self._buffer_to_batch(incoming)
+        self._buffer_to_batch(incoming)
 
-    def _overflow_to_sinks(
-        self, batch: Batch, mask: torch.Tensor | None = None
+    @staticmethod
+    def _write_first_fit(
+        sinks: Sequence[DataSink],
+        batch: Batch,
+        mask: torch.Tensor | None,
+        kind: str,
     ) -> None:
-        """Write overflow samples to the first sink with available capacity.
+        """Write samples to the first sink with room for all of them.
+
+        Omit ephemeral neighbor data whose shape can change between writes.
+        Hide these fields only during the write, restoring the same tensors
+        afterwards even on error. The sink performs its normal selection and copy.
 
         Parameters
         ----------
+        sinks : Sequence[DataSink]
+            Candidate sinks in priority order.
         batch : Batch
-            Overflow samples to store.
-        mask : torch.Tensor | None, optional
-            Boolean mask for selective writing. Forwarded to sink.write().
+            Samples to store.
+        mask : torch.Tensor | None
+            Boolean mask selecting the graphs to store.
+        kind : str
+            Description of the samples, used in the error message.
 
         Raises
         ------
         RuntimeError
-            If no sink has capacity for the overflow.
+            If no sink has room for every selected sample.
         """
-        for sink in self.sinks:
-            if not sink.is_full:
-                sink.write(batch, mask=mask)
+        num_graphs = batch.num_graphs if mask is None else int(mask.sum())
+        if num_graphs == 0:
+            return
+        for sink in sinks:
+            if len(sink) + num_graphs <= sink.capacity:
+                with batch.without_keys(*_NEIGHBOR_KEYS):
+                    sink.write(batch, mask=mask)
                 return
         raise RuntimeError(
-            f"All sinks are full. Cannot store {batch.num_graphs} overflow samples."
+            f"All sinks are full. Cannot store {num_graphs} {kind} samples."
         )
 
-    def _batch_to_buffer(self, mask: torch.Tensor) -> None:
+    def _overflow_to_sinks(
+        self, batch: Batch, mask: torch.Tensor | None = None
+    ) -> None:
+        """Store received samples that do not fit in the active batch.
+
+        Samples go to the first overflow sink with room for all of them and
+        are drained back into the active batch by
+        :meth:`_drain_sinks_to_batch`.
+
+        Parameters
+        ----------
+        batch : Batch
+            Pending samples to store.
+        mask : torch.Tensor | None, optional
+            Boolean mask selecting the graphs to store.
+
+        Raises
+        ------
+        RuntimeError
+            If no overflow sink has room for every selected sample.
+        """
+        self._write_first_fit(self.overflow_sinks, batch, mask, "overflow")
+
+    def _write_to_sinks(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
+        """Write finished samples to the first result sink with room for them.
+
+        Parameters
+        ----------
+        batch : Batch
+            Finished samples to store.
+        mask : torch.Tensor | None, optional
+            Boolean mask selecting the graphs to store.
+
+        Raises
+        ------
+        RuntimeError
+            If no result sink has room for every selected sample.
+        """
+        self._write_first_fit(self.sinks, batch, mask, "result")
+
+    def _batch_to_buffer(
+        self, mask: torch.Tensor, *, num_requested: int | None = None
+    ) -> None:
         """Move graduated samples from the active batch into the send buffer.
 
         Uses ``send_buffer.put`` to copy samples where *mask* is ``True``
@@ -1254,12 +1436,20 @@ class _CommunicationMixin:
         ----------
         mask : torch.Tensor
             Boolean mask of shape ``(active_batch.num_graphs,)`` where
-            ``True`` marks a graduated (converged) sample.
+            ``True`` marks a graduated (converged) sample. In grouped
+            batches it must select complete groups.
+        num_requested : int, optional
+            Number of selected graphs, if already known. Avoids reading the
+            mask back to the host to count them.
 
         Raises
         ------
         RuntimeError
             If ``active_batch`` or ``send_buffer`` is ``None``.
+        ValueError
+            If the mask selects part of a group or the send buffer cannot
+            copy every selected graph. The active batch is left unchanged,
+            and the transfer must not proceed.
         """
         if self.active_batch is None:
             raise RuntimeError("No active batch to extract from.")
@@ -1267,10 +1457,23 @@ class _CommunicationMixin:
             raise RuntimeError("No send buffer to write to.")
 
         previous_batch = self.active_batch
-        remaining_indices = torch.where(~mask)[0]
-        self.send_buffer.put(previous_batch, mask=mask)
-        self.active_batch = previous_batch.trim(copied_mask=mask)
-        self._admission_initialized = False
+        if num_requested is None:
+            num_requested = int(mask.sum())
+        n_before = self.send_buffer.num_graphs
+        copied_mask = torch.zeros_like(mask)
+        self.send_buffer.put(previous_batch, mask=mask, copied_mask=copied_mask)
+        # put already updates host-side occupancy. Reuse it for validation.
+        num_copied = self.send_buffer.num_graphs - n_before
+        if num_copied != num_requested:
+            raise ValueError(
+                f"Send buffer copied {num_copied} of "
+                f"{num_requested} requested graphs. Increase BufferConfig "
+                "capacities to hold the largest outgoing batch; "
+                f"buffer_config={self.buffer_config}."
+            )
+        remaining_indices = torch.where(~copied_mask)[0]
+        self.active_batch = previous_batch.trim(copied_mask=copied_mask)
+        self._record_batch_change(self.active_batch, remaining_indices)
 
         # Graph-indexed metadata and integrator state refer to the old batch
         # layout. Keep only state for retained graphs and prevent the next hook
@@ -1280,21 +1483,24 @@ class _CommunicationMixin:
             template = (
                 self.active_batch if self.active_batch is not None else previous_batch
             )
-            sync_state(remaining_indices, 0, template)
+            remaining_state_rows = remaining_indices
+            if getattr(self, "by_group", False):
+                kept_groups = previous_batch.group_layout.reduce_all(~copied_mask)
+                remaining_state_rows = torch.where(kept_groups)[0]
+            sync_state(remaining_state_rows, 0, template)
         if hasattr(self, "_last_converged"):
             self._last_converged = None
 
     def _drain_sinks_to_batch(self) -> None:
         """Pull samples from overflow sinks into the active batch.
 
-        Iterates through sinks in priority order.  For each non-empty
-        sink, drains its contents and routes them into the active batch
-        via :meth:`_buffer_to_batch`.  Stops early when the active batch
-        has no more room.
-
-        If the drained batch is larger than the remaining room,
-        ``_buffer_to_batch`` handles the partial-fit logic (accepts what
-        fits, overflows the rest back to sinks).
+        Iterates through ``overflow_sinks`` in priority order.  For each
+        non-empty sink, removes at most the remaining room's worth of its
+        oldest samples and routes them into the active batch via
+        :meth:`_buffer_to_batch`.  Samples that do not fit stay where they
+        are, so the cost follows the samples admitted rather than the
+        queue length.  Stops early when the active batch has no more room.
+        Result ``sinks`` are never read.
 
         Notes
         -----
@@ -1302,12 +1508,12 @@ class _CommunicationMixin:
         data from the prior rank, to backfill any remaining capacity
         with previously overflowed samples.
         """
-        for sink in self.sinks:
+        for sink in self.overflow_sinks:
             if self.room_in_active_batch <= 0:
                 break
             if len(sink) == 0:
                 continue
-            overflow = sink.drain()
+            overflow = sink.drain(max_samples=self.room_in_active_batch)
             self._buffer_to_batch(overflow)
 
     def _prestep_sync_buffers(self) -> None:
@@ -1442,7 +1648,8 @@ class _CommunicationMixin:
         Parameters
         ----------
         converged_indices : torch.Tensor
-            Integer indices of converged samples (already truncated to capacity).
+            Integer indices of converged graphs, already limited to available
+            graph capacity. Grouped selections contain only complete groups.
         """
         mask = torch.zeros(
             self.active_batch.num_graphs,
@@ -1450,7 +1657,7 @@ class _CommunicationMixin:
             device=self.device,
         )
         mask[converged_indices] = True
-        self._batch_to_buffer(mask)
+        self._batch_to_buffer(mask, num_requested=converged_indices.numel())
         if self.debug_mode:
             logger.debug(
                 "[rank {}] populated send buffer with {} converged graphs",
@@ -1468,26 +1675,37 @@ class _CommunicationMixin:
         ----------
         converged_indices : torch.Tensor
             Integer indices of converged samples.
+
+        Raises
+        ------
+        ValueError
+            If a grouped batch's converged samples are not complete groups.
+            Nothing is removed or stored.
         """
         previous_batch = self.active_batch
+        # Grouped batches raise here unless complete groups converged.
         graduated = previous_batch.index_select(converged_indices)
-        all_indices = set(range(previous_batch.num_graphs))
-        remaining = sorted(all_indices - set(converged_indices.tolist()))
-        if remaining:
-            self.active_batch = previous_batch.index_select(remaining)
+        kept = torch.ones(
+            previous_batch.num_graphs, dtype=torch.bool, device=previous_batch.device
+        )
+        kept[converged_indices] = False
+        remaining_indices = torch.where(kept)[0]
+        if remaining_indices.numel() > 0:
+            self.active_batch = previous_batch.index_select(remaining_indices)
         else:
             self.active_batch = None
-        self._admission_initialized = False
+        self._record_batch_change(self.active_batch, remaining_indices)
 
         sync_state = getattr(self, "_sync_state_to_batch", None)
         if callable(sync_state):
-            remaining_indices = torch.tensor(
-                remaining, dtype=torch.long, device=previous_batch.device
-            )
             template = (
                 self.active_batch if self.active_batch is not None else previous_batch
             )
-            sync_state(remaining_indices, 0, template)
+            remaining_state_rows = remaining_indices
+            if getattr(self, "by_group", False):
+                kept_groups = previous_batch.group_layout.reduce_all(kept)
+                remaining_state_rows = torch.where(kept_groups)[0]
+            sync_state(remaining_state_rows, 0, template)
         if hasattr(self, "_last_converged"):
             self._last_converged = None
         if self.debug_mode:
@@ -1497,16 +1715,19 @@ class _CommunicationMixin:
                 converged_indices.numel(),
             )
         if self.sinks:
-            self._overflow_to_sinks(graduated)
+            self._write_to_sinks(graduated)
 
     def _poststep_sync_buffers(
         self, converged_indices: torch.Tensor | None = None
     ) -> None:
         """Synchronize buffers after a dynamics step.
 
-        If ``converged_indices`` is provided and a next rank exists with
-        available capacity, the converged samples are copied into
-        ``send_buffer`` via :meth:`_populate_send_buffer`.  The send
+        When the stage defines ``exit_status``, graphs already at or beyond
+        that status are included alongside ``converged_indices``. This retries
+        graduates that did not fit the send buffer on an earlier step.
+
+        If a next rank exists with available capacity, graduated samples are
+        copied into ``send_buffer`` via :meth:`_populate_send_buffer`. The send
         buffer is then unconditionally sent to the next rank — even if
         empty (``num_graphs == 0`` after zeroing) — so the downstream
         ``irecv`` always completes without deadlock.
@@ -1516,17 +1737,19 @@ class _CommunicationMixin:
 
         Back-pressure behavior
         ----------------------
-        Only as many converged samples as fit in the remaining buffer
-        capacity are copied and sent.  Excess converged samples remain
-        in the active batch and become no-ops until the next step when
-        buffer capacity may be available.
+        Select at most the available send-buffer graph capacity, keeping
+        complete groups for grouped batches. Excess converged graphs or groups
+        remain active for a later step. A group larger than the buffer raises.
+        Every selected graph must fit the buffer's graph, atom, and edge
+        capacities, otherwise the transfer raises before removing any graphs.
 
         Parameters
         ----------
         converged_indices : torch.Tensor | None, optional
             Integer indices of converged samples in the active batch.
             Typically obtained from ``BaseDynamics._check_convergence()``.
-            If ``None``, no samples are graduated.
+            If ``None``, only graphs already at or beyond ``exit_status``
+            are considered.
         """
         if self.next_rank is not None:
             # The send buffer is reused every iteration. A fully asynchronous
@@ -1536,6 +1759,15 @@ class _CommunicationMixin:
                 self._pending_send_handle = None
             self.send_buffer.zero()
 
+        batch = self.active_batch
+        exit_status = getattr(self, "exit_status", None)
+        status = getattr(batch, "status", None) if batch is not None else None
+        if status is not None and exit_status is not None:
+            graduated = status.view(-1)[: batch.num_graphs] >= exit_status
+            if converged_indices is not None:
+                graduated[converged_indices] = True
+            converged_indices = torch.where(graduated)[0]
+
         has_converged = converged_indices is not None and converged_indices.numel() > 0
 
         if has_converged:
@@ -1543,7 +1775,24 @@ class _CommunicationMixin:
                 send_capacity = self._send_buffer_capacity
                 if send_capacity > 0:
                     if converged_indices.numel() > send_capacity:
-                        converged_indices = converged_indices[:send_capacity]
+                        if "group_idx" in batch:
+                            layout = batch.group_layout
+                            mask = torch.zeros(
+                                batch.num_graphs, dtype=torch.bool, device=batch.device
+                            )
+                            mask[converged_indices] = True
+                            groups = _complete_group_mask(layout, mask)
+                            # Limit graph slots without splitting a group.
+                            counts = (layout.num_graphs_per_group * groups).cumsum(0)
+                            mask = layout.broadcast(groups & (counts <= send_capacity))
+                            converged_indices = torch.where(mask)[0]
+                            if converged_indices.numel() == 0:
+                                raise ValueError(
+                                    "The first converged group exceeds the send buffer's "
+                                    "graph capacity. Increase BufferConfig.num_systems."
+                                )
+                        else:
+                            converged_indices = converged_indices[:send_capacity]
                     self._populate_send_buffer(converged_indices)
             if self.is_final_stage:
                 self._remove_converged_final_stage(converged_indices)
@@ -1884,10 +2133,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         super().__init__(**kwargs)
         self.by_group = by_group
         self.reprime_on_entry = reprime_on_entry
-        if self.by_group and self.sampler is not None:
-            raise NotImplementedError(
-                "Sampling and refill are not implemented for by_group=True."
-            )
+        if self.sampler is not None and self.by_group != getattr(
+            self.sampler, "by_group", False
+        ):
+            raise ValueError("Sampler and dynamics must use the same by_group setting")
         if not isinstance(model, BaseModelMixin):
             raise TypeError(
                 f"Expected a `BaseModelMixin` instance, got {type(model).__name__}."
@@ -1996,6 +2245,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         if self._admission_initialized:
             return
+        if self._pending_graph_indices is None:
+            self._pending_graph_indices = torch.full(
+                (batch.num_graphs,), -1, dtype=torch.long, device=batch.device
+            )
         self._call_hooks(
             DynamicsStage.ON_ADMISSION,
             batch,
@@ -2003,6 +2256,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             ignore_frequency=True,
         )
         self._admission_initialized = True
+        self._pending_graph_indices = None
 
     def _build_context(
         self,
@@ -2029,6 +2283,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             active_graph_mask=active_graph_mask,
             converged_mask=_mask,
             graduated_mask=graduated_mask,
+            previous_graph_indices=(
+                self._pending_graph_indices
+                if self.current_hook_stage == DynamicsStage.ON_ADMISSION
+                else None
+            ),
             global_rank=self.global_rank,
             workflow=self,
         )
@@ -2735,6 +2994,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Called after graduated systems have been removed, with optional
         replacement systems appended. Removes state rows for graduated systems
         and appends fresh default state for the new ones.
+        Systems are groups when ``by_group=True`` and graphs otherwise.
 
         If this dynamics has no ``_state`` (e.g. :class:`DemoDynamics`),
         this method is a no-op.
@@ -2743,7 +3003,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         ----------
         remaining_indices : torch.Tensor
             Integer indices of systems that remain in the new batch, in
-            order.  Used to slice ``self._state`` via ``index_select``.
+            order. Used to slice ``self._state`` via ``index_select``.
         n_new : int
             Number of newly admitted replacement systems appended after
             the remaining ones.  State for these is produced by
@@ -3293,6 +3553,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             # A run is a fresh admission even when the caller deliberately
             # reuses the same Batch object from an earlier run.
             self._admission_initialized = False
+            self._pending_graph_indices = None
             self._forces_primed = False
             for _ in range(resolved):
                 batch, _converged = self.step(batch)
@@ -3308,7 +3569,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             self._close_hooks()
         return batch
 
-    def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
+    def refill_check(
+        self, batch: Batch, exit_status: int, *, remove_graduated: bool = True
+    ) -> Batch | None:
         """Replace graduated samples via index-select and append.
 
         Graduated graphs (``status >= exit_status``) are written to sinks,
@@ -3321,12 +3584,20 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         integrator updates for one iteration while the model computes their
         initial forces.
 
+        With ``by_group=True``, removal and replacement operate on complete
+        groups, the sampler's ``max_batch_size`` counts groups, and optimizer
+        state is indexed by group.
+
         Parameters
         ----------
         batch : Batch
             The current batch with a ``status`` field.
         exit_status : int
             Status code indicating graduation.
+        remove_graduated : bool, optional
+            Whether to store and remove graduated graphs before refilling.
+            Set to ``False`` after a pipeline send to fill available capacity
+            while retaining graphs that are still waiting to be sent.
 
         Returns
         -------
@@ -3340,6 +3611,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         ------
         RuntimeError
             If ``self.sampler`` is ``None``.
+        ValueError
+            If graduation splits a group, or pending samples cannot fit an
+            empty active batch under the sampler's limits.
         """
         if self.sampler is None:
             raise RuntimeError("refill_check requires a sampler to be configured.")
@@ -3347,31 +3621,25 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         status = batch.status
         if status.dim() == 2:
             status = status.squeeze(-1)
-        graduated_mask = status >= exit_status
+        graduated_mask = (
+            status >= exit_status
+            if remove_graduated
+            else torch.zeros_like(status, dtype=torch.bool)
+        )
 
-        if not graduated_mask.any():
+        has_graduated = bool(graduated_mask.any())
+        if remove_graduated and not has_graduated:
             return batch
 
-        # Batch composition changes here; drop stale converged indices so the
-        # next _build_context mask doesn't over-index the resized batch.
-        self._last_converged = None
-        self._admission_initialized = False
+        if self.by_group:
+            layout = batch.group_layout
+            graduated_groups = layout.reduce_all(graduated_mask)
+            if not torch.equal(layout.broadcast(graduated_groups), graduated_mask):
+                raise ValueError("Grouped refill must graduate complete groups")
+            remaining_units = torch.where(~graduated_groups)[0]
+
         remaining_indices = torch.where(~graduated_mask)[0]
         n_remaining = remaining_indices.numel()
-        # With no survivors there are no forces to preserve, so treat the
-        # refill as a fresh batch and prime it fully before its first update.
-        use_per_graph_priming = (
-            self._supports_per_graph_priming and self._forces_primed and n_remaining > 0
-        )
-        self._forces_primed = False
-
-        if self.sinks and graduated_mask.any():
-            self._overflow_to_sinks(batch, mask=graduated_mask)
-
-        if remaining_indices.numel() > 0:
-            result = batch.index_select(remaining_indices)
-        else:
-            result = None
 
         # Budget-based replacement: compute total atom/edge headroom
         # from the remaining systems and the sampler's constraints.
@@ -3396,8 +3664,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             if self.sampler.max_edges is not None
             else None
         )
+        # The sampler's count limit is in groups when by_group=True.
+        n_remaining_samples = remaining_units.numel() if self.by_group else n_remaining
         max_new = (
-            self.sampler.max_batch_size - n_remaining
+            self.sampler.max_batch_size - n_remaining_samples
             if self.sampler.max_batch_size is not None
             else None
         )
@@ -3407,8 +3677,28 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             max_count=max_new,
         )
 
+        if not has_graduated and not replacements:
+            return batch
+
+        # Batch composition changes here; drop stale converged indices so the
+        # next _build_context mask doesn't over-index the resized batch.
+        self._last_converged = None
+        # With no survivors there are no forces to preserve, so treat the
+        # refill as a fresh batch and prime it fully before its first update.
+        use_per_graph_priming = (
+            self._supports_per_graph_priming and self._forces_primed and n_remaining > 0
+        )
+        self._forces_primed = False
+
+        if self.sinks and has_graduated:
+            self._write_to_sinks(batch, mask=graduated_mask)
+
+        result = batch.index_select(remaining_indices) if n_remaining > 0 else None
+
         if replacements:
-            repl_batch = Batch.from_data_list(replacements, device=batch.device)
+            repl_batch = self.sampler.assemble_samples(
+                replacements, device=batch.device
+            )
             if result is None:
                 result = repl_batch
             else:
@@ -3442,12 +3732,24 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 result.reprime_pending.view(-1)[n_remaining:] = True
                 self._forces_primed = True
                 self._refill_pending = True
-            self._sync_state_to_batch(remaining_indices, len(replacements), result)
+            self._sync_state_to_batch(
+                remaining_units if self.by_group else remaining_indices,
+                len(replacements),
+                result,
+            )
+            self._record_batch_change(result, remaining_indices)
             return result
 
         if self.sampler.exhausted:
             self.done = True
+        else:
+            raise ValueError(
+                "No remaining sample fits the empty active batch under the "
+                "sampler's max_batch_size, max_atoms, or max_edges limits."
+            )
+        # Nothing remains in either mode, so this only clears per-system state.
         self._sync_state_to_batch(remaining_indices, 0, batch)
+        self._record_batch_change(None, remaining_indices)
         return None
 
     def masked_update(
@@ -4356,6 +4658,7 @@ class FusedStage(BaseDynamics):
         This override delegates to every sub-stage so that active-batch
         membership changes keep each sub-stage's ``_state`` aligned with the
         new batch composition.
+        Systems are groups when ``by_group=True`` and graphs otherwise.
 
         Parameters
         ----------
@@ -4372,14 +4675,18 @@ class FusedStage(BaseDynamics):
     def _ensure_bookkeeping_fields(self, batch: Batch) -> None:
         """Auto-initialize status and registered bookkeeping fields if absent.
 
+        Bookkeeping stays per graph even when updates are grouped. Fields on
+        preallocated buffers cover every allocated graph slot.
+
         Parameters
         ----------
         batch : Batch
             The batch to check and initialize fields on.
         """
+        num_systems = max(batch.num_graphs, batch.system_capacity)
         for key, default_fn in self._bookkeeping_keys.items():
             if getattr(batch, key, None) is None:
-                batch[key] = default_fn(batch.num_graphs, batch.device)
+                batch[key] = default_fn(num_systems, batch.device)
 
     def _on_receive(self, incoming: Batch) -> None:
         """Admit samples from the prior rank at ``entry_status``.
@@ -4490,6 +4797,10 @@ class FusedStage(BaseDynamics):
         """Prepare fused-level and sub-stage hooks for an admitted batch."""
         if self._admission_initialized:
             return
+        if self._pending_graph_indices is None:
+            self._pending_graph_indices = torch.full(
+                (batch.num_graphs,), -1, dtype=torch.long, device=batch.device
+            )
 
         status = batch.status
         if status.dim() == 2:
@@ -4503,6 +4814,11 @@ class FusedStage(BaseDynamics):
             ignore_frequency=True,
         )
         for status_code, dynamics in self.sub_stages:
+            # Admission must not expose a convergence mask from the old batch layout.
+            # Dropping this reference allocates no tensor; the next convergence
+            # check creates a new mask regardless of whether the old one is retained.
+            dynamics._last_converged = None
+            dynamics._pending_graph_indices = self._pending_graph_indices
             dynamics._call_hooks(
                 DynamicsStage.ON_ADMISSION,
                 batch,
@@ -4510,8 +4826,10 @@ class FusedStage(BaseDynamics):
                 ignore_frequency=True,
             )
             dynamics._admission_initialized = True
+            dynamics._pending_graph_indices = None
 
         self._admission_initialized = True
+        self._pending_graph_indices = None
 
     def _step_impl(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Internal step implementation (may be compiled).
@@ -5056,6 +5374,7 @@ class FusedStage(BaseDynamics):
             # A run is a fresh admission even when the caller deliberately
             # reuses the same Batch object from an earlier run.
             self._admission_initialized = False
+            self._pending_graph_indices = None
             for _, dynamics in self.sub_stages:
                 dynamics._admission_initialized = False
             self._forces_primed = False
@@ -5090,7 +5409,9 @@ class FusedStage(BaseDynamics):
         finally:
             self._close_hooks()
 
-    def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
+    def refill_check(
+        self, batch: Batch, exit_status: int, *, remove_graduated: bool = True
+    ) -> Batch | None:
         """Replace graduated samples and clear stale convergence indices.
 
         Delegates to the parent :meth:`BaseDynamics.refill_check` to remove
@@ -5107,6 +5428,9 @@ class FusedStage(BaseDynamics):
             The current batch with a ``status`` field.
         exit_status : int
             Status code indicating graduation.
+        remove_graduated : bool, optional
+            Whether to store and remove graduates, or retain all current graphs
+            and only fill available sampler capacity after a pipeline send.
 
         Returns
         -------
@@ -5114,7 +5438,11 @@ class FusedStage(BaseDynamics):
             A new batch with graduated graphs replaced by fresh samples,
             or ``None`` if no active samples remain.
         """
-        result = super().refill_check(batch, exit_status)
+        result = super().refill_check(
+            batch, exit_status, remove_graduated=remove_graduated
+        )
+        if result is batch:
+            return result
         # Clear stale convergence indices since the batch configuration has changed
         self._last_converged = None
         for _, dynamics in self.sub_stages:
@@ -5274,7 +5602,22 @@ class DistributedPipeline:
             (default) keeps the classic one-rank-per-stage behavior unchanged.
         **dist_kwargs : Any
             Additional keyword arguments for ``torch.distributed.init_process_group``.
+
+        Raises
+        ------
+        ValueError
+            If some stages use ``by_group=True`` and others do not. Groups
+            can only be sent between grouped stages.
+        NotImplementedError
+            If ``mesh`` is given with ``by_group=True`` stages.
         """
+        group_modes = {getattr(stage, "by_group", False) for stage in stages.values()}
+        if len(group_modes) > 1:
+            raise ValueError("All pipeline stages must use the same by_group setting")
+        if mesh is not None and True in group_modes:
+            raise NotImplementedError(
+                "DistributedPipeline with mesh does not support by_group=True stages"
+            )
         dist_kwargs.setdefault(
             "backend", "nccl" if dist.is_nccl_available() else "gloo"
         )
@@ -5694,8 +6037,10 @@ class DistributedPipeline:
 
         **Mode 2 (inflight batching):** When the first stage has
         ``inflight_mode=True`` (i.e., a sampler is configured), it builds
-        the initial batch from the sampler and refills graduated samples
-        instead of receiving from a prior stage.
+        batches from the sampler instead of receiving from a prior stage.
+        After sending, the first stage fills available capacity from the
+        sampler. Graduated samples that do not fit the send buffer stay
+        in the batch until a later send and count toward the refill limits.
 
         When ``self.synchronized`` is ``True``, a global
         ``dist.barrier()`` is issued at the end of each step so that no
@@ -5779,19 +6124,12 @@ class DistributedPipeline:
 
                 stage._poststep_sync_buffers(converged_indices)
 
-                if hasattr(stage, "exit_status"):
-                    exit_status = stage.exit_status
-                else:
-                    exit_status = 1
                 if stage.active_batch is not None:
-                    result = stage.refill_check(stage.active_batch, exit_status)
-                    stage.active_batch = result
-                    if result is None:
-                        if self.debug_mode:
-                            logger.debug(
-                                "[rank {}] sampler exhausted, marking done", rank
-                            )
-                        stage.done = True
+                    # Sending already removed the outgoing graphs. Retain all
+                    # others, including unsent graduates, when filling capacity.
+                    stage.active_batch = stage.refill_check(
+                        stage.active_batch, stage.exit_status, remove_graduated=False
+                    )
                 else:
                     if self.debug_mode:
                         logger.debug(
@@ -5834,6 +6172,11 @@ class DistributedPipeline:
                 )
             if stage.active_batch is not None:
                 stage._ensure_buffers(stage.active_batch)
+            elif stage._recv_template is not None:
+                # An empty middle stage still sends an empty message so the
+                # downstream receive can complete. Allocate its buffers from
+                # the receive template before any samples arrive.
+                stage._ensure_buffers(stage._recv_template)
 
             stage._prestep_sync_buffers()
             stage._complete_pending_recv()
@@ -5860,10 +6203,12 @@ class DistributedPipeline:
             stage._poststep_sync_buffers(converged_indices)
 
             # Auto-terminate downstream stages: if the upstream is done
-            # and this stage has no remaining work, mark it as done.
+            # and this stage has no active or pending work, mark it as done.
+            # Stored results do not count as work.
             n_active = (
                 stage.active_batch.num_graphs if stage.active_batch is not None else 0
             )
+            n_pending = sum(len(sink) for sink in stage.overflow_sinks)
             # ``_done_tensor`` is indexed by stage slot (pipeline index in grouped
             # mode, global rank classically); the upstream slot is the prior
             # pipeline index (grouped) or the prior global rank (``prior_rank``).
@@ -5877,7 +6222,7 @@ class DistributedPipeline:
                 and upstream_slot >= 0
                 and bool(self._done_tensor[upstream_slot])
             )
-            if upstream_done and n_active == 0 and not stage.done:
+            if upstream_done and n_active == 0 and n_pending == 0 and not stage.done:
                 if self.debug_mode:
                     logger.debug(
                         "[rank {}] upstream rank {} done and no active work, marking done",

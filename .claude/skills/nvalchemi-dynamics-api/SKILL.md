@@ -296,7 +296,8 @@ The dynamics framework manages data flow through three layers:
 |-------|----------|---------|
 | **Active batch** | `_CommunicationMixin.active_batch` | Working set being integrated |
 | **Communication buffers** | `send_buffer` / `recv_buffer` | Pre-allocated `Batch.empty()` for zero-copy inter-rank transfer |
-| **Overflow sinks** | `DataSink` list (priority-ordered) | Staging when active batch is full |
+| **Overflow sinks** | `overflow_sinks`: `DataSink` list (priority-ordered) | Received samples waiting for room; private `HostMemory` by default |
+| **Result sinks** | `sinks`: `DataSink` list (priority-ordered) | Finished samples; never drained back |
 
 ### Communication protocol (DistributedPipeline)
 
@@ -305,7 +306,7 @@ Each pipeline step follows a four-phase protocol:
 1. `_prestep_sync_buffers()` zeros the send buffer and posts `irecv`
    from the prior rank.
 2. `_complete_pending_recv()` waits on deferred receive, routes into
-   the active batch, and drains overflow sinks.
+   the active batch, and drains `overflow_sinks` (never `sinks`).
 3. `step()` runs dynamics integration.
 4. `_poststep_sync_buffers(converged_indices)` extracts converged
    samples into the send buffer and sends them to the next rank.
@@ -317,8 +318,12 @@ is still sent so the downstream `irecv` completes.
 
 When `send_buffer` has limited capacity (via `BufferConfig`):
 
-- Only `min(converged_count, remaining_capacity)` samples are extracted
-- Excess converged samples remain in the active batch as **no-ops**.
+- Transfers select at most the available graph capacity, keeping complete
+  groups for grouped batches. A group larger than the buffer raises `ValueError`.
+- Every selected graph must fit the graph, atom, and edge capacities;
+  otherwise the transfer raises `ValueError` without removing graphs.
+- Graphs or groups beyond the selected graph-count limit remain in the
+  active batch as **no-ops**.
   Their positions and velocities are saved before the integrator and
   restored after it runs.
 - Without `BufferConfig`, all converged samples are sent without
@@ -349,11 +354,12 @@ float32 attributes. Adjacent pipeline stages must have identical
 
 | Method | Purpose |
 |--------|---------|
-| `_recv_to_batch(incoming)` | Route received data through recv buffer into active batch |
-| `_buffer_to_batch(incoming)` | Append to active batch, overflow to sinks if full |
-| `_batch_to_buffer(mask)` | Copy graduated samples into send buffer, defrag active batch |
-| `_overflow_to_sinks(batch)` | Write to first non-full sink in priority order |
-| `_drain_sinks_to_batch()` | Pull from sinks back into active batch when room available |
+| `_recv_to_batch(incoming)` | Route received data directly into active batch or overflow sinks |
+| `_buffer_to_batch(incoming)` | Append to active batch, overflow to `overflow_sinks` if full; admits complete groups |
+| `_batch_to_buffer(mask)` | Copy selected graduated samples into send buffer, trim active batch; raise if any do not fit |
+| `_overflow_to_sinks(batch)` | Write pending samples to the first overflow sink with room for all of them |
+| `_write_to_sinks(batch)` | Write finished samples to the first result sink with room for all of them |
+| `_drain_sinks_to_batch()` | Pull from `overflow_sinks` back into active batch when room available |
 
 ---
 
@@ -370,7 +376,7 @@ sampler = SizeAwareSampler(
     dataset=dataset,                # must have __len__, __getitem__, get_metadata
     max_atoms=1000,                 # max total atoms per batch (None = auto from GPU)
     max_edges=5000,                 # max total edges per batch
-    max_batch_size=32,              # max graphs per batch
+    max_batch_size=32,              # max graphs (groups if by_group) per batch
     bin_width=10,                   # group samples by atom count bins
     shuffle=False,
     max_gpu_memory_fraction=0.8,    # for auto max_atoms estimation
@@ -446,7 +452,9 @@ class DataSink(ABC):
     def write(self, batch: Batch, mask: Tensor | None = None) -> None: ...
     def read(self) -> Batch: ...
     def zero(self) -> None: ...           # clear contents
-    def drain(self) -> Batch: ...         # read() + zero()
+    def drain(self, max_samples: int | None = None) -> Batch: ...
+    # None: read() + zero(). Otherwise remove the oldest max_samples samples
+    # (complete groups when grouped, else graphs) and keep the rest.
     def is_full(self) -> bool: ...        # len(self) >= capacity
     def __len__(self) -> int: ...
     @property
@@ -488,7 +496,7 @@ from nvalchemi.dynamics.hooks import SnapshotHook
 
 dynamics = DemoDynamics(
     model=model, n_steps=1000, dt=0.5,
-    sinks=[gpu_sink, zarr_sink],   # for pipeline communication
+    sinks=[gpu_sink, zarr_sink],   # finished results, in priority order
     hooks=[
         SnapshotHook(sink=zarr_sink, frequency=10),
     ],

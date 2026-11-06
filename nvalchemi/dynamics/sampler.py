@@ -23,14 +23,19 @@ from __future__ import annotations
 
 import random
 from collections import deque
-from collections.abc import Iterator
-from typing import Any
+from collections.abc import Callable, Iterator, Mapping
+from typing import Any, TypeAlias
 
 import torch
 from torch.utils.data import Sampler
 
 from nvalchemi.data.atomic_data import AtomicData
-from nvalchemi.data.batch import Batch
+from nvalchemi.data.batch import _LEVEL_ALIASES, Batch
+from nvalchemi.data.level_storage import effective_dtype
+
+FieldDefault: TypeAlias = tuple[
+    str, bool | int | float | Callable[[int, torch.device], torch.Tensor]
+]
 
 
 class SizeAwareSampler(Sampler[int]):
@@ -47,11 +52,17 @@ class SizeAwareSampler(Sampler[int]):
     The GPU memory heuristic is **best-effort** and **conservative**; users
     who need tighter control should set ``max_atoms`` explicitly.
 
+    Samples are modified in place when loaded. The sampler stamps
+    ``system_id`` on every sample, ``group_id`` on grouped samples, and any
+    ``field_defaults``. Dataset items that are cached therefore keep these
+    fields.
+
     Parameters
     ----------
     dataset : Any
         Dataset with ``__len__``, ``__getitem__``, and ``get_metadata(idx)``
         methods. ``get_metadata`` must return ``(num_atoms, num_edges)``.
+        In grouped mode, these counts cover the complete group.
     max_atoms : int | None
         Maximum total atoms across all samples in a batch. ``None`` disables
         the atom count constraint (GPU memory estimate may still apply).
@@ -60,8 +71,9 @@ class SizeAwareSampler(Sampler[int]):
         Maximum total edges across all samples in a batch. ``None`` disables
         the edge count constraint.
     max_batch_size : int | None
-        Maximum number of samples (graphs) in a batch. ``None`` disables the
-        graph-count constraint, letting ``max_atoms`` (and/or ``max_edges``)
+        Maximum number of dataset items in a batch: graphs by default, or
+        complete groups when ``by_group`` is True. ``None`` disables the
+        count constraint, letting ``max_atoms`` (and/or ``max_edges``)
         alone control batch capacity. At least one of ``max_atoms`` or
         ``max_batch_size`` must be set.
     bin_width : int
@@ -72,6 +84,28 @@ class SizeAwareSampler(Sampler[int]):
         Fraction of GPU memory to use when estimating atom capacity. Default
         0.8 (80%), leaving 20% headroom for model parameters and CUDA context.
         Only used when CUDA is available.
+    by_group : bool
+        Sample complete single-group batches instead of individual graphs. Each
+        item returns ``(batch, metadata)`` with exactly one group.
+        ``max_batch_size`` counts groups. Default False.
+    field_defaults : mapping, optional
+        Map missing fields to ``(level, scalar_or_callable)`` for node, edge,
+        or system levels. A scalar value is expanded to the sample's size.
+        For other shapes or dtypes, pass a callable that takes
+        ``(num_rows, device)`` and returns a tensor. Defaults are added in
+        place; existing values are preserved.
+        Grouped node and edge defaults require existing tensors at that level.
+
+    Attributes
+    ----------
+    assemble_samples : Callable[..., Batch]
+        Assemble a nonempty list of samples into a batch on the supplied
+        ``device``. Samples are AtomicData graphs by default or single-group
+        Batch objects when ``by_group=True``. Group labels are rebased across
+        samples in grouped mode.
+    field_defaults : dict
+        Optional-field defaults applied when loading samples. Consumers
+        can register defaults before the first sample is loaded.
 
     Raises
     ------
@@ -100,6 +134,9 @@ class SizeAwareSampler(Sampler[int]):
         bin_width: int = 1,
         shuffle: bool = False,
         max_gpu_memory_fraction: float = 0.8,
+        *,
+        by_group: bool = False,
+        field_defaults: Mapping[str, FieldDefault] | None = None,
     ) -> None:
         """Initialize the size-aware sampler.
 
@@ -116,8 +153,9 @@ class SizeAwareSampler(Sampler[int]):
             Maximum total edges across all samples in a batch. ``None`` disables
             the edge count constraint.
         max_batch_size : int | None
-            Maximum number of samples (graphs) in a batch. ``None`` disables
-            the graph-count constraint. At least one of ``max_atoms`` or
+            Maximum number of dataset items in a batch: graphs by default, or
+            complete groups when ``by_group`` is True. ``None`` disables the
+            count constraint. At least one of ``max_atoms`` or
             ``max_batch_size`` must be set.
         bin_width : int
             Atom-count bin width for grouping samples. Default 1.
@@ -127,6 +165,17 @@ class SizeAwareSampler(Sampler[int]):
             Fraction of GPU memory to use when estimating atom capacity. Default
             0.8 (80%), leaving 20% headroom for model parameters and CUDA context.
             Only used when CUDA is available.
+        by_group : bool, optional
+            Sample complete single-group batches instead of AtomicData graphs.
+            Metadata contains total atom and edge counts across each group.
+            ``max_batch_size`` counts groups. Default False.
+        field_defaults : mapping, optional
+            Sample defaults mapping field names to ``(level, value)``.
+            Scalars are expanded on the sample device. Callables accept
+            ``(num_rows, device)`` and return a tensor with the desired shape
+            and dtype. Only missing node, edge, and system fields are added.
+            Grouped node and edge defaults require existing tensors at that
+            level. Default is no defaults.
 
         Raises
         ------
@@ -165,6 +214,12 @@ class SizeAwareSampler(Sampler[int]):
         self._max_atoms = max_atoms
         self._max_edges = max_edges
         self._max_batch_size = max_batch_size
+        self.by_group = by_group
+        self.field_defaults: dict[str, FieldDefault] = dict(field_defaults or {})
+        self._load_sample = self._load_group if by_group else self._load_graph
+        self.assemble_samples: Callable[..., Batch] = (
+            self._assemble_groups if by_group else Batch.from_data_list
+        )
         self._bin_width = bin_width
         self._shuffle = shuffle
         self._max_gpu_memory_fraction = max_gpu_memory_fraction
@@ -258,14 +313,115 @@ class SizeAwareSampler(Sampler[int]):
 
         return max(available_for_data // bytes_per_atom, 1)
 
+    def _load_graph(self, index: int) -> AtomicData:
+        """Load and identify one ordinary graph."""
+        data, _ = self._dataset[index]
+        self._apply_field_defaults(data)
+        data.add_system_property(
+            "system_id",
+            torch.tensor(
+                [[self._next_system_id]], dtype=torch.long, device=data.device
+            ),
+        )
+        self._next_system_id += 1
+        return data
+
+    def _load_group(self, index: int) -> Batch:
+        """Load and identify one complete group."""
+        data, _ = self._dataset[index]
+        if not isinstance(data, Batch):
+            raise TypeError("Grouped dataset items must be Batch objects")
+        if "group_idx" not in data or data.group_layout.num_groups != 1:
+            raise ValueError("Grouped dataset items must contain exactly one group")
+        self._apply_field_defaults(data)
+        data.add_key(
+            "group_id",
+            [torch.tensor([[index]], dtype=torch.long, device=data.device)]
+            * data.num_graphs,
+            level="system",
+            overwrite=True,
+        )
+        data.add_key(
+            "system_id",
+            [
+                torch.tensor([[i]], dtype=torch.long, device=data.device)
+                for i in range(
+                    self._next_system_id, self._next_system_id + data.num_graphs
+                )
+            ],
+            level="system",
+            overwrite=True,
+        )
+        self._next_system_id += data.num_graphs
+        return data
+
+    def _apply_field_defaults(self, data: AtomicData | Batch) -> None:
+        """Add missing optional built-in fields to a sample before packing."""
+        for key, (level, default) in self.field_defaults.items():
+            if getattr(data, key, None) is not None:
+                continue
+            level_name = _LEVEL_ALIASES.get(level)
+            if level_name is None:
+                raise ValueError(
+                    f"Unknown field default level '{level}'; "
+                    f"expected one of {sorted(_LEVEL_ALIASES)}"
+                )
+            # Active counts exclude any spare buffer capacity.
+            counts = {
+                "atoms": data.num_nodes,
+                "edges": data.num_edges,
+                "system": data.num_graphs if isinstance(data, Batch) else 1,
+            }
+            num_rows = counts[level_name]
+            if isinstance(data, Batch) and num_rows == 0:
+                raise ValueError(
+                    f"Field defaults require existing tensors at level '{level}'"
+                )
+            if callable(default):
+                values = default(num_rows, data.device)
+            else:
+                # System fields are stored as (num_graphs, 1) payloads.
+                shape = (num_rows, 1) if level_name == "system" else (num_rows,)
+                # A field already declared on a batch keeps its declared dtype.
+                dtype = None
+                if isinstance(data, Batch):
+                    declared = effective_dtype(data.get_level_schema().dtypes.get(key))
+                    dtype = declared if isinstance(declared, torch.dtype) else None
+                values = torch.full(shape, default, dtype=dtype, device=data.device)
+            if isinstance(data, Batch):
+                schema = data.get_level_schema()
+                schema.set(key, level_name, dtype=values.dtype)
+                data.extend_level_schema(schema)
+                data[key] = values
+                if data.keys is not None:
+                    data.keys.setdefault(level_name, set()).add(key)
+            else:
+                add_property = {
+                    "atoms": data.add_node_property,
+                    "edges": data.add_edge_property,
+                    "system": data.add_system_property,
+                }[level_name]
+                add_property(key, values)
+
+    @staticmethod
+    def _assemble_groups(samples: list[Batch], device: torch.device | str) -> Batch:
+        """Append complete grouped batches and build their final layout once."""
+        batch = samples[0].to(device)
+        for sample in samples[1:]:
+            batch.append(sample.to(device))
+        batch.group_layout
+        return batch
+
     def build_initial_batch(self) -> Batch:
         """Build an initial batch using diverse round-robin bin packing.
 
-        Cycles across size bins in round-robin fashion, taking one sample
-        per bin per round, until capacity constraints are reached.  This
-        produces a diverse mix of system sizes so that when systems
-        converge and graduate, the freed atom budget can accommodate
-        replacement systems of any size.
+        Cycles across atom-count bins in round-robin fashion, selecting at
+        most one fitting dataset item per bin per round, until budgets are
+        full or no remaining item fits. Each item is one graph by default,
+        or one complete group of graphs when ``self.by_group`` is True.
+
+        In grouped mode, binning and atom/edge budgets use totals across the
+        entire group. ``max_batch_size`` counts selected groups.
 
         Returns
         -------
@@ -291,7 +447,7 @@ class SizeAwareSampler(Sampler[int]):
             self._max_batch_size if self._max_batch_size is not None else float("inf")
         )
 
-        data_list: list[AtomicData] = []
+        data_list: list[AtomicData | Batch] = []
         total_atoms = 0
         total_edges = 0
 
@@ -329,15 +485,8 @@ class SizeAwareSampler(Sampler[int]):
                         and total_edges + num_edges > self._max_edges
                     ):
                         continue
-
                     # Sample fits — load it.
-                    data, _ = self._dataset[idx]
-                    data.add_system_property(
-                        "system_id",
-                        torch.tensor([[self._next_system_id]], dtype=torch.long),
-                    )
-                    self._next_system_id += 1
-                    data_list.append(data)
+                    data_list.append(self._load_sample(idx))
                     total_atoms += num_atoms
                     total_edges += num_edges
                     self._consumed.add(idx)
@@ -359,7 +508,7 @@ class SizeAwareSampler(Sampler[int]):
             )
 
         # Create batch
-        batch = Batch.from_data_list(data_list, device=data_list[0].device)
+        batch = self.assemble_samples(data_list, device=data_list[0].device)
 
         # Initialize status attribute
         batch["status"] = torch.zeros(
@@ -374,6 +523,10 @@ class SizeAwareSampler(Sampler[int]):
         Searches for an unconsumed sample with at most ``num_atoms`` atoms and
         ``num_edges`` edges, starting from the target bin and progressively
         searching smaller bins.
+
+        This method supports individual graphs only. When ``self.by_group``
+        is True, use :meth:`request_replacements_budget`, which fits complete
+        groups within atom, edge, and count budgets.
 
         Parameters
         ----------
@@ -409,12 +562,7 @@ class SizeAwareSampler(Sampler[int]):
                 # Check if candidate fits in the slot
                 if cand_atoms <= num_atoms and cand_edges <= num_edges:
                     # Found a match, load and mark consumed
-                    data, _ = self._dataset[idx]
-                    data.add_system_property(
-                        "system_id",
-                        torch.tensor([[self._next_system_id]], dtype=torch.long),
-                    )
-                    self._next_system_id += 1
+                    data = self._load_graph(idx)
                     self._consumed.add(idx)
                     return data
 
@@ -425,7 +573,7 @@ class SizeAwareSampler(Sampler[int]):
         atom_budget: int | None = None,
         edge_budget: int | None = None,
         max_count: int | None = None,
-    ) -> list[AtomicData]:
+    ) -> list[AtomicData | Batch]:
         """Request replacement samples that fit within a total atom/edge budget.
 
         Searches bins from **largest to smallest** to maximize diversity —
@@ -440,15 +588,17 @@ class SizeAwareSampler(Sampler[int]):
         edge_budget : int | None
             Total edges available for replacements.  ``None`` = unconstrained.
         max_count : int | None
-            Maximum number of replacement samples.  ``None`` = unconstrained.
+            Maximum number of replacement samples: graphs by default, or
+            complete groups when ``self.by_group`` is True. ``None`` disables
+            the count constraint.
 
         Returns
         -------
-        list[AtomicData]
+        list[AtomicData | Batch]
             Replacement samples (may be empty if nothing fits or sampler
             is exhausted).
         """
-        results: list[AtomicData] = []
+        results: list[AtomicData | Batch] = []
         remaining_atoms = atom_budget
         remaining_edges = edge_budget
 
@@ -476,14 +626,8 @@ class SizeAwareSampler(Sampler[int]):
                     continue
 
                 # Fits — load and consume.
-                data, _ = self._dataset[idx]
-                data.add_system_property(
-                    "system_id",
-                    torch.tensor([[self._next_system_id]], dtype=torch.long),
-                )
-                self._next_system_id += 1
+                results.append(self._load_sample(idx))
                 self._consumed.add(idx)
-                results.append(data)
 
                 if remaining_atoms is not None:
                     remaining_atoms -= cand_atoms
@@ -504,7 +648,7 @@ class SizeAwareSampler(Sampler[int]):
 
     @property
     def max_batch_size(self) -> int | None:
-        """Maximum number of systems per batch (user-specified constraint)."""
+        """Maximum graphs, or groups when ``by_group``, per batch (user-specified constraint)."""
         return self._max_batch_size
 
     @property
@@ -557,6 +701,10 @@ class SizeAwareSampler(Sampler[int]):
         checking is fully vectorized on GPU. M scalar ``item()`` calls remain
         (unavoidable: Python dataset indexing requires CPU integers).
 
+        This method supports individual graphs only. When ``self.by_group``
+        is True, use :meth:`request_replacements_budget`, which fits complete
+        groups within atom, edge, and count budgets.
+
         Parameters
         ----------
         node_counts : torch.Tensor
@@ -603,16 +751,12 @@ class SizeAwareSampler(Sampler[int]):
 
             # ONE item() per slot — unavoidable to index into the Python dataset
             chosen_idx = int(candidates[0, 0].item())
+            data = self._load_graph(chosen_idx)
             available[chosen_idx] = False
             self._consumed_mask[chosen_idx] = True
             # Sync CPU _consumed set for exhausted() and __len__ correctness
             self._consumed.add(chosen_idx)
 
-            data, _ = self._dataset[chosen_idx]
-            data.add_system_property(
-                "system_id", torch.tensor([[self._next_system_id]], dtype=torch.long)
-            )
-            self._next_system_id += 1
             results.append(data)
 
         return results

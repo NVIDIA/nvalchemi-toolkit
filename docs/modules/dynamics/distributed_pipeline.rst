@@ -316,6 +316,14 @@ batch from the sampler and replaces graduated samples automatically:
 The second rank receives graduated samples via ``irecv`` and
 accumulates them in its ``active_batch``.
 
+The sampler's ``max_batch_size`` limits the first stage's batch. Each
+downstream stage's own ``max_batch_size`` limits how many received samples it
+admits. Both count graphs, or complete groups with ``by_group=True``.
+Transfers limit the selected graph count to the send-buffer capacity, keeping
+complete groups when grouped. Excess groups wait for a later step. A group that
+exceeds the graph capacity raises ``ValueError``. Atom and edge capacities must
+accommodate every selected graph, otherwise the transfer also raises.
+
 
 Data sinks for the final stage
 -------------------------------
@@ -333,12 +341,24 @@ On the final rank, converged samples are written to
        dt=1.0,
        sinks=[
            HostMemory(capacity=10_000),          # primary: CPU memory
-           ZarrData(store="results.zarr"),        # overflow: disk
+           ZarrData(store="results.zarr"),        # fallback: disk
        ],
    )
 
-Sinks are tried in priority order; the first non-full sink receives
-the data.
+Sinks are tried in priority order, and each write goes to the first sink with
+room for all of it. Results are never read back into computation.
+
+
+Overflow of received samples
+----------------------------
+
+When samples arrive while a stage's active batch is full, the excess waits in
+``overflow_sinks`` and is drained into the batch as room frees up. Each drain
+removes only the oldest samples that fit, so its cost follows the samples
+admitted rather than the length of the queue. By default, each stage uses its
+own :class:`~nvalchemi.dynamics.HostMemory`. A downstream
+stage finishes once its upstream stage is done and both its active batch and
+its overflow sinks are empty.
 
 
 Combining ``FusedStage`` and ``DistributedPipeline``
