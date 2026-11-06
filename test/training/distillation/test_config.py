@@ -622,7 +622,13 @@ class TestStatusMigrators:
         self,
     ) -> None:
         """The migrator a FusedStage builds for its first sub-stage is found."""
-        fused = self._propagator() + self._propagator()
+        first = DemoDynamics(
+            _build_demo_model(),
+            n_steps=10,
+            dt=0.5,
+            convergence_hook=ConvergenceHook.from_fmax(0.05),
+        )
+        fused = first + self._propagator()
 
         migrations = [
             (hook.source_status, hook.target_status)
