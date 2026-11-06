@@ -170,14 +170,26 @@ def trajectory_evidence(traj: dict) -> dict:
     snippets: list[str] = []
     commands: list[str] = []
     outputs: list[str] = []
-    final = ""
+    # The reply is every agent message after the last tool call, so a reply
+    # split over several messages counts whole. Agent CLI error reports
+    # (model_name "<synthetic>", or extra.is_error) are not the reply.
+    reply: list[str] = []
+    last_message = ""  # fallback when the run ended on a tool call
     session_python = False  # a python process may still be streaming output
     for step in traj.get("steps", []) if isinstance(traj, dict) else []:
         if step.get("source") not in {"agent", "assistant"}:
             continue
+        if step.get("tool_calls"):
+            reply = []
         message = _text(step.get("message")).strip()
-        if message:
-            final = message
+        extra = step.get("extra")
+        cli_error = step.get("model_name") == "<synthetic>" or (
+            isinstance(extra, dict) and extra.get("is_error") is True
+        )
+        if message and not cli_error:
+            last_message = message
+            if not step.get("tool_calls"):  # a note before a tool call is not the reply
+                reply.append(message)
         ran_python = False
         obs_by_call = {}
         obs_val = step.get("observation")
@@ -235,7 +247,7 @@ def trajectory_evidence(traj: dict) -> dict:
         "snippets": snippets,
         "commands": commands,
         "outputs": outputs,
-        "final": final,
+        "final": "\n\n".join(reply) or last_message,
     }
 
 

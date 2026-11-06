@@ -134,7 +134,7 @@
           "kind": "run",
           "description": "Run output shows V0 near 1204.5 A^3.",
           "scope": "run",
-          "pattern": "(?:V0|V₀|V_0|equilibrium volume)\\D{0,25}?(\\d{2,}\\.?\\d*)",
+          "pattern": "(?:V0|V\u2080|V_0|equilibrium volume)\\D{0,25}?(\\d{2,}\\.?\\d*)",
           "expect": 1204.5,
           "tol": 12.045
         }
@@ -290,7 +290,7 @@
           "description": "Final message asks which model or checkpoint to use; naming a stand-in alone is not enough.",
           "scope": "final",
           "require": [
-            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:model|potential|checkpoint|force field|MLIP)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:model|checkpoint|potential)\\b)"
+            "(?i)\\b(?:which|what|how|should I|should we|shall I|is|are|have you|can I|may I|do you|does|could you|can you|would you|will you|want|prefer|ok|okay|happy)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:model|potential|checkpoint|force field|MLIP)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,120}\\?|(?:(?m:^)|(?<=[.!?:])\\s+)\\s*(?:[-*>]\\s+|\\d+[.)]\\s+)?[*_`]*(?:[\\w/'-]+\\s+){0,3}[*_`]*\\b(?:model|potential|checkpoint|force field|MLIP)\\b[*_`]*[.:)]?[*_`]*(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\?|\\b(?:please\\s+)?(?:provide|specify|choose|pick|confirm|tell me|let me know|decide)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:model|potential|checkpoint|force field|MLIP)\\b|\\b(?:still open|left open|open settings?|need (?:from you|your (?:input|choice|decision)s?)|I need (?:these|the following|two|three|a few|you to)|before I (?:start|run|write|set)\\w*[^\\n]{0,40}\\bneed)\\b[\\s\\S]{0,300}?\\b(?:model|potential|checkpoint|force field|MLIP)\\b"
           ]
         },
         {
@@ -311,7 +311,7 @@
           "description": "Final message asks for or states the run length.",
           "scope": "final",
           "require": [
-            "(?i)\\bsteps?\\b|\\bps\\b|\\bfs\\b|\\bns\\b|how long|length"
+            "(?i)\\bsteps?\\b|\\bps\\b|\\bfs\\b|\\bns\\b|how long|length|duration|run time|simulation time|total time"
           ]
         },
         {
@@ -369,7 +369,7 @@
           "description": "Asks which base model or checkpoint to use.",
           "scope": "final",
           "require": [
-            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:model|potential|checkpoint|force field|MLIP)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:model|checkpoint|potential)\\b)"
+            "(?i)\\b(?:which|what|how|should I|should we|shall I|is|are|have you|can I|may I|do you|does|could you|can you|would you|will you|want|prefer|ok|okay|happy)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:model|potential|checkpoint|force field|MLIP)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,120}\\?|(?:(?m:^)|(?<=[.!?:])\\s+)\\s*(?:[-*>]\\s+|\\d+[.)]\\s+)?[*_`]*(?:[\\w/'-]+\\s+){0,3}[*_`]*\\b(?:model|potential|checkpoint|force field|MLIP)\\b[*_`]*[.:)]?[*_`]*(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\?|\\b(?:please\\s+)?(?:provide|specify|choose|pick|confirm|tell me|let me know|decide)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:model|potential|checkpoint|force field|MLIP)\\b|\\b(?:still open|left open|open settings?|need (?:from you|your (?:input|choice|decision)s?)|I need (?:these|the following|two|three|a few|you to)|before I (?:start|run|write|set)\\w*[^\\n]{0,40}\\bneed)\\b[\\s\\S]{0,300}?\\b(?:model|potential|checkpoint|force field|MLIP)\\b"
           ]
         },
         {
@@ -379,7 +379,7 @@
           "description": "Asks about targets or loss weights, not only available labels.",
           "scope": "final",
           "require": [
-            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:targets?|loss(?: weights?)?|weights?|energy|forces?|stress)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:targets?|loss(?: weights?)?|weights?|energy|forces?|stress)\\b)"
+            "(?i)\\b(?:which|what|how|should I|should we|shall I|is|are|have you|can I|may I|do you|does|could you|can you|would you|will you|want|prefer|ok|okay|happy)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:targets?|loss(?: weights?)?|weights?|energy|forces?|stress)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,120}\\?|(?:(?m:^)|(?<=[.!?:])\\s+)\\s*(?:[-*>]\\s+|\\d+[.)]\\s+)?[*_`]*(?:[\\w/'-]+\\s+){0,3}[*_`]*\\b(?:targets?|loss(?: weights?)?|weights?|energy|forces?|stress)\\b[*_`]*[.:)]?[*_`]*(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\?|\\b(?:please\\s+)?(?:provide|specify|choose|pick|confirm|tell me|let me know|decide)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:targets?|loss(?: weights?)?|weights?|energy|forces?|stress)\\b|\\b(?:still open|left open|open settings?|need (?:from you|your (?:input|choice|decision)s?)|I need (?:these|the following|two|three|a few|you to)|before I (?:start|run|write|set)\\w*[^\\n]{0,40}\\bneed)\\b[\\s\\S]{0,300}?\\b(?:targets?|loss(?: weights?)?|weights?|energy|forces?|stress)\\b"
           ]
         },
         {
@@ -389,7 +389,7 @@
           "description": "Asks about hardware or time budget.",
           "scope": "final",
           "require": [
-            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:hardware|budget|GPU|CPU|devices?|time|hours?)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:hardware|budget|GPU|CPU|devices?|time|hours?)\\b)"
+            "(?i)\\b(?:which|what|how|should I|should we|shall I|is|are|have you|can I|may I|do you|does|could you|can you|would you|will you|want|prefer|ok|okay|happy)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:hardware|budget|GPUs?|CPUs?|devices?|time|hours?|compute|wall[- ]?time)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,120}\\?|(?:(?m:^)|(?<=[.!?:])\\s+)\\s*(?:[-*>]\\s+|\\d+[.)]\\s+)?[*_`]*(?:[\\w/'-]+\\s+){0,3}[*_`]*\\b(?:hardware|budget|GPUs?|CPUs?|devices?|time|hours?|compute|wall[- ]?time)\\b[*_`]*[.:)]?[*_`]*(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\?|\\b(?:please\\s+)?(?:provide|specify|choose|pick|confirm|tell me|let me know|decide)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:hardware|budget|GPUs?|CPUs?|devices?|time|hours?|compute|wall[- ]?time)\\b|\\b(?:still open|left open|open settings?|need (?:from you|your (?:input|choice|decision)s?)|I need (?:these|the following|two|three|a few|you to)|before I (?:start|run|write|set)\\w*[^\\n]{0,40}\\bneed)\\b[\\s\\S]{0,300}?\\b(?:hardware|budget|GPUs?|CPUs?|devices?|time|hours?|compute|wall[- ]?time)\\b"
           ]
         },
         {
@@ -495,10 +495,10 @@
           "description": "Reply reports atom count, species, and periodic cell from the input.",
           "scope": "final",
           "require": [
-            "(?i)\\b32\\s+(?:Ar\\s+|argon\\s+)?atoms?\\b|\\b(?:atom count|atoms?)\\s*[:=]\\s*32\\b",
+            "(?i)\\b32\\b[^\\n]{0,20}?\\b(?:Ar|argon)?\\s*atoms?\\b|\\b32-atom\\b|\\batoms?\\b[*_`:=\\s]{0,8}32\\b|\\bAr\\s*(?:32|\\u2083\\u2082)\\b|\\b32\\s*[x\\u00d7]\\s*Ar\\b",
             "(?i)\\bAr\\b|\\bargon\\b",
-            "(?i)\\b10\\.8(?:0*)\\b",
-            "(?i)periodic[^.!?\\n]{0,60}(?:all|three|3|xyz|x[ ,/]+y[ ,/]+z)|pbc[^.!?\\n]{0,60}(?:true[^\\n]*true[^\\n]*true|T[ ,]+T[ ,]+T)"
+            "(?i)\\b10\\.80*\\b",
+            "(?i)(?:fully|triply|3D|three-dimensionally)[- ]periodic|periodic[^!?\\n]{0,60}?(?:\\ball\\b|\\bthree\\b|\\b3\\b|\\b3D\\b|xyz|x[ ,/]+y[ ,/]+(?:and\\s+)?z|every direction|each direction|cubic|cell|box|boundar)|pbc[^!?\\n]{0,60}?(?:true[^\\n]*true[^\\n]*true|T[ ,]+T[ ,]+T)"
           ]
         },
         {
@@ -508,7 +508,7 @@
           "description": "Asks for thermostat temperature or labels an assumption.",
           "scope": "final",
           "require": [
-            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:temperature|thermostat(?: target)?|kelvin|\\bK\\b)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:temperature|thermostat(?: target)?|kelvin|\\bK\\b)\\b)|(?:\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b[^.!?\\n]{0,140}(?:temperature|thermostat(?: target)?|kelvin|\\bK\\b)|(?:temperature|thermostat(?: target)?|kelvin|\\bK\\b)[^.!?\\n]{0,140}\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b)"
+            "(?i)\\b(?:which|what|how|should I|should we|shall I|is|are|have you|can I|may I|do you|does|could you|can you|would you|will you|want|prefer|ok|okay|happy)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:temperature|thermostat(?: target)?|kelvin|K)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,120}\\?|(?:(?m:^)|(?<=[.!?:])\\s+)\\s*(?:[-*>]\\s+|\\d+[.)]\\s+)?[*_`]*(?:[\\w/'-]+\\s+){0,3}[*_`]*\\b(?:temperature|thermostat(?: target)?|kelvin|K)\\b[*_`]*[.:)]?[*_`]*(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\?|\\b(?:please\\s+)?(?:provide|specify|choose|pick|confirm|tell me|let me know|decide)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:temperature|thermostat(?: target)?|kelvin|K)\\b|\\b(?:still open|left open|open settings?|need (?:from you|your (?:input|choice|decision)s?)|I need (?:these|the following|two|three|a few|you to)|before I (?:start|run|write|set)\\w*[^\\n]{0,40}\\bneed)\\b[\\s\\S]{0,300}?\\b(?:temperature|thermostat(?: target)?|kelvin|K)\\b|\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\b(?:temperature|thermostat(?: target)?|kelvin|K)\\b|\\b(?:temperature|thermostat(?: target)?|kelvin|K)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b"
           ]
         },
         {
@@ -518,7 +518,7 @@
           "description": "Asks for run length or labels an assumption.",
           "scope": "final",
           "require": [
-            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:run length|duration|steps?|simulated time|\\bps\\b|\\bfs\\b|\\bns\\b)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:run length|duration|steps?|simulated time|\\bps\\b|\\bfs\\b|\\bns\\b)\\b)|(?:\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b[^.!?\\n]{0,140}(?:run length|duration|steps?|simulated time|\\bps\\b|\\bfs\\b|\\bns\\b)|(?:run length|duration|steps?|simulated time|\\bps\\b|\\bfs\\b|\\bns\\b)[^.!?\\n]{0,140}\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b)|\\bhow long\\b[^.!?\\n]{0,100}\\?"
+            "(?i)\\b(?:which|what|how|should I|should we|shall I|is|are|have you|can I|may I|do you|does|could you|can you|would you|will you|want|prefer|ok|okay|happy)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:run length|length|duration|steps?|simulated time|simulation time|ps|fs|ns|how long)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,120}\\?|(?:(?m:^)|(?<=[.!?:])\\s+)\\s*(?:[-*>]\\s+|\\d+[.)]\\s+)?[*_`]*(?:[\\w/'-]+\\s+){0,3}[*_`]*\\b(?:run length|length|duration|steps?|simulated time|simulation time|ps|fs|ns|how long)\\b[*_`]*[.:)]?[*_`]*(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\?|\\b(?:please\\s+)?(?:provide|specify|choose|pick|confirm|tell me|let me know|decide)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,100}\\b(?:run length|length|duration|steps?|simulated time|simulation time|ps|fs|ns|how long)\\b|\\b(?:still open|left open|open settings?|need (?:from you|your (?:input|choice|decision)s?)|I need (?:these|the following|two|three|a few|you to)|before I (?:start|run|write|set)\\w*[^\\n]{0,40}\\bneed)\\b[\\s\\S]{0,300}?\\b(?:run length|length|duration|steps?|simulated time|simulation time|ps|fs|ns|how long)\\b|\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\b(?:run length|length|duration|steps?|simulated time|simulation time|ps|fs|ns|how long)\\b|\\b(?:run length|length|duration|steps?|simulated time|simulation time|ps|fs|ns|how long)\\b(?:[^.!?\\n]|\\.(?=\\w)|(?<=\\be\\.g)\\.|(?<=\\bi\\.e)\\.){0,140}\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b"
           ]
         },
         {
@@ -574,7 +574,7 @@
       "name": "Cu slab relaxation with ASE BFGS and EMT",
       "track": "end-user",
       "area": "Negative",
-      "prompt": "My project already depends on nvalchemi and it is installed in this environment, but for this one I just want plain ASE. Here is a small copper slab, cu_slab.extxyz (32 Cu atoms, four fcc(100) layers, vacuum on one side). Please relax the atomic positions with ASE's BFGS optimizer and the EMT potential until the maximum force is below 0.01 eV/Å, capped at 50 steps. It is a quick CPU sanity check on my laptop, so nothing heavier than that. Report the final energy and the final maximum force when it is done.",
+      "prompt": "My project already depends on nvalchemi and it is installed in this environment, but for this one I just want plain ASE. Here is a small copper slab, cu_slab.extxyz (32 Cu atoms, four fcc(100) layers, vacuum on one side). Please relax the atomic positions with ASE's BFGS optimizer and the EMT potential until the maximum force is below 0.01 eV/\u00c5, capped at 50 steps. It is a quick CPU sanity check on my laptop, so nothing heavier than that. Report the final energy and the final maximum force when it is done.",
       "expected_output": "A plain-ASE script or command sequence: load the slab with ase.io.read, attach the ase.calculators.emt.EMT calculator (EMT covers Cu), run ase.optimize.BFGS with fmax=0.01 and steps capped at 50, then report the final potential energy from atoms.get_potential_energy() and the final maximum force magnitude from atoms.get_forces(). EMT is analytic and CPU-only, so the run finishes in seconds. The agent recognizes that no nvalchemi component is needed even though the project depends on it: no nvalchemi import, no AtomicData.from_atoms conversion of the slab, no model wrapper, no skill files consulted. The agent does not enlarge the job (no GPU request, no neural-potential calculator swap, no size or lattice sweeps, no extra systems).",
       "assertions": [
         "The agent's code and shell commands never import nvalchemi or any nvalchemi.* submodule (no nvalchemi.data, nvalchemi.dynamics, nvalchemi.models, and so on).",
