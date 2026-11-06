@@ -85,7 +85,9 @@ class HookRegistryMixin:
             not an instance of the accepted ``_stage_type`` declared on
             the engine **and** the hook does not define
             ``_runs_on_stage`` (cross-category hooks that manage their
-            own stage dispatch bypass this check).
+            own stage dispatch bypass this check). A hook that also sets
+            ``_extends_stage`` is checked as if it did not define
+            ``_runs_on_stage``.
         """
         if not isinstance(hook.frequency, int) or hook.frequency < 1:
             raise ValueError(
@@ -96,7 +98,11 @@ class HookRegistryMixin:
         stage_type = self._stage_type
         # Hooks that define ``_runs_on_stage`` handle stage dispatch
         # themselves (e.g. cross-category hooks); skip the type check.
-        has_custom_dispatch = getattr(hook, "_runs_on_stage", None) is not None
+        # ``_extends_stage`` marks a hook whose extra stages are added to a
+        # ``hook.stage`` that is still checked.
+        has_custom_dispatch = getattr(
+            hook, "_runs_on_stage", None
+        ) is not None and not getattr(hook, "_extends_stage", False)
         if hook.stage is None and not has_custom_dispatch:
             raise TypeError(
                 f"Hook {type(hook).__name__} has no stage assigned. "

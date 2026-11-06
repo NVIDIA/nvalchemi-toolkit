@@ -58,6 +58,7 @@ from nvalchemi._typing import (
 )
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.hooks import Hook, NeighborListHook
+from nvalchemi.hooks.neighbor_list import _admission_stage
 from nvalchemi.models._derivatives import (
     DerivativeNotSupported,
     _DerivativeRequest,
@@ -155,6 +156,9 @@ class _NeighborSourceData:
 class _PipelineNeighborListHook:
     """Build all planned pipeline neighbor-list sources before compute."""
 
+    # Runs at ``stage`` and, like each source hook, at ON_ADMISSION.
+    _extends_stage = True
+
     def __init__(
         self,
         sources: list[_NeighborSource],
@@ -168,10 +172,20 @@ class _PipelineNeighborListHook:
         self.stage = stage
         self.frequency = 1
 
+    def _runs_on_stage(self, stage: Any) -> bool:
+        """Return whether the hook runs at *stage*: its own or ON_ADMISSION."""
+        return stage == self.stage or stage is _admission_stage()
+
     def __call__(self, ctx: Any, stage: Any) -> None:
+        if stage is _admission_stage():
+            # Each source hook drops the caches sized for the old systems.
+            for hook in self.hooks:
+                hook._reset_for_new_membership()
+            if stage is not self.stage:
+                return
         source_data: list[_NeighborSourceData] = []
         for source, hook in zip(self.sources, self.hooks, strict=True):
-            hook(ctx, stage)
+            hook._build(ctx)
             source_data.append(self._capture_source_data(ctx.batch, source, hook))
 
         ctx.batch.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR] = tuple(source_data)
