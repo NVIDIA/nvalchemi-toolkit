@@ -215,3 +215,81 @@ def test_fused_stage_pipeline_graduates_and_terminates() -> None:
     results = dict(run_gloo(world_size=2, fn=_fused_pipeline_worker, timeout_sec=120.0))
 
     assert results[1] == _N_SYSTEMS * _LANGEVIN_STEPS
+
+
+class _SystemDataset:
+    """``_make_system`` molecules in the form ``SizeAwareSampler`` reads."""
+
+    def __init__(self, num_systems: int) -> None:
+        self.systems = [_make_system(i) for i in range(num_systems)]
+
+    def __len__(self) -> int:
+        return len(self.systems)
+
+    def __getitem__(self, idx: int) -> tuple[AtomicData, dict[str, int]]:
+        data = self.systems[idx]
+        return data, {"num_atoms": data.num_nodes, "num_edges": data.num_edges}
+
+    def get_metadata(self, idx: int) -> tuple[int, int]:
+        data = self.systems[idx]
+        return data.num_nodes, data.num_edges
+
+
+def _plain_receiver_worker(rank: int, world_size: int, queue) -> None:
+    """Relax on a fused stage, then on a plain one; report what moves on rank 1."""
+    torch.manual_seed(0)
+    model = DemoModelWrapper(DemoModel())
+    buffer_cfg = BufferConfig(num_systems=_N_SYSTEMS, num_nodes=50, num_edges=0)
+    stages = {
+        0: FusedStage(
+            sub_stages=[(0, FIRE2(model=model, dt=0.05, n_steps=3, device_type="cpu"))],
+            device_type="cpu",
+            sampler=SizeAwareSampler(
+                dataset=_SystemDataset(_N_SYSTEMS),
+                max_atoms=50,
+                max_edges=0,
+                max_batch_size=_N_SYSTEMS,
+            ),
+            prior_rank=None,
+            next_rank=1,
+            buffer_config=buffer_cfg,
+        ),
+        # A tight fmax keeps every arrival relaxing on the plain stage.
+        1: FIRE2(
+            model=model,
+            dt=0.05,
+            convergence_hook=ConvergenceHook.from_fmax(1e-7),
+            device_type="cpu",
+            prior_rank=0,
+            next_rank=None,
+            buffer_config=buffer_cfg,
+        ),
+    }
+    first_positions: dict[int, torch.Tensor] = {}
+    moved: set[int] = set()
+    with DistributedPipeline(stages=stages, backend="gloo") as pipeline:
+        stage = pipeline.local_stage
+        for _ in range(20):
+            pipeline.step()
+            batch = stage.active_batch
+            if rank == 0 or batch is None:
+                continue
+            positions = batch.positions.detach().split(
+                batch.num_nodes_per_graph.tolist()
+            )
+            for system_id, pos in zip(batch.system_id.view(-1).tolist(), positions):
+                first = first_positions.setdefault(system_id, pos.clone())
+                if not torch.equal(first, pos):
+                    moved.add(system_id)
+    if rank == 1:
+        queue.put((sorted(first_positions), sorted(moved)))
+
+
+def test_plain_stage_steps_systems_sent_by_fused_stage() -> None:
+    """Systems that leave a fused stage at its exit status move on a plain stage."""
+    [(seen, moved)] = run_gloo(
+        world_size=2, fn=_plain_receiver_worker, timeout_sec=90.0
+    )
+
+    assert seen == list(range(_N_SYSTEMS))
+    assert moved == seen
