@@ -27,6 +27,30 @@ Device helpers
 
    resolve_device
 
+Transforms
+----------
+
+.. currentmodule:: nvalchemi.data.transforms
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   Compose
+   make_supercell
+
+.. data:: DEFAULT_EXTENSIVE_SYSTEM_KEYS
+   :type: frozenset[str]
+
+   System-level fields a k-fold supercell carries k times over.
+
+.. data:: DEFAULT_INTENSIVE_SYSTEM_KEYS
+   :type: frozenset[str]
+
+   System-level fields a supercell carries unchanged.
+
+.. currentmodule:: nvalchemi.data
+
 I/O and pipelines
 -----------------
 

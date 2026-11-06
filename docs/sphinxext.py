@@ -117,6 +117,27 @@ def _parse_numpy_section(docstring, section="Attributes"):
     return result
 
 
+# A dotted name not preceded by a quote, word character, or dot, so quoted
+# Literal values keep their text.
+_QUALIFIED_NAME = re.compile(
+    r"(?<![\w.'\"])(?:[A-Za-z_][A-Za-z0-9_]*\.)+([A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
+def _format_annotation(annotation) -> str:
+    """Return a short type string for a table cell.
+
+    ``str(bool)`` gives ``<class 'bool'>`` and ``str(X | None)`` spells out the
+    full module path of ``X``; both make the type column too wide to read.
+    """
+    if isinstance(annotation, str):
+        # Source text from a dataclass annotation: already as the author wrote it.
+        return annotation
+    if isinstance(annotation, type):
+        return annotation.__qualname__
+    return _QUALIFIED_NAME.sub(r"\1", str(annotation))
+
+
 def _extract_fields(cls):
     """Return list of (name, type_str, description) for own fields of a dataclass or Pydantic model."""
     own = set(getattr(cls, "__annotations__", {}))
@@ -126,7 +147,7 @@ def _extract_fields(cls):
         return [
             (
                 f.name,
-                f.type if isinstance(f.type, str) else str(f.type),
+                _format_annotation(f.type),
                 descriptions.get(f.name, ""),
             )
             for f in dataclasses.fields(cls)
@@ -148,7 +169,7 @@ def _extract_fields(cls):
         for name, info in cls.model_fields.items():
             if name not in own:
                 continue
-            type_str = str(info.annotation)
+            type_str = _format_annotation(info.annotation)
             desc = (info.description or "").strip() or param_descs.get(name, "")
             result.append((name, type_str, desc))
         return result
@@ -185,6 +206,11 @@ class DataclassTableDirective(Directive):
                 line=self.lineno,
             )
             return [error]
+
+        if not fields:
+            # A list-table needs at least one body row; say so in plain text.
+            para = nodes.paragraph(text="This class has no configurable fields.")
+            return [para]
 
         rst_lines = [
             ".. list-table::",

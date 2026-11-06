@@ -42,7 +42,11 @@ from typing import TYPE_CHECKING, Any, Literal
 import torch
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
+from nvalchemi.dynamics._ops._bridge import (
+    _arrival_atom_counts,
+    _make_state_batch,
+    _to_per_system,
+)
 from nvalchemi.dynamics._ops.nose_hoover import nhc_compute_masses
 from nvalchemi.dynamics._ops.npt_nph import (
     compute_barostat_mass,
@@ -54,9 +58,8 @@ from nvalchemi.dynamics._ops.npt_nph import (
     npt_thermostat_half_step,
 )
 from nvalchemi.dynamics._ops.thermostat_utils import compute_kinetic_energy
-from nvalchemi.dynamics._units import fs_to_internal_time
+from nvalchemi.dynamics._units import KB_EV, fs_to_internal_time
 from nvalchemi.dynamics.base import BaseDynamics
-from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook
@@ -268,23 +271,19 @@ class NPT(BaseDynamics):
         kT = _to_per_system(self._temperature_init * KB_EV, n, dev, dtype)
         tau_p = _to_per_system(self._barostat_time_init, n, dev, dtype)
         tau_t = _to_per_system(self._thermostat_time_init, n, dev, dtype)
-        approx_n_atoms = template_batch.num_nodes // template_batch.num_graphs
-        num_atoms_per_system = torch.full(
-            (n,), approx_n_atoms, dtype=torch.int32, device=dev
-        )
-        dummy_masses = template_batch.atomic_masses[:1].expand(n).contiguous()
-        dummy_batch_idx = torch.zeros(n, dtype=torch.int32, device=dev)
+        # Size each arrival's barostat mass and particle chain from its own
+        # atoms, as _init_state does; the arrivals are the last n graphs.
+        counts = _arrival_atom_counts(template_batch, n)
+        num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         W = torch.zeros(n, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
         W = W / 3
-        Q = nhc_compute_masses(
-            kT[:1],
-            tau_t[:1],
-            dummy_masses[:1],
-            dummy_batch_idx[:1],
-            self.chain_length,
+        batch_idx = torch.repeat_interleave(
+            torch.arange(n, dtype=torch.int32, device=dev), counts
         )
-        Q = Q.expand(n, -1).contiguous()
+        first_atom = template_batch.num_nodes - batch_idx.numel()
+        masses = template_batch.atomic_masses[first_atom:]
+        Q = nhc_compute_masses(kT, tau_t, masses, batch_idx, self.chain_length)
         cell_dofs = _cell_dof_count(self.pressure_coupling)
         dummy_b_particles = 3 if cell_dofs == 9 else 1
         dummy_b_masses = torch.ones(dummy_b_particles, dtype=dtype, device=dev)

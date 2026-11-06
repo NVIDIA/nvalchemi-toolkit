@@ -236,8 +236,8 @@ class TestMappinglessStages:
     """A generator returning a non-Batch sample yields it raw — terminal stages only."""
 
     def test_mappingless_terminal_stage_returns_raw_sample(self) -> None:
-        """A terminal AtomisticGenerator without ``batch_mapping`` ends the fold with
-        its raw sample, not a ``Batch``."""
+        """A terminal AtomisticGenerator whose function does not return a
+        ``Batch`` ends the fold with its raw sample."""
         terminal = AtomisticGenerator(
             generator_func=trivial_generate,
             required_inputs=frozenset(),

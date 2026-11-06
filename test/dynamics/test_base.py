@@ -36,9 +36,17 @@ from nvalchemi.dynamics.base import (
 )
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
+from nvalchemi.dynamics.optimizers.fire import FIRE, FIREVariableCell
+from nvalchemi.dynamics.optimizers.fire2 import FIRE2, FIRE2VariableCell
+from nvalchemi.dynamics.optimizers.lbfgs import LBFGS, LBFGSVariableCell
 from nvalchemi.hooks import DynamicsContext, Hook
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+# FIRE is deprecated in favour of FIRE2; these tests still exercise it.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:FIRE(VariableCell)? is deprecated:DeprecationWarning"
+)
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -2115,16 +2123,16 @@ class TestBookkeepingKeys:
         self.model = DemoModelWrapper(DemoModel())
 
     def test_a_bare_dynamics_reports_the_base_registry(self) -> None:
-        """The engine's own bookkeeping is status and system_id, plus registrations."""
+        """The base registry includes status, system_id, and pending force priming."""
         dynamics = BaseDynamics(model=self.model)
 
         keys = dynamics.bookkeeping_keys()
 
-        assert {"status", "system_id"} <= keys
+        assert {"status", "system_id", "reprime_pending"} <= keys
         assert keys == frozenset(BaseDynamics._bookkeeping_keys)
 
-    def test_a_fused_stage_adds_its_own_key_and_its_sub_stages_counters(self) -> None:
-        """reprime_pending lives on FusedStage alone; the counters on the base registry."""
+    def test_a_fused_stage_reports_pending_flags_and_sub_stage_counters(self) -> None:
+        """Fused stages share pending force flags and include sub-stage counters."""
         fused = DemoDynamics(self.model, n_steps=1) + DemoDynamics(
             self.model, n_steps=2
         )
@@ -2133,7 +2141,7 @@ class TestBookkeepingKeys:
 
         assert "reprime_pending" in keys
         assert {"n_steps_counter_0", "n_steps_counter_1"} <= keys
-        assert "reprime_pending" not in BaseDynamics._bookkeeping_keys
+        assert "reprime_pending" in BaseDynamics._bookkeeping_keys
 
     def test_a_key_registered_on_a_sub_stage_class_is_reached_from_the_root(
         self,
@@ -2272,3 +2280,54 @@ class TestSeedOffset:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSamplesEquilibrium:
+    """Tests for the samples_equilibrium declaration on dynamics classes."""
+
+    @pytest.mark.parametrize(
+        "dynamics_cls", [BaseDynamics, DemoDynamics, NVTLangevin, FusedStage]
+    )
+    def test_the_engine_and_the_integrators_declare_sampling(
+        self, dynamics_cls: type[BaseDynamics]
+    ) -> None:
+        """The base declaration is True and an integrator inherits it."""
+        assert dynamics_cls.samples_equilibrium is True
+
+    @pytest.mark.parametrize(
+        "optimizer_cls",
+        [FIRE, FIREVariableCell, FIRE2, FIRE2VariableCell, LBFGS, LBFGSVariableCell],
+    )
+    def test_the_relaxation_optimizers_declare_a_descent(
+        self, optimizer_cls: type[BaseDynamics]
+    ) -> None:
+        """Every built-in minimizer declares that it does not sample an ensemble."""
+        assert optimizer_cls.samples_equilibrium is False
+
+    def test_a_subclass_inherits_its_parents_declaration(self) -> None:
+        """A user optimizer built on FIRE is a descent unless it says otherwise."""
+
+        class _Quenched(FIRE):
+            pass
+
+        class _Sampling(FIRE):
+            samples_equilibrium = True
+
+        assert _Quenched.samples_equilibrium is False
+        assert _Sampling.samples_equilibrium is True
+
+    def test_the_declaration_is_read_on_an_instance_too(self) -> None:
+        """An instance reports its class's declaration."""
+        dynamics = DemoDynamics(DemoModelWrapper(DemoModel()), n_steps=1)
+        assert dynamics.samples_equilibrium is True
+
+    @pytest.mark.parametrize(
+        ("optimizer_cls", "replacement"),
+        [(FIRE, "FIRE2"), (FIREVariableCell, "FIRE2VariableCell")],
+    )
+    def test_the_fire_optimizers_warn_that_they_are_deprecated(
+        self, optimizer_cls: type[BaseDynamics], replacement: str
+    ) -> None:
+        """Constructing a FIRE optimizer points the user at its replacement."""
+        with pytest.warns(DeprecationWarning, match=replacement):
+            optimizer_cls(DemoModelWrapper(DemoModel()), dt=0.1)

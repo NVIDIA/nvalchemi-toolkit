@@ -40,10 +40,12 @@ For install options, refer to the install guide below.
   - {doc}`Training: Strategy and Runtime <training>`
   - {doc}`Losses: Composable Training Terms <losses>`
   - {doc}`Fine-Tuning Pretrained Models <finetuning>`
+  - {doc}`Distilling a Teacher Into a Student <distillation>`
 - {doc}`Serialization & Reproducibility <serialization>`
 - {doc}`Hooks: Observe & Modify <hooks>`
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
-- [Dynamics: Optimization and MD](dynamics)
+- {doc}`Dynamics: Optimization and MD <dynamics>`
+- {doc}`Enhanced Sampling: Biases and Free Energy <enhanced_sampling>`
 - {doc}`Generative Models <generative>`
 
 ## Distributed Simulations
@@ -52,6 +54,10 @@ For install options, refer to the install guide below.
 - {doc}`ShardTensor: Per-Atom Fields Across Ranks <distributed_shardtensor>`
 - {doc}`Bring Your Own Model: Authoring a Spec <distributed_byo>`
 - {doc}`Architecture & design (deep dive) <distributed_design>`
+
+## Applications
+
+- {doc}`Crystal structure prediction <csp>`
 
 ## Advanced Usage
 
@@ -85,6 +91,7 @@ serialization
 hooks
 reporting
 dynamics
+enhanced_sampling
 generative
 ```
 
@@ -97,6 +104,14 @@ distributed
 distributed_shardtensor
 distributed_byo
 distributed_design
+```
+
+```{toctree}
+:caption: Applications
+:maxdepth: 1
+:hidden:
+
+csp
 ```
 
 ```{toctree}

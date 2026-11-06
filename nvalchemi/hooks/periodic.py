@@ -81,13 +81,19 @@ def wrap_positions_into_cell(
 ) -> Float[torch.Tensor, "V 3"]:
     """Wrap positions into the unit cell using fractional coordinates.
 
-    Respects per-dimension periodicity: only periodic dimensions are
-    wrapped.  Non-periodic dimensions are left unchanged.
+    Respects per-axis periodicity: ``pbc[:, i]`` applies to lattice
+    vector ``i`` (row ``i`` of ``cell``), not to Cartesian axis ``i``.
+    Each atom moves by whole lattice vectors along its periodic axes only,
+    so its fractional coordinates along non-periodic lattice vectors stay
+    unchanged, also for triclinic cells.
 
     This function modifies ``positions`` **in-place** and returns the
     same tensor.  Delegates to ``nvalchemiops.dynamics.utils.wrap_positions_to_cell``
-    for GPU-optimized wrapping, then applies per-dimension PBC masking
-    in pure PyTorch.
+    for GPU-optimized wrapping along all three lattice vectors, recovers
+    the integer lattice shift of each atom, and then drops the shift along
+    non-periodic lattice vectors in pure PyTorch.  If a graph's cell is
+    singular (for example a zero lattice vector), its atoms are not moved,
+    also along periodic axes.
 
     Parameters
     ----------
@@ -96,7 +102,7 @@ def wrap_positions_into_cell(
     cell : Float[Tensor, "B 3 3"]
         Lattice vectors as rows, one ``(3, 3)`` matrix per graph.
     pbc : Tensor
-        Per-dimension periodicity flags, shape ``(B, 3)``, boolean.
+        Per-lattice-vector periodicity flags, shape ``(B, 3)``, boolean.
     batch_idx : Tensor
         Per-atom graph membership indices of shape ``(V,)``.
 
@@ -104,13 +110,38 @@ def wrap_positions_into_cell(
     -------
     Float[Tensor, "V 3"]
         The same ``positions`` tensor (modified in-place).
-    """
-    original = positions.clone()
-    wrapped = _wrap_positions(positions, cell, batch_idx)
 
-    # Restore non-periodic dimensions
-    per_atom_pbc = pbc[batch_idx]  # (V, 3)
-    positions.copy_(torch.where(per_atom_pbc, wrapped, original))
+    Raises
+    ------
+    ValueError
+        If ``pbc`` does not have one flag per lattice vector (last
+        dimension of size 3).
+    """
+    # Shape-only check: no host sync, free under torch.compile.
+    if pbc.shape[-1] != 3:
+        raise ValueError(f"pbc must have shape (B, 3), got {tuple(pbc.shape)}")
+    # Positions can still require grad here (FusedStage); see #206.
+    with torch.no_grad():
+        original = positions.clone()
+        wrapped = _wrap_positions(positions, cell, batch_idx)
+
+        # The kernel wraps all three lattice vectors. Recover the integer
+        # shift per lattice vector (row convention: r = s @ cell) and keep
+        # it only along periodic ones. ``inv_ex`` avoids the host sync of
+        # ``inv``'s singularity check; a singular cell gives a non-finite
+        # shift, and those atoms stay where they are.
+        inv_cell, _ = torch.linalg.inv_ex(cell)
+        shift = torch.einsum(
+            "vi,vij->vj", wrapped - original, inv_cell[batch_idx]
+        ).round()
+        finite = torch.isfinite(shift).all(dim=-1, keepdim=True)
+        periodic = pbc[batch_idx]
+        shift = torch.where(periodic & finite, shift, torch.zeros_like(shift))
+        result = original + torch.einsum("vi,vij->vj", shift, cell[batch_idx])
+        # Fully periodic atoms take the kernel output as is, which avoids
+        # float32 rounding of ``shift @ cell`` for atoms many cells away.
+        fully_periodic = periodic.all(dim=-1, keepdim=True) & finite
+        positions.copy_(torch.where(fully_periodic, wrapped, result))
     return positions
 
 

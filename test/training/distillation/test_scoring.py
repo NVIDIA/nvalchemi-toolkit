@@ -463,6 +463,48 @@ class _ChargeConsumerModel(torch.nn.Module, BaseModelMixin):
         return OrderedDict([("energy", energy)])
 
 
+class _FieldWritingTeacher(torch.nn.Module, BaseModelMixin):
+    """Teacher whose energy curves with positions and that shadows a batch field.
+
+    Stands in for a composition that wires one stage into the next. The write
+    lands in the batch's instance dictionary, the way
+    :class:`~nvalchemi.models.pipeline.PipelineModelWrapper` puts an
+    intermediate there. Unlike a pipeline, it does not narrow the grad mode of
+    the double-backward pass a Hessian-vector product needs.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_outputs=frozenset(),
+            autograd_inputs=frozenset({"positions"}),
+            neighbor_config=None,
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        """Return no embedding shapes."""
+        return {}
+
+    def compute_embeddings(self, data: Any, **kwargs: Any) -> Any:  # noqa: ARG002
+        """Raise, since this teacher produces no embeddings."""
+        raise NotImplementedError
+
+    def forward(self, data: Batch, **kwargs: Any) -> OrderedDict:  # noqa: ARG002
+        """Shadow the batch's charges, then return an energy quadratic in positions."""
+        object.__setattr__(
+            data, "charges", torch.full((data.num_nodes,), _WIRED_CHARGE)
+        )
+        node_energy = data.charges.reshape(-1, 1) * data.positions.pow(2).sum(
+            dim=-1, keepdim=True
+        )
+        energy = torch.zeros(data.num_graphs, 1, dtype=data.positions.dtype).index_add(
+            0, data.batch_idx, node_energy
+        )
+        return OrderedDict([("energy", energy)])
+
+
 class _DeclaredFieldsScorer:
     """Scorer publishing ``label_fields`` its signal names alone would not imply."""
 
@@ -906,6 +948,78 @@ class TestInProcessTeacherScorerCustomSignals:
         with pytest.raises(RuntimeError, match="must produce exactly"):
             scorer.label(_make_spread_batch())
 
+    def test_a_hessian_normalizer_reshapes_the_product_and_keeps_the_probe(
+        self,
+    ) -> None:
+        """A custom ``hessian`` spec's normalize runs on the product, with the probe kept."""
+        seen: list[Batch] = []
+
+        def halve(value: torch.Tensor, batch: Batch) -> torch.Tensor:
+            seen.append(batch)
+            return value * 0.5
+
+        spec = TeacherSignal(
+            "hessian",
+            None,
+            "teacher_hvp",
+            "node",
+            normalize=halve,
+            extra_fields=("teacher_hvp_probe",),
+        )
+        batch = _make_charge_batch()
+        scorer = InProcessTeacherScorer(_FieldWritingTeacher(), [spec], probe_seed=3)
+        labels = scorer.label(batch)
+        probe = labels["teacher_hvp_probe"][0]
+        assert seen == [batch]
+        assert set(labels) == {"teacher_hvp", "teacher_hvp_probe"}
+        torch.testing.assert_close(
+            labels["teacher_hvp"][0], 0.5 * scorer.label_hvp(batch, probe)
+        )
+        torch.testing.assert_close(labels["teacher_hvp"][0], _WIRED_CHARGE * probe)
+
+    def test_a_hessian_normalizer_returning_a_mapping_replaces_the_spread(
+        self,
+    ) -> None:
+        """A mapping from a ``hessian`` normalize names the fields, companion included."""
+
+        def with_direction(
+            value: torch.Tensor, batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            return {
+                "teacher_hvp": value,
+                "teacher_hvp_direction": torch.ones_like(batch.positions),
+            }
+
+        spec = TeacherSignal(
+            "hessian",
+            None,
+            "teacher_hvp",
+            "node",
+            normalize=with_direction,
+            extra_fields=("teacher_hvp_direction",),
+        )
+        batch = _make_charge_batch()
+        labels = InProcessTeacherScorer(_FieldWritingTeacher(), [spec]).label(batch)
+        assert set(labels) == {"teacher_hvp", "teacher_hvp_direction"}
+        torch.testing.assert_close(
+            labels["teacher_hvp_direction"][0], torch.ones_like(batch.positions)
+        )
+
+    def test_the_built_in_hessian_signal_stores_the_raw_product(self) -> None:
+        """Without a normalize, the product is stored as the teacher returned it."""
+        batch = _make_charge_batch()
+        scorer = InProcessTeacherScorer(
+            _FieldWritingTeacher(), ["hessian"], probe_seed=3
+        )
+        labels = scorer.label(batch)
+        probe = labels["teacher_hvp_probe"][0]
+        torch.testing.assert_close(
+            labels["teacher_hvp"][0], scorer.label_hvp(batch, probe)
+        )
+        torch.testing.assert_close(
+            labels["teacher_hvp"][0], 2.0 * _WIRED_CHARGE * probe
+        )
+
 
 class TestInProcessTeacherScorerLabeling:
     """Signal shapes, levels, and detachment produced by ``label()``."""
@@ -1004,6 +1118,20 @@ class TestInProcessTeacherScorerLabeling:
         small_batch.positions.requires_grad_(True)
         InProcessTeacherScorer(demo_teacher, ["energy", "forces"]).label(small_batch)
         assert small_batch.positions.requires_grad is True
+
+    def test_a_grad_flag_on_an_undeclared_field_is_cleared(
+        self, direct_force_teacher: _DirectForceTeacher, periodic_batch: Batch
+    ) -> None:
+        """A teacher enabling ``cell`` gradients, as a stress head does, is undone."""
+
+        class _CellGradTeacher(_DirectForceTeacher):
+            def forward(self, data: Batch, **kwargs: Any) -> Any:
+                data.cell.requires_grad_(True)
+                return super().forward(data, **kwargs)
+
+        teacher = _CellGradTeacher(direct_force_teacher.model)
+        InProcessTeacherScorer(teacher, ["energy", "forces"]).label(periodic_batch)
+        assert periodic_batch.cell.requires_grad is False
 
     def test_active_outputs_are_restored_after_label(
         self, lj_teacher: LennardJonesModelWrapper, periodic_batch: Batch
@@ -1757,6 +1885,35 @@ class TestComposedTeacherFieldIsolation:
         assert set(after) == set(before)
         assert all(after[key] is before[key] for key in before)
         assert set(small_batch.__dict__) == shadows
+
+
+class TestHvpFieldIsolation:
+    """A Hessian-vector product, like a label, leaves no teacher write behind."""
+
+    def test_a_written_field_the_batch_lacked_is_gone_afterwards(self) -> None:
+        """The charges the teacher writes leave no trace on the batch."""
+        batch = _make_charge_batch()
+        scorer = InProcessTeacherScorer(_FieldWritingTeacher(), ["hessian"])
+        scorer.label_hvp(batch, torch.ones_like(batch.positions))
+        assert "charges" not in batch.__dict__
+        assert "charges" not in batch
+
+    def test_a_written_field_the_batch_carried_is_restored(self) -> None:
+        """A batch's own charges read back unshadowed, as the same tensor."""
+        batch = _make_charge_batch(charge=1.0)
+        before = batch.charges
+        scorer = InProcessTeacherScorer(_FieldWritingTeacher(), ["hessian"])
+        scorer.label_hvp(batch, torch.ones_like(batch.positions))
+        assert batch.charges is before
+        torch.testing.assert_close(batch.charges, torch.ones(batch.num_nodes))
+
+    def test_the_product_is_the_curvature_the_written_charges_give(self) -> None:
+        """Isolating the fields does not disturb the product the teacher returns."""
+        batch = _make_charge_batch()
+        scorer = InProcessTeacherScorer(_FieldWritingTeacher(), ["hessian"])
+        product = scorer.label_hvp(batch, torch.ones_like(batch.positions))
+        expected = torch.full_like(batch.positions, 2.0 * _WIRED_CHARGE)
+        torch.testing.assert_close(product, expected)
 
 
 class TestInProcessTeacherScorerAutogradNeighborTeacher:

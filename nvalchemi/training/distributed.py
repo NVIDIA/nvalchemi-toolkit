@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import distributed as dist
+from torch.distributed.nn.functional import all_gather as _differentiable_all_gather
 
 from nvalchemi.distributed import collective_device
 
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
     from nvalchemi.distributed import DistributedManager
 
 __all__ = [
+    "all_gather_objects",
+    "all_gather_rows",
     "all_reduce",
     "all_reduce_flags",
     "barrier",
@@ -260,3 +263,122 @@ def all_reduce_flags(
     flags = torch.zeros(world_size, dtype=torch.int64, device=collective_device())
     flags[get_rank(manager)] = int(bool(flag))
     return all_reduce(flags, manager, op=dist.ReduceOp.MAX)
+
+
+def _require_process_group(world_size: int, name: str) -> None:
+    """Raise when *name* would gather *world_size* ranks without a process group."""
+    if not (dist.is_available() and dist.is_initialized()):
+        raise RuntimeError(
+            f"{name} gathers across {world_size!r} ranks, but no process group is "
+            "initialized. Initialize one before the collective, or run on one "
+            "process."
+        )
+
+
+def all_gather_rows(
+    tensor: torch.Tensor,
+    manager: DistributedManager | None = None,
+    *,
+    differentiable: bool = True,
+) -> tuple[torch.Tensor, slice]:
+    """Return every rank's *tensor* stacked along the leading dim, and this rank's rows.
+
+    Shards may differ in their leading size. The sizes are gathered first, on
+    the device :func:`~nvalchemi.distributed.collective_device` picks for the
+    backend, then every shard is padded to the largest, gathered, and trimmed
+    back, so the result holds each rank's rows in rank order and nothing
+    else. With *differentiable*, the gather goes through
+    :func:`torch.distributed.nn.functional.all_gather`, so a gradient reaching
+    the gathered tensor flows back to each rank's own rows, summed over the
+    ranks that used them. A single process gets its tensor back unchanged,
+    with a slice over all of it, without a collective.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        This rank's rows, of shape ``(n, ...)``. The trailing shape and the
+        dtype must agree across ranks.
+    manager : DistributedManager | None, optional
+        Manager whose rank and world size are read when given. Default
+        ``None`` reads ``torch.distributed`` or the launcher's environment.
+    differentiable : bool, optional
+        Whether the gathered tensor carries an autograd graph back to
+        *tensor*. Default ``True``.
+
+    Returns
+    -------
+    tuple[torch.Tensor, slice]
+        The world tensor, of shape ``(sum of every rank's n, ...)``, and the
+        slice of its rows that came from this rank.
+
+    Raises
+    ------
+    RuntimeError
+        If more than one rank is reported but no process group is initialized.
+
+    Examples
+    --------
+    >>> from nvalchemi.training.distributed import all_gather_rows
+    >>> world, rows = all_gather_rows(energies)  # doctest: +SKIP
+    >>> torch.equal(world[rows], energies)  # doctest: +SKIP
+    True
+    """
+    world_size = get_world_size(manager)
+    if world_size == 1:
+        return tensor, slice(0, tensor.shape[0])
+    _require_process_group(world_size, "all_gather_rows")
+    count = torch.tensor(
+        [tensor.shape[0]], dtype=torch.int64, device=collective_device()
+    )
+    counts = [torch.zeros_like(count) for _ in range(world_size)]
+    dist.all_gather(counts, count)
+    sizes = [int(size) for size in counts]
+    padding = [0, 0] * (tensor.ndim - 1) + [0, max(sizes) - tensor.shape[0]]
+    padded = torch.nn.functional.pad(tensor, padding)
+    if differentiable:
+        gathered = _differentiable_all_gather(padded)
+    else:
+        gathered = [torch.zeros_like(padded) for _ in range(world_size)]
+        dist.all_gather(gathered, padded)
+    world = torch.cat(
+        [shard[:size] for shard, size in zip(gathered, sizes, strict=True)]
+    )
+    start = sum(sizes[: get_rank(manager)])
+    return world, slice(start, start + tensor.shape[0])
+
+
+def all_gather_objects(
+    obj: Any, manager: DistributedManager | None = None
+) -> list[Any]:
+    """Return every rank's *obj*, in rank order.
+
+    A single process gets ``[obj]`` without a collective. Under a process
+    group the objects travel through :func:`torch.distributed.all_gather_object`,
+    which pickles them, so the call suits small verdicts and summaries;
+    :func:`all_gather_rows` carries tensors.
+
+    Parameters
+    ----------
+    obj : Any
+        This rank's picklable object.
+    manager : DistributedManager | None, optional
+        Manager whose world size is read when given. Default ``None`` reads
+        ``torch.distributed`` or the launcher's environment.
+
+    Returns
+    -------
+    list[Any]
+        One entry per rank, this rank's at its own index.
+
+    Raises
+    ------
+    RuntimeError
+        If more than one rank is reported but no process group is initialized.
+    """
+    world_size = get_world_size(manager)
+    if world_size == 1:
+        return [obj]
+    _require_process_group(world_size, "all_gather_objects")
+    gathered: list[Any] = [None] * world_size
+    dist.all_gather_object(gathered, obj)
+    return gathered

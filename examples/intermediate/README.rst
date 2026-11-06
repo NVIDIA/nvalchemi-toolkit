@@ -37,3 +37,8 @@ reference energies, and fine-tune ``medium-mpa-0`` with LoRA adapters.
 **09 — Offline Distillation**: Labeling a dataset with a frozen foundation
 teacher, streaming the labeled Zarr store, and distilling energy, force, and
 per-atom energy signals into a student with DistillationStrategy.
+
+**10 — On-Policy Distillation**: Generate-label-train segments driven by the
+student's own Langevin propagator, teacher labeling of visited frames, and a
+replay buffer mixed with a teacher-labeled reference dataset at a fixed replay
+ratio.

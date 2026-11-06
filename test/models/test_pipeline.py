@@ -26,6 +26,7 @@ Tests all composition cases from the proposal:
 from __future__ import annotations
 
 import copy
+import itertools
 from collections import OrderedDict
 from unittest.mock import MagicMock, patch
 
@@ -36,7 +37,8 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.hooks import NeighborListHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks import HookContext, NeighborListHook
 from nvalchemi.models import DerivativeNotSupported
 from nvalchemi.models.base import (
     BaseModelMixin,
@@ -1095,6 +1097,39 @@ class TestPipelineNeighborHookFactory:
         assert len(hooks1[0].hooks) == 2
         assert len(hooks2[0].hooks) == 2
 
+    def test_composite_hook_forwards_admission_to_every_source(self):
+        """After new systems are admitted, no source keeps a too-narrow matrix."""
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[_MatrixModel10(), _MatrixModel4()])],
+        )
+        (hook,) = pipe.make_neighbor_hooks()
+        hook(HookContext(batch=_make_cluster_batch([12, 12])), hook.stage)
+
+        # New systems with the same atom and graph counts.
+        batch = _make_cluster_batch([4, 20])
+        hook(HookContext(batch=batch), DynamicsStage.ON_ADMISSION)
+        hook(HookContext(batch=batch), hook.stage)
+
+        for source in batch.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR]:
+            assert source.num_neighbors.max() <= source.neighbor_matrix.shape[1]
+        assert hook._runs_on_stage(DynamicsStage.ON_ADMISSION)
+        assert hook._runs_on_stage(DynamicsStage.BEFORE_COMPUTE)
+        assert not hook._runs_on_stage(DynamicsStage.AFTER_COMPUTE)
+
+
+def _make_cluster_batch(sizes: list[int]) -> Batch:
+    """One compact cluster per graph; every atom neighbors its whole cluster."""
+    sites = torch.tensor(list(itertools.product(range(3), repeat=3))).float()
+    return Batch.from_data_list(
+        [
+            AtomicData(
+                positions=0.5 * sites[:n],
+                atomic_numbers=torch.ones(n, dtype=torch.long),
+            )
+            for n in sizes
+        ]
+    )
+
 
 class TestPipelineNeighborAdaptation:
     """Verify that sub-models receive correctly adapted neighbor data."""
@@ -1801,9 +1836,11 @@ class TestPipelineCompile:
         out_eager = pipe(batch)
         assert out_eager["forces"] is not None
 
-        torch._dynamo.config.suppress_errors = True
-        compiled_pipe = torch.compile(pipe, fullgraph=False)
-        out_compiled = compiled_pipe(batch)
+        # patch(), not assignment: a bare assignment leaks the setting into
+        # every later test in the session.
+        with torch._dynamo.config.patch(suppress_errors=True):
+            compiled_pipe = torch.compile(pipe, fullgraph=False)
+            out_compiled = compiled_pipe(batch)
 
         torch.testing.assert_close(
             out_compiled["energy"], out_eager["energy"], atol=1e-5, rtol=1e-5
@@ -1834,9 +1871,11 @@ class TestPipelineCompile:
         assert out_eager["energy"] is not None
         assert out_eager["forces"] is not None
 
-        torch._dynamo.config.suppress_errors = True
-        compiled_pipe = torch.compile(pipe, fullgraph=False)
-        out_compiled = compiled_pipe(batch)
+        # patch(), not assignment: a bare assignment leaks the setting into
+        # every later test in the session.
+        with torch._dynamo.config.patch(suppress_errors=True):
+            compiled_pipe = torch.compile(pipe, fullgraph=False)
+            out_compiled = compiled_pipe(batch)
 
         torch.testing.assert_close(
             out_compiled["energy"], out_eager["energy"], atol=1e-4, rtol=1e-4

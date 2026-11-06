@@ -58,6 +58,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.distributed.config import DomainConfig
 
 WORLD_SIZE = 2
+CHECKPOINT = "small"
 WARMUP_STEPS = 8
 STEADY_STEPS = 8
 JITTER = 0.08  # Å per-step RMS displacement (well within cutoff+skin headroom)
@@ -99,7 +100,7 @@ def _recompile_gate_worker(rank: int, world_size: int) -> None:
     # Eager wrapper (compile_model is the single-process model-compile lever);
     # DD-compile is requested on DistributedModel below.
     wrapper = MACEWrapper.from_checkpoint(
-        "small", device=device, dtype=dtype, enable_cueq=True
+        CHECKPOINT, device=device, dtype=dtype, enable_cueq=True
     )
     _cp = wrapper.distribution_spec().compile
     assert _cp is not None and _cp.forces_via_autograd, (
@@ -168,6 +169,10 @@ def test_compile_dd_zero_steady_state_recompiles_2ranks():
     GraphPadder/caps consolidation refactors."""
     pytest.importorskip("mace", reason="mace-torch not installed")
     pytest.importorskip("cuequivariance", reason="cuequivariance not installed")
+    from mace.calculators.foundations_models import download_mace_mp_checkpoint
+
+    # Finish the shared checkpoint download before starting concurrent readers.
+    download_mace_mp_checkpoint(CHECKPOINT)
     mp.spawn(
         _worker,
         args=(WORLD_SIZE, "29572", _recompile_gate_worker),

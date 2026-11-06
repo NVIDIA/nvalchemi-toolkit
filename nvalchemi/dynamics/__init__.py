@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from nvalchemi.dynamics import hooks, integrators, optimizers
 from nvalchemi.dynamics._ops.thermostat_utils import initialize_velocities
+from nvalchemi.dynamics._units import KB_EV
 from nvalchemi.dynamics.base import (
     BaseDynamics,
     ConvergenceHook,
@@ -70,6 +71,7 @@ __all__ = [
     "GPUBuffer",
     "Hook",
     "HostMemory",
+    "KB_EV",
     "LBFGS",
     "LBFGSVariableCell",
     "ResizableSink",

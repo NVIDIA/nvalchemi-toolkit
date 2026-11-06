@@ -51,6 +51,16 @@ admission is an event rather than a recurring step stage, it ignores a hook's
 `frequency`; for a multi-stage hook, the frequency still applies at its other
 stages.
 
+After initial force priming, inflight refill in `BaseDynamics` and `FusedStage`
+lets existing graphs continue updating normally. Newly added graphs skip both
+integrator updates for one iteration while the regular model evaluation computes
+their initial forces.
+This avoids an extra whole-batch model evaluation. Newly added graphs begin
+integrator updates on the following step. In `FusedStage`, their stage step
+counters do not advance during the iteration that computes their initial forces.
+If no graphs remain before a refill, the refilled batch is primed as a fresh
+batch instead.
+
 Each step then proceeds through these stages in order:
 
 1. **BEFORE_STEP** hooks fire.
@@ -128,7 +138,7 @@ from nvalchemi.dynamics import FIRE2, ConvergenceHook
 
 with FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     n_steps=500,
     convergence_hook=ConvergenceHook.from_fmax(0.05),
 ) as opt:
@@ -148,10 +158,10 @@ MD at increasing temperatures, then relax again. The
 with the `+` operator:
 
 ```python
-from nvalchemi.dynamics import FIRE, NVTLangevin, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, NVTLangevin, ConvergenceHook
 
-relax = FIRE(
-    model=model, dt=0.1, n_steps=200, convergence_hook=ConvergenceHook.from_fmax(0.05)
+relax = FIRE2(
+    model=model, dt=0.05, n_steps=200, convergence_hook=ConvergenceHook.from_fmax(0.05)
 )
 md = NVTLangevin(model=model, dt=1.0, temperature=300.0, friction=0.01, n_steps=5000)
 
@@ -226,13 +236,13 @@ dictionary keyed by global rank and handed to
 {py:class}`~nvalchemi.dynamics.base.DistributedPipeline`:
 
 ```python
-from nvalchemi.dynamics import FIRE, NVTLangevin, DistributedPipeline
+from nvalchemi.dynamics import FIRE2, NVTLangevin, DistributedPipeline
 from nvalchemi.dynamics.base import BufferConfig
 
 buffer_cfg = BufferConfig(num_systems=4, num_nodes=50, num_edges=0)
 
 stages = {
-    0: FIRE(model=model, buffer_config=buffer_cfg, ...),        # upstream — relaxation
+    0: FIRE2(model=model, buffer_config=buffer_cfg, ...),        # upstream — relaxation
     1: NVTLangevin(model=model, buffer_config=buffer_cfg, ...),  # downstream — MD
 }
 
@@ -240,6 +250,37 @@ pipeline = DistributedPipeline(stages=stages, backend="nccl")
 with pipeline:
     pipeline.run()
 ```
+
+Dynamics default to `reprime_on_entry=False`: received graphs use the
+upstream stage's forces for their first update when they carry every model output
+the receiving dynamics needs. Graphs missing any of those outputs are primed
+locally, as with `True`: they skip one update while the stage's next model
+evaluation supplies them. This assumes the stages use compatible models and force
+modifications. To refresh forces under the receiving stage's model and hooks
+before updating, opt in explicitly on the receiving stage's dynamics:
+
+```python
+coarse = FIRE2(model=fast_model, buffer_config=buffer_cfg, ...)
+fine = FIRE2(model=accurate_model, buffer_config=buffer_cfg, ..., reprime_on_entry=True)
+pipeline = coarse | fine
+```
+
+With this option, received graphs skip one update while the stage's next regular
+model evaluation gives them forces. Residents keep their forces and keep updating,
+so graphs arriving at different steps add no extra model evaluations. Sending,
+final-stage removal, and sampler refill do not refresh residents' forces.
+
+With either setting, initial sampler batches are primed locally. When received
+graphs need local forces, an empty or unprimed receiving stage primes the whole
+batch instead of skipping their update.
+
+Inside a `FusedStage`, the flag works the same way for sub-stage transitions. Set
+it on a sub-stage's dynamics, and graphs whose status changes into that sub-stage
+skip one update while their forces are refreshed.
+
+A `DomainParallel` stage reads the flag from the dynamics it wraps. It holds one
+system at a time, so a received system that needs local forces is primed as a
+whole before its first update.
 
 By default, `setup()` (called automatically by the context manager) sorts stages by
 rank and wires `prior_rank` / `next_rank` between adjacent stages as a simple linear
@@ -250,10 +291,10 @@ on each stage:
 ```python
 stages = {
     # Sub-pipeline A: rank 0 → rank 1
-    0: FIRE(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=1, ...),
+    0: FIRE2(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=1, ...),
     1: NVTLangevin(model=model, buffer_config=buffer_cfg, prior_rank=0, next_rank=None, ...),
     # Sub-pipeline B: rank 2 → rank 3
-    2: FIRE(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=3, ...),
+    2: FIRE2(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=3, ...),
     3: NVTLangevin(model=model, buffer_config=buffer_cfg, prior_rank=2, next_rank=None, ...),
 }
 ```
@@ -279,7 +320,7 @@ data a single transfer can carry:
 |-------|------------------|
 | `num_systems` | Maximum number of graphs (structures) per transfer. Determines throughput per step --- higher values move more data but consume more GPU memory. |
 | `num_nodes` | Total atom capacity across all graphs in the buffer. Must be large enough for the worst-case combination of systems. For example, transferring up to 4 structures of at most 50 atoms each requires `num_nodes=200`. |
-| `num_edges` | Total edge capacity. Set to **0** when the downstream model recomputes edges via its neighbor list (the common case). Only set a non-zero value if pre-computed edge attributes must be transferred. |
+| `num_edges` | Total edge capacity. Set to **0** when the downstream model recomputes edges via its neighbor list (the common case). Edges are omitted from transport, and arriving graphs have no edges until the neighbor-list hook rebuilds them. Only set a non-zero value if pre-computed edge attributes must be transferred. |
 
 ```python
 from nvalchemi.dynamics.base import BufferConfig
@@ -400,6 +441,54 @@ The {doc}`/examples/distributed/index` gallery contains end-to-end examples,
 including multi-pipeline topologies and monitoring with persistent storage.
 ```
 
+(dynamics-structure-sources)=
+
+## Structure sources
+
+A run that graduates structures needs fresh ones to take their place, and a run
+that starts many trajectories needs them dealt out once.
+{py:class}`~nvalchemi.dynamics.OrderedStructureSampler` is that supply: a
+dataset served in row order from one position, `next_row`. The initial batch,
+and every later *backfill* (the structures drawn to replace the ones that
+finished) read from that position. A structure is therefore propagated once per
+pass over the rows, and a sampler restored from its `state_dict()` (`next_row`,
+`wraps`, `next_system_id`, `rank`, and `world_size`) picks up where it stopped
+rather than at row zero. `shard()` resets the position, so a caller that
+re-shards at start-up, as the distillation segment loop does, begins at the
+first row of the shard unless it restores the state afterwards.
+
+An *unbudgeted* sampler serves every row it owns as one batch, so that batch
+*is* the set of systems the run generates from. A budget --- `max_atoms`,
+`max_batch_size`, or `max_edges` --- packs the initial batch first-fit in row
+order instead. Packing stops at the first structure that does not fit and leaves
+the remainder, in row order, for the backfill. The initial packing and each
+backfill are one {py:meth}`~nvalchemi.dynamics.OrderedStructureSampler.draw`
+call under a {py:class}`~nvalchemi.dynamics.WithinBudget` policy: the initial
+batch with `on_miss="stop"`, and a backfill with `on_miss="skip"`, which passes
+over a row that does not fit rather than stalling on it. When you drive `draw`
+yourself, `fits=` takes any {py:class}`~nvalchemi.dynamics.FitPolicy`, a
+callable over the running atom and edge totals of the batch being drawn.
+`max_edges` counts the edges a store saved, not the neighbor list a propagator's
+hook rebuilds each step, so set it only when the stored count is the one that
+matters.
+
+{py:meth}`~nvalchemi.dynamics.OrderedStructureSampler.shard` narrows the
+sampler to the rows one rank owns, dealt strided and unpadded through
+{py:func}`~nvalchemi.data.datapipes.distributed_shard`: rank `r` takes every
+`world_size`-th row from offset `r`, so the shards are disjoint and cover the
+dataset. `recycle=True` wraps the position to the front of the shard when it
+reaches the end instead of reporting the sampler exhausted; `wraps` counts how
+often that happened, and the `system_id`s keep climbing across a wrap. One
+`draw` reaches every row at most once, so a single call never serves two copies
+of one structure.
+
+Every batch the sampler hands over is stamped with the bookkeeping an in-flight
+run maintains: `status` zeros and consecutive `system_id`s. A store written by an
+earlier run, whose exit statuses a propagator would otherwise read as finished,
+can therefore be propagated again without a manual cleanup pass. Any object
+satisfying the {py:class}`~nvalchemi.dynamics.StructureSource` protocol can
+stand in for the sampler; {doc}`/modules/dynamics/api` lists its members.
+
 ## What's next
 
 ```{toctree}
@@ -410,7 +499,7 @@ dynamics_mep
 dynamics_sinks
 ```
 
-- [Optimization and Integrators](dynamics_simulations) --- FIRE, NVE, NVT, NPT and
+- [Optimization and Integrators](dynamics_simulations) --- FIRE2, NVE, NVT, NPT and
   their configuration.
 - [Reaction Paths and NEB](dynamics_mep_guide) --- batched nudged elastic band,
   using either the high-level `NEB` strategy or hooks attached directly to an

@@ -276,42 +276,60 @@ def _propagator_tree(dynamics: BaseDynamics) -> Iterator[BaseDynamics]:
         pending.extend(stages.values() if isinstance(stages, Mapping) else stages)
 
 
-def _competing_migrators(
-    dynamics: BaseDynamics, criterion: ConvergenceHook
-) -> list[ConvergenceHook]:
-    """Return the status migrators already on *dynamics* that are not *criterion*.
+def _status_migrators(dynamics: BaseDynamics) -> list[ConvergenceHook]:
+    """Return every status migrator on *dynamics* and its sub-stages.
 
     A status migrator is a :class:`~nvalchemi.dynamics.base.ConvergenceHook`
     with both ``source_status`` and ``target_status`` set. Every place a
     propagator can hold one is searched. That covers its registered hooks (on
     a :class:`~nvalchemi.dynamics.FusedStage`, the hooks registered at the
-    fused level) and its ``convergence_hook``, which the lifecycle is about to
-    replace. It also covers the same two places on every sub-stage, where a
-    fused stage puts the migrators it builds itself: one on every sub-stage
-    except the last, and one on the last whenever it declares a
-    ``convergence_hook``.
+    fused level) and its ``convergence_hook``. It also covers the same two
+    places on every sub-stage, where a fused stage puts the migrators it
+    builds itself: one on every sub-stage except the last, and one on the
+    last whenever it declares a ``convergence_hook``.
 
     Parameters
     ----------
     dynamics : BaseDynamics
-        Propagator the lifecycle is being installed on.
-    criterion : ConvergenceHook
-        The lifecycle's own criterion, which is not a competitor.
+        Propagator to walk.
 
     Returns
     -------
     list[ConvergenceHook]
-        The competing criteria, in the order they were found.
+        The migrators, in the order they were found.
     """
     return [
         hook
         for propagator in _propagator_tree(dynamics)
         for hook in (*propagator.hooks, propagator.convergence_hook)
         if isinstance(hook, ConvergenceHook)
-        and hook is not criterion
         and hook.source_status is not None
         and hook.target_status is not None
     ]
+
+
+def _competing_migrators(
+    dynamics: BaseDynamics, criterion: ConvergenceHook
+) -> list[ConvergenceHook]:
+    """Return the status migrators already on *dynamics* that are not *criterion*.
+
+    The lifecycle is about to install *criterion* as the propagator's
+    ``convergence_hook`` and as a registered hook, so *criterion* itself is
+    not a competitor wherever the walk finds it.
+
+    Parameters
+    ----------
+    dynamics : BaseDynamics
+        Propagator the lifecycle is being installed on.
+    criterion : ConvergenceHook
+        The lifecycle's own criterion.
+
+    Returns
+    -------
+    list[ConvergenceHook]
+        The competing criteria, in the order they were found.
+    """
+    return [hook for hook in _status_migrators(dynamics) if hook is not criterion]
 
 
 def _check_sole_migrator(dynamics: BaseDynamics, criterion: ConvergenceHook) -> None:
@@ -415,7 +433,9 @@ class OnPolicySettings(BaseModel):
         Propagator steps between teacher labelings. Each segment's last frame
         is labeled in addition. Default ``100``.
     replay_capacity : int | None, optional
-        Frame capacity of the replay buffer. Default ``None`` (unbounded).
+        Frame capacity of the replay buffer. Default ``None`` (unbounded). A
+        Boltzmann objective needs a bound; see the :class:`OnPolicyConfig`
+        Notes.
     replay_eviction : {"fifo"}, optional
         Eviction policy of the replay buffer, as a name a recipe can store. A
         policy instance is passed to :class:`OnPolicyConfig` instead. Default
@@ -435,12 +455,38 @@ class OnPolicySettings(BaseModel):
         Whether a multi-rank run refuses to start unless the ``SETUP`` stage
         replaced the student with a wrapper that owns it, as a ``DDPHook``
         does. Default ``True``.
+    samples_equilibrium : bool | None, optional
+        Whether the propagator samples an equilibrium ensemble, the ensemble a
+        distribution-matching objective is defined on. Default ``None`` infers
+        the answer from the propagator: a stage whose class declares
+        :attr:`~nvalchemi.dynamics.BaseDynamics.samples_equilibrium` false, as
+        the relaxation optimizers do, or a convergence criterion counts as not
+        sampling one. ``True`` or ``False`` overrides that inference for the
+        objective's guard.
     fmax : float | None, optional
         Max force norm below which a generated trajectory counts as finished.
         Setting it turns on the trajectory lifecycle of a relaxation run, in
         which converged structures leave the batch and fresh initial
         structures replace them. Default ``None`` ends no trajectory, which
         suits a molecular-dynamics run.
+    max_trajectory_steps : int | None, optional
+        Propagator steps a generated trajectory lives for. A trajectory that
+        reaches this age is frozen on that step, stored once, and retired at
+        the segment boundary like a converged one, so a fresh initial
+        structure takes its place. It turns on the trajectory lifecycle on
+        its own, which is how a thermostatted run rotates through its initial
+        structures instead of propagating the first batch forever. A multiple
+        of ``generation_steps`` retires on segment boundaries, so no frozen
+        graph idles inside a segment. Default ``None`` lets a trajectory live
+        for the whole run.
+    quarantine_diverged : bool, optional
+        Sanitize a diverged graph on the step it is flagged: its velocities
+        and forces are zeroed and its positions made finite, so the frozen
+        graph presents a finite geometry to the model on every remaining step
+        of the segment. The propagator still evaluates the whole batch, frozen
+        graphs included, and a non-finite or runaway geometry can break a
+        model's neighbor-list construction. The sanitized frame is never
+        captured. Default ``False`` leaves the flagged state as it is.
     weight_sync_frequency : int, optional
         Segments between weight syncs to the propagator. Default ``1``, the
         only accepted value while the propagator shares the student module.
@@ -650,6 +696,31 @@ class OnPolicySettings(BaseModel):
             ),
         ),
     ] = None
+    max_trajectory_steps: Annotated[
+        int | None,
+        Field(
+            default=None,
+            gt=0,
+            description=(
+                "Propagator steps a generated trajectory lives for before it is "
+                "retired and a fresh initial structure takes its place. Turns on "
+                "the trajectory lifecycle on its own. None lets every "
+                "trajectory live for the whole run."
+            ),
+        ),
+    ] = None
+    quarantine_diverged: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "Zero the velocities and forces of a diverged graph and make its "
+                "positions finite on the step it is flagged, so the frozen graph "
+                "stays a finite input to the model until the segment boundary "
+                "retires it. False leaves the flagged state untouched."
+            ),
+        ),
+    ] = False
     weight_sync_frequency: Annotated[
         int,
         Field(
@@ -673,6 +744,20 @@ class OnPolicySettings(BaseModel):
             ),
         ),
     ] = True
+    samples_equilibrium: Annotated[
+        bool | None,
+        Field(
+            default=None,
+            description=(
+                "Whether the propagator samples an equilibrium ensemble. None "
+                "infers it: a stage declaring samples_equilibrium=False on its "
+                "class, as the relaxation optimizers do, or a convergence "
+                "criterion is treated as not sampling equilibrium. True or "
+                "False overrides that inference for a distribution-matching "
+                "objective's guard."
+            ),
+        ),
+    ] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -735,7 +820,7 @@ class OnPolicyConfig(OnPolicySettings):
     for a pre-flight check or a restart bundle.
 
     The propagator can be any :class:`~nvalchemi.dynamics.base.BaseDynamics`.
-    A relaxation optimizer such as :class:`~nvalchemi.dynamics.optimizers.FIRE`
+    A relaxation optimizer such as :class:`~nvalchemi.dynamics.optimizers.FIRE2`
     drives the loop exactly as a thermostat does. The initial structures must
     carry every field the propagator updates in place through
     ``__provides_keys__``. For every shipped propagator these include
@@ -762,6 +847,13 @@ class OnPolicyConfig(OnPolicySettings):
     ``recycle=True`` wraps to its first row instead of letting the batch
     narrow. Generation ends when the last trajectory finishes, and the
     remaining training steps draw on the frames already in the buffer.
+
+    A thermostatted propagator needs the same lifecycle for a different
+    reason: its trajectories never end, so the initial batch is the only set
+    of structures the run ever propagates. ``max_trajectory_steps`` retires a
+    trajectory after that many propagator steps, stored once like a converged
+    one, and backfills its place from the initial structures, so the run
+    rotates through the whole source. It works alone or beside ``fmax``.
 
     Parameters
     ----------
@@ -808,8 +900,8 @@ class OnPolicyConfig(OnPolicySettings):
     ValueError
         If a setting is out of range, if both ``fmax`` and
         ``convergence_hook`` are set, if ``convergence_hook`` cannot manage
-        the lifecycle, if ``initial_structures`` recycles while no criterion is
-        set, if a criterion is paired with a
+        the lifecycle, if ``initial_structures`` recycles while neither a
+        criterion nor ``max_trajectory_steps`` is set, if a lifecycle is paired with a
         :class:`~nvalchemi.distributed.DomainParallel` propagator or a
         multi-sub-stage :class:`~nvalchemi.dynamics.FusedStage`, if
         ``initial_structures`` is neither a source nor a dataset, if the
@@ -841,7 +933,7 @@ class OnPolicyConfig(OnPolicySettings):
     place:
 
     >>> config = OnPolicyConfig(  # doctest: +SKIP
-    ...     dynamics=FIRE(student, dt=0.1),
+    ...     dynamics=FIRE2(student, dt=0.05),
     ...     teacher_scorer=InProcessTeacherScorer(teacher, ["energy", "forces"]),
     ...     initial_structures=InitialStructures(dataset, recycle=True),
     ...     fmax=0.05,
@@ -923,6 +1015,17 @@ class OnPolicyConfig(OnPolicySettings):
     migrator already on the propagator is refused when the config is built,
     and one registered afterwards is refused when the run starts. See
     :ref:`training-distillation-api` for the capture routes and the backfill.
+
+    Distribution-matching objectives are defined on equilibrium ensembles, and
+    a relaxation path is not one. A
+    :class:`~nvalchemi.training.distillation.BoltzmannMatchingLoss` is
+    therefore refused at construction beside a relaxation propagator or any
+    convergence criterion, unless ``samples_equilibrium=True`` declares that
+    the propagator does sample an equilibrium ensemble. ``False`` refuses the
+    term whatever the propagator is. The term should also have a bounded
+    ``replay_capacity``. Energy, force, and atomic-energy matching are
+    pointwise, so they distill a relaxation path exactly as they distill a
+    trajectory.
     """
 
     dynamics: Annotated[
@@ -1085,6 +1188,22 @@ class OnPolicyConfig(OnPolicySettings):
             )
         return self._convergence_criterion
 
+    @property
+    def manages_lifecycle(self) -> bool:
+        """Whether the segment loop retires and backfills trajectories.
+
+        Returns
+        -------
+        bool
+            ``True`` when a convergence criterion (``fmax`` or
+            ``convergence_hook``) or a ``max_trajectory_steps`` lifetime is
+            set; ``False`` for a run that propagates its initial batch for
+            the whole run.
+        """
+        return self.convergence_criterion is not None or (
+            self.max_trajectory_steps is not None
+        )
+
     @model_validator(mode="before")
     @classmethod
     def _coerce_initial_structures(cls, data: Any) -> Any:
@@ -1157,15 +1276,16 @@ class OnPolicyConfig(OnPolicySettings):
     @model_validator(mode="after")
     def _validate_lifecycle_shape(self) -> OnPolicyConfig:
         """Reject a lifecycle the structures or the propagator cannot carry."""
-        managed = self.fmax is not None or self.convergence_hook is not None
+        managed = self.manages_lifecycle
         if getattr(self.initial_structures, "recycle", False) and not managed:
             raise ValueError(
                 "The initial-structures source sets recycle=True; got "
-                f"fmax={self.fmax!r} and "
-                f"convergence_hook={self.convergence_hook!r}. Recycling wraps "
-                "the backfill to the front of the rows, and only a run managing "
-                "a trajectory lifecycle ever backfills. Pass fmax or a "
-                "convergence_hook, or drop recycle."
+                f"fmax={self.fmax!r}, "
+                f"convergence_hook={self.convergence_hook!r}, and "
+                f"max_trajectory_steps={self.max_trajectory_steps!r}. Recycling "
+                "wraps the backfill to the front of the rows, and only a run "
+                "managing a trajectory lifecycle ever backfills. Pass fmax, a "
+                "convergence_hook, or max_trajectory_steps, or drop recycle."
             )
         if not managed:
             return self
@@ -1174,10 +1294,12 @@ class OnPolicyConfig(OnPolicySettings):
                 "A DomainParallel propagator cannot carry a trajectory lifecycle: "
                 "its step dispatches no ON_GRADUATE stage, so no converged frame "
                 f"would ever be captured; got dynamics={self.dynamics!r} with "
-                f"fmax={self.fmax!r} and convergence_hook={self.convergence_hook!r}. "
-                "Pass the dynamics it wraps, or drop fmax and convergence_hook."
+                f"fmax={self.fmax!r}, convergence_hook={self.convergence_hook!r}, "
+                f"and max_trajectory_steps={self.max_trajectory_steps!r}. Pass "
+                "the dynamics it wraps, or drop the lifecycle settings."
             )
-        _check_sole_migrator(self.dynamics, self.convergence_criterion)
+        if self.convergence_criterion is not None:
+            _check_sole_migrator(self.dynamics, self.convergence_criterion)
         return self
 
     @model_validator(mode="after")

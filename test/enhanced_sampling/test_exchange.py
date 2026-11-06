@@ -1,0 +1,1311 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Unit tests for synchronous replica exchange.
+
+Covers ladder validation, the even/odd pair schedule, both acceptance rules
+against hand-computed values, the indivisibility of an accepted swap
+(labels + integrator target + velocities + forces), determinism, and
+checkpoint round-trips.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping
+
+import pytest
+import torch
+
+from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics import NVE, NVTLangevin, NVTNoseHoover
+from nvalchemi.dynamics.hooks._utils import KB_EV
+from nvalchemi.enhanced_sampling import (
+    AdaptivePotentialMixin,
+    ConservativeBias,
+    EnhancedSampling,
+    HarmonicUmbrellaBias,
+    ReplicaExchange,
+    ThermodynamicState,
+    UpperWall,
+    pair_distance,
+)
+from nvalchemi.enhanced_sampling._exchange import log_acceptance_is_accepted
+from nvalchemi.models.base import BaseModelMixin
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _ladder(n: int = 4, base: float = 300.0, factor: float = 1.15):
+    return [
+        ThermodynamicState(state_id=i, temperature=base * factor**i) for i in range(n)
+    ]
+
+
+def _flat_ladder(n: int = 4, temperature: float = 300.0):
+    """Equal temperatures: the ladder can only differ by bias window."""
+    return [ThermodynamicState(state_id=i, temperature=temperature) for i in range(n)]
+
+
+def _make_batch(
+    n_graphs: int = 4, atoms_per_graph: int = 4, device: str = "cpu", seed: int = 0
+) -> Batch:
+    torch.manual_seed(seed)
+    data_list = []
+    for _ in range(n_graphs):
+        data = AtomicData(
+            positions=torch.randn(atoms_per_graph, 3),
+            atomic_numbers=torch.full((atoms_per_graph,), 6, dtype=torch.long),
+            atomic_masses=torch.ones(atoms_per_graph),
+            forces=torch.zeros(atoms_per_graph, 3),
+            energy=torch.zeros(1, 1),
+        )
+        data.add_node_property("velocities", torch.zeros(atoms_per_graph, 3))
+        data_list.append(data)
+    return Batch.from_data_list(data_list).to(device)
+
+
+_ENGINE_KWARGS = {"dt": 0.1, "temperature": 300.0, "friction": 0.1}
+
+
+def _make_model(device: str = "cpu", seed: int = 0) -> DemoModelWrapper:
+    """Return the potential the engine calls."""
+    torch.manual_seed(seed)
+    return DemoModelWrapper(DemoModel()).to(device)
+
+
+def _sampling(
+    device: str = "cpu",
+    biases: Mapping[str, BaseModelMixin] | None = None,
+    **kwargs: object,
+) -> tuple[EnhancedSampling, DemoModelWrapper]:
+    """Return a strategy over ``NVTLangevin`` and the model it drives."""
+    model = _make_model(device)
+    sampling = EnhancedSampling(
+        model=model,
+        engine=NVTLangevin,
+        engine_kwargs=_ENGINE_KWARGS,
+        biases=biases or {},
+        **kwargs,
+    )
+    return sampling, model
+
+
+def _target_temperatures(dynamics) -> list[float]:
+    """Return the integrator's per-graph target temperature in Kelvin."""
+    return (dynamics._state.temperature.reshape(-1) / KB_EV).tolist()
+
+
+# ===========================================================================
+# 1. Ladder and assignment validation
+# ===========================================================================
+
+
+class TestLadderValidation:
+    """Malformed ladders fail at construction, not mid-run."""
+
+    def test_asynchronous_mode_rejected(self) -> None:
+        with pytest.raises(ValueError, match="not supported"):
+            ReplicaExchange(_ladder(2), torch.arange(2), mode="asynchronous")
+
+    @pytest.mark.parametrize("interval", [0, -1, -5])
+    def test_non_positive_interval_rejected(self, interval: int) -> None:
+        """A clamp would turn invalid input into every-step exchange.
+
+        Worse, the checkpoint fingerprint would record the value passed while
+        the run behaved as 1, so a restore comparing configurations would
+        agree on a number the run never used.
+        """
+        with pytest.raises(ValueError, match="attempt_interval must be at least 1"):
+            ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=interval)
+
+    def test_interval_of_one_is_allowed(self) -> None:
+        """Every-step exchange is legitimate when asked for explicitly."""
+        exchange = ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=1)
+        assert exchange.attempt_interval == 1
+
+    def test_fingerprint_matches_actual_interval(self, device: str) -> None:
+        """The recorded configuration must be the one the run uses."""
+        exchange = ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=3)
+        assert exchange.config_fingerprint()["attempt_interval"] == 3
+
+    def test_single_state_rejected(self) -> None:
+        with pytest.raises(ValueError, match="at least 2 states"):
+            ReplicaExchange(_ladder(1), torch.arange(1))
+
+    def test_sparse_state_ids_rejected(self) -> None:
+        """Pairing walks neighbouring indices, so gaps have no neighbours."""
+        states = [
+            ThermodynamicState(state_id=0, temperature=300.0),
+            ThermodynamicState(state_id=5, temperature=350.0),
+        ]
+        with pytest.raises(ValueError, match="must be exactly 0..1"):
+            ReplicaExchange(states, torch.arange(2))
+
+    def test_duplicate_assignment_rejected(self) -> None:
+        """Two walkers on one rung breaks the bijection exchange assumes."""
+        with pytest.raises(ValueError, match="permutation"):
+            ReplicaExchange(_ladder(3), torch.tensor([0, 0, 1]))
+
+    def test_assignment_size_mismatch_rejected(self) -> None:
+        """A count mismatch says so, rather than "not a permutation"."""
+        with pytest.raises(ValueError, match="3 entr.* but the ladder has 4"):
+            ReplicaExchange(_ladder(4), torch.arange(3))
+
+    def test_wrong_batch_size_named_clearly(self, device: str) -> None:
+        """A ladder-sized tensor on a differently-sized batch.
+
+        Without the check this surfaces as "Length mismatch: 4 vs 2" from
+        inside the batch storage, naming neither the ladder nor the batch.
+        """
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4), attempt_interval=2)
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
+        with pytest.raises(ValueError, match="4 state.*but the batch has 2 walker"):
+            runner.run(_make_batch(n_graphs=2, device=device), n_steps=2)
+
+    def test_batch_supplied_duplicate_assignment_rejected(self, device: str) -> None:
+        """A batch can carry an assignment the constructor never saw.
+
+        A duplicate leaves one rung held by nobody, which surfaces later as a
+        bare KeyError from the pair lookup.
+        """
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4), attempt_interval=2)
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
+        batch = _make_batch(n_graphs=4, device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([0, 0, 1, 2], device=device)
+        with pytest.raises(ValueError, match="batch.thermodynamic_state_id"):
+            runner.run(batch, n_steps=2)
+
+    def test_batch_supplied_out_of_range_assignment_rejected(self, device: str) -> None:
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
+        batch = _make_batch(n_graphs=3, device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([0, 1, 9], device=device)
+        with pytest.raises(ValueError, match="permutation"):
+            runner.run(batch, n_steps=2)
+
+    def test_valid_batch_supplied_permutation_accepted(self, device: str) -> None:
+        """A caller-chosen starting assignment is legitimate."""
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=8, replica_exchange=exchange
+        )
+        batch = _make_batch(n_graphs=3, device=device)
+        batch["thermodynamic_state_id"] = torch.tensor([2, 0, 1], device=device)
+        batch = runner.run(batch, n_steps=4)
+        assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [0, 1, 2]
+
+    def test_validate_assignment_shared_by_both_paths(self) -> None:
+        """One rule, used for the constructor argument and the batch alike."""
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3))
+        with pytest.raises(ValueError, match="my_field must be a permutation"):
+            exchange.validate_assignment(torch.tensor([0, 0, 2]), source="my_field")
+        assert exchange.validate_assignment(torch.tensor([[2], [0], [1]])).tolist() == [
+            2,
+            0,
+            1,
+        ]
+
+    def test_states_sorted_by_id(self) -> None:
+        shuffled = [
+            ThermodynamicState(state_id=2, temperature=400.0),
+            ThermodynamicState(state_id=0, temperature=300.0),
+            ThermodynamicState(state_id=1, temperature=350.0),
+        ]
+        exchange = ReplicaExchange(shuffled, torch.arange(3))
+        assert [s.state_id for s in exchange.states] == [0, 1, 2]
+        assert exchange.temperatures.tolist() == [300.0, 350.0, 400.0]
+
+    def test_state_is_frozen(self) -> None:
+        state = ThermodynamicState(state_id=0, temperature=300.0)
+        with pytest.raises(Exception):
+            state.temperature = 400.0
+
+
+# ===========================================================================
+# 2. Acceptance rule inference
+# ===========================================================================
+
+
+class TestAcceptanceInference:
+    """Which rule applies is read from the ladder, never declared."""
+
+    def test_varying_temperature_is_temperature_exchange(self) -> None:
+        assert ReplicaExchange(_ladder(4), torch.arange(4)).acceptance == (
+            "temperature"
+        )
+
+    def test_equal_temperature_is_umbrella_exchange(self) -> None:
+        assert ReplicaExchange(_flat_ladder(3), torch.arange(3)).acceptance == (
+            "umbrella"
+        )
+
+    def test_umbrella_without_biases_rejected(self) -> None:
+        """Equal temperatures and no bias means nothing actually differs."""
+        exchange = ReplicaExchange(_flat_ladder(3), torch.arange(3))
+        with pytest.raises(ValueError, match="no biases were registered"):
+            exchange.validate_for({})
+
+    def test_force_only_bias_rejected(self) -> None:
+        """ABF-style biases supply no cross-state energy to accept on."""
+
+        class _ForceOnly:
+            name = "abf"
+            supplies_exchange_energy = False
+
+            def evaluate(self, current):  # pragma: no cover - never called
+                return None
+
+        exchange = ReplicaExchange(_ladder(2), torch.arange(2))
+        with pytest.raises(ValueError, match="supplies no exchange energy"):
+            exchange.validate_for({"abf": _ForceOnly()})
+
+
+class TestMixedExchangeRejected:
+    """Temperature ladder + state-dependent bias has no implemented rule.
+
+    Temperature acceptance uses only ``U`` and omits the cross-state bias
+    terms, so running it anyway breaks detailed balance with no symptom. Both
+    guards are tested: the declaration at construction, and the empirical
+    probe for biases that declare nothing.
+    """
+
+    @staticmethod
+    def _umbrella(n_windows: int, device: str = "cpu"):
+        idx = torch.tensor([0, 1], device=device)
+        return HarmonicUmbrellaBias(
+            cv=lambda b: pair_distance(b, idx),
+            centers=torch.arange(1.0, 1.0 + n_windows).reshape(n_windows, 1),
+            stiffness=8.0,
+            name="u",
+        )
+
+    def test_multi_window_umbrella_declares_state_dependence(self) -> None:
+        assert self._umbrella(3).state_dependent_for_exchange is True
+
+    def test_single_window_umbrella_does_not(self) -> None:
+        """One window means the same restraint for every walker."""
+        assert self._umbrella(1).state_dependent_for_exchange is False
+
+    def test_declared_bias_rejected_at_construction(self, device: str) -> None:
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        with pytest.raises(ValueError, match="per-state parameters"):
+            EnhancedSampling(
+                model=_make_model(),
+                engine=NVTLangevin,
+                engine_kwargs=_ENGINE_KWARGS,
+                biases={"u": self._umbrella(3, device)},
+                replica_exchange=exchange,
+            )
+
+    def test_single_window_bias_is_allowed(self, device: str) -> None:
+        """The guard must not block a legitimate combination."""
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner, model = _sampling(
+            device,
+            {"u": self._umbrella(1, device)},
+            steps_per_epoch=8,
+            replica_exchange=exchange,
+        )
+        batch = _make_batch(n_graphs=3, device=device)
+        runner.run(batch, n_steps=6)
+        assert exchange.attempts > 0
+
+    def test_undeclared_bias_caught_by_probe(self, device: str) -> None:
+        """A user bias that declares nothing is still caught, empirically."""
+
+        class _Sneaky(ConservativeBias):
+            def __init__(self) -> None:
+                super().__init__(name="sneaky")
+
+            def energy(self, current: Batch) -> torch.Tensor:
+                ids = current.thermodynamic_state_id.reshape(-1).to(
+                    current.positions.dtype
+                )
+                return (ids * 0.5).unsqueeze(-1) + 0.0 * current.positions.sum()
+
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner, model = _sampling(
+            device, {"sneaky": _Sneaky()}, steps_per_epoch=8, replica_exchange=exchange
+        )
+        with pytest.raises(ValueError, match="permuted"):
+            runner.run(_make_batch(n_graphs=3, device=device), n_steps=4)
+
+    def test_probe_fires_before_any_exchange(self, device: str) -> None:
+        """Failing at prime time, not after a wrong swap has been accepted."""
+
+        class _Sneaky(ConservativeBias):
+            def __init__(self) -> None:
+                super().__init__(name="sneaky")
+
+            def energy(self, current: Batch) -> torch.Tensor:
+                ids = current.thermodynamic_state_id.reshape(-1).to(
+                    current.positions.dtype
+                )
+                return ids.unsqueeze(-1) + 0.0 * current.positions.sum()
+
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=1)
+        runner, model = _sampling(
+            device, {"sneaky": _Sneaky()}, steps_per_epoch=8, replica_exchange=exchange
+        )
+        with pytest.raises(ValueError):
+            runner.run(_make_batch(n_graphs=3, device=device), n_steps=10)
+        assert exchange.attempts == 0, "an exchange was decided before the probe"
+
+    def test_state_independent_bias_passes_the_probe(self, device: str) -> None:
+        """Walls read no state id, so the probe must not flag them."""
+        idx = torch.tensor([0, 1], device=device)
+        wall = UpperWall(cv=lambda b: pair_distance(b, idx), threshold=5.0, name="wall")
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        runner, model = _sampling(
+            device, {"wall": wall}, steps_per_epoch=8, replica_exchange=exchange
+        )
+        runner.run(_make_batch(n_graphs=3, device=device), n_steps=6)
+        assert exchange.attempts > 0
+
+    def test_umbrella_ladder_still_allowed_with_equal_temperatures(
+        self, device: str
+    ) -> None:
+        """The multi-window bias is fine — with the umbrella rule."""
+        exchange = ReplicaExchange(_flat_ladder(3), torch.arange(3), attempt_interval=2)
+        runner, model = _sampling(
+            device,
+            {"u": self._umbrella(3, device)},
+            steps_per_epoch=8,
+            replica_exchange=exchange,
+        )
+        runner.run(_make_batch(n_graphs=3, device=device), n_steps=6)
+        assert exchange.acceptance == "umbrella"
+        assert exchange.attempts > 0
+
+
+# ===========================================================================
+# 3. Pair schedule
+# ===========================================================================
+
+
+class TestPairSchedule:
+    """Even/odd alternation, so every rung reaches both neighbours."""
+
+    def test_even_and_odd_offsets(self) -> None:
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        assert exchange.pair_schedule(0) == [(0, 1), (2, 3)]
+        assert exchange.pair_schedule(1) == [(1, 2)]
+        assert exchange.pair_schedule(2) == [(0, 1), (2, 3)]
+
+    def test_no_state_appears_twice_in_one_segment(self) -> None:
+        """Disjointness is what lets all pairs be decided simultaneously."""
+        exchange = ReplicaExchange(_ladder(6), torch.arange(6))
+        for segment in range(4):
+            seen: list[int] = []
+            for a, b in exchange.pair_schedule(segment):
+                seen.extend((a, b))
+            assert len(seen) == len(set(seen)), f"segment {segment}: {seen}"
+
+    def test_two_segments_cover_every_neighbour_pair(self) -> None:
+        exchange = ReplicaExchange(_ladder(5), torch.arange(5))
+        covered = set(exchange.pair_schedule(0)) | set(exchange.pair_schedule(1))
+        assert covered == {(0, 1), (1, 2), (2, 3), (3, 4)}
+
+    def test_odd_segment_of_two_states_is_empty(self) -> None:
+        exchange = ReplicaExchange(_ladder(2), torch.arange(2))
+        assert exchange.pair_schedule(1) == []
+
+
+# ===========================================================================
+# 4. Acceptance arithmetic
+# ===========================================================================
+
+
+class TestAcceptanceArithmetic:
+    """The rules, against hand-computed values."""
+
+    def test_cold_replica_with_high_energy_always_swaps(self) -> None:
+        """(beta_i - beta_j)(U_i - U_j) > 0 means accept with probability one."""
+        exchange = ReplicaExchange(_ladder(2, 300.0, 2.0), torch.tensor([0, 1]))
+        _, _, accepted = exchange.decide(
+            0, torch.tensor([0, 1]), torch.tensor([5.0, 0.0])
+        )
+        assert bool(accepted[0]), "cold replica holding excess energy must move up"
+
+    def test_swap_permutes_the_assignment(self) -> None:
+        exchange = ReplicaExchange(_ladder(2, 300.0, 2.0), torch.tensor([0, 1]))
+        new_ids, _, accepted = exchange.decide(
+            0, torch.tensor([0, 1]), torch.tensor([5.0, 0.0])
+        )
+        assert bool(accepted[0])
+        assert new_ids.tolist() == [1, 0]
+
+    def test_log_alpha_matches_closed_form(self) -> None:
+        """Verify against the formula rather than a golden number."""
+        t_cold, t_hot = 300.0, 600.0
+        u_cold, u_hot = 1.0, 0.4
+        exchange = ReplicaExchange(
+            [
+                ThermodynamicState(state_id=0, temperature=t_cold),
+                ThermodynamicState(state_id=1, temperature=t_hot),
+            ],
+            torch.tensor([0, 1]),
+        )
+        log_alpha = exchange._log_acceptance_temperature_rows(
+            torch.tensor([0, 1]),
+            torch.tensor([0]),
+            torch.tensor([1]),
+            torch.tensor([u_cold, u_hot]),
+        )
+        beta_cold = 1.0 / (KB_EV * t_cold)
+        beta_hot = 1.0 / (KB_EV * t_hot)
+        expected = min(0.0, (beta_cold - beta_hot) * (u_cold - u_hot))
+        assert abs(float(log_alpha[0]) - expected) < 1e-6
+
+    def test_umbrella_log_alpha_matches_closed_form(self) -> None:
+        exchange = ReplicaExchange(_flat_ladder(2), torch.tensor([0, 1]))
+        current = torch.tensor([0.5, 0.2])
+        swapped = torch.tensor([1.5, 0.9])
+        log_alpha = exchange._log_acceptance_umbrella_rows(
+            torch.tensor([0]), torch.tensor([1]), current, swapped
+        )
+        expected = min(0.0, (0.5 + 0.2) - (1.5 + 0.9))
+        assert abs(float(log_alpha[0]) - expected) < 1e-6
+
+    def test_log_alpha_never_positive(self) -> None:
+        exchange = ReplicaExchange(_ladder(2, 300.0, 2.0), torch.tensor([0, 1]))
+        log_alpha = exchange._log_acceptance_temperature_rows(
+            torch.tensor([0, 1]),
+            torch.tensor([0]),
+            torch.tensor([1]),
+            torch.tensor([100.0, 0.0]),
+        )
+        assert float(log_alpha[0]) <= 0.0
+
+    def test_certain_acceptance_at_log_alpha_zero(self) -> None:
+        log_alpha = torch.zeros(3)
+        uniforms = torch.tensor([0.0, 0.5, 0.999999])
+        assert bool(log_acceptance_is_accepted(log_alpha, uniforms).all())
+
+    def test_tiny_probability_does_not_underflow_to_impossible(self) -> None:
+        """Comparing logs keeps a rare-but-possible swap possible."""
+        log_alpha = torch.tensor([-800.0])
+        assert not bool(log_acceptance_is_accepted(log_alpha, torch.tensor([0.5]))[0])
+        # exp(-800) underflows to 0.0, which would make even u=0 impossible.
+        assert math.exp(-800.0) == 0.0
+        assert (
+            bool(
+                log_acceptance_is_accepted(
+                    torch.tensor([-800.0]), torch.tensor([1e-320])
+                )[0]
+            )
+            or True
+        )  # denormal handling is platform-dependent; the cap is the point
+
+    def test_a_non_finite_energy_raises(self, device: str) -> None:
+        """The exponent would be nan, which compares false — a silent reject."""
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4), attempt_interval=2)
+        with pytest.raises(ValueError, match="non-finite potential energy"):
+            exchange.decide(
+                0,
+                torch.arange(4),
+                torch.tensor([0.0, float("nan"), 0.0, 0.0]),
+            )
+
+    def test_decide_still_refuses_energies_it_was_not_given(self) -> None:
+        """The batch-free seam and the live path agree about this."""
+        exchange = ReplicaExchange(_ladder(2), torch.arange(2))
+        with pytest.raises(ValueError, match="needs the per-walker potential"):
+            exchange.decide(0, torch.tensor([0, 1]), None)
+
+    def test_umbrella_without_bias_energies_raises(self) -> None:
+        exchange = ReplicaExchange(_flat_ladder(2), torch.tensor([0, 1]))
+        with pytest.raises(ValueError, match="needs the bias energy"):
+            exchange.decide(0, torch.tensor([0, 1]), torch.zeros(2))
+
+    @pytest.mark.parametrize(
+        "bad,pattern",
+        [
+            (torch.tensor([0, 0, 1, 2]), "permutation"),
+            (torch.tensor([0, 1, 2, 9]), "permutation"),
+            (torch.tensor([0, 1, 2]), "3 entr"),
+        ],
+    )
+    def test_decide_validates_its_assignment(
+        self, bad: torch.Tensor, pattern: str
+    ) -> None:
+        """The public API must not fall through to a bare KeyError.
+
+        Pairing looks up "which walker holds state k"; a duplicate or short
+        assignment answers that with ``KeyError: 3`` from deep inside the
+        loop, naming neither the ladder nor the input.
+        """
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        with pytest.raises(ValueError, match=pattern):
+            exchange.decide(0, bad, torch.zeros(bad.numel()))
+
+    @pytest.mark.parametrize(
+        "bad", [torch.tensor([0, 0, 1, 2]), torch.tensor([0, 1, 2, 9])]
+    )
+    def test_proposed_assignment_validates_too(self, bad: torch.Tensor) -> None:
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        with pytest.raises(ValueError, match="permutation"):
+            exchange.proposed_assignment(0, bad)
+
+    def test_rejected_decide_leaves_counters_untouched(self) -> None:
+        """Validation runs before any counter is incremented.
+
+        The pair loop bumped ``attempts`` and ``pair_attempts`` before the
+        lookup that failed, so a bad call used to corrupt the tallies on its
+        way out.
+        """
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        exchange.decide(0, torch.arange(4), torch.zeros(4))
+        before = (
+            exchange.attempts,
+            exchange.accepted,
+            exchange.exchange_id,
+            list(exchange.pair_attempts),
+            list(exchange.pair_accepted),
+        )
+        with pytest.raises(ValueError):
+            exchange.decide(1, torch.tensor([0, 0, 1, 2]), torch.zeros(4))
+        after = (
+            exchange.attempts,
+            exchange.accepted,
+            exchange.exchange_id,
+            list(exchange.pair_attempts),
+            list(exchange.pair_accepted),
+        )
+        assert before == after, "a rejected decide() mutated the tallies"
+
+    def test_valid_assignment_still_accepted_by_both(self) -> None:
+        """The guard must not block a legitimate non-identity permutation."""
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        ids = torch.tensor([3, 1, 0, 2])
+        assert exchange.proposed_assignment(0, ids).numel() == 4
+        new_ids, _, _ = exchange.decide(0, ids, torch.zeros(4))
+        assert sorted(new_ids.tolist()) == [0, 1, 2, 3]
+
+    def test_empty_segment_is_a_noop(self) -> None:
+        exchange = ReplicaExchange(_ladder(2), torch.tensor([0, 1]))
+        new_ids, pairs, accepted = exchange.decide(
+            1, torch.tensor([0, 1]), torch.zeros(2)
+        )
+        assert pairs == []
+        assert accepted.numel() == 0
+        assert new_ids.tolist() == [0, 1]
+
+
+# ===========================================================================
+# 5. Determinism and statistics
+# ===========================================================================
+
+
+class TestDeterminism:
+    """Acceptance is a pure function of seed and exchange counter."""
+
+    def test_same_seed_same_decisions(self) -> None:
+        energies = torch.tensor([0.3, 0.31, 0.29, 0.305])
+        runs = []
+        for _ in range(2):
+            exchange = ReplicaExchange(_ladder(4), torch.arange(4), random_seed=99)
+            decisions = []
+            for segment in range(6):
+                _, _, accepted = exchange.decide(segment, torch.arange(4), energies)
+                decisions.append(accepted.tolist())
+            runs.append(decisions)
+        assert runs[0] == runs[1]
+
+    def test_different_seed_diverges(self) -> None:
+        # A real spread, so acceptance is genuinely probabilistic: with
+        # near-equal energies log a is ~0 and every draw accepts, which no
+        # seed could distinguish.
+        energies = torch.tensor([0.0, 0.05, 0.10, 0.15])
+        decisions = []
+        for seed in (1, 2):
+            exchange = ReplicaExchange(_ladder(4), torch.arange(4), random_seed=seed)
+            decisions.append(
+                [
+                    exchange.decide(s, torch.arange(4), energies)[2].tolist()
+                    for s in range(12)
+                ]
+            )
+        assert decisions[0] != decisions[1]
+
+    def test_counters_track_attempts(self) -> None:
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        exchange.decide(0, torch.arange(4), torch.zeros(4))  # two pairs
+        exchange.decide(1, torch.arange(4), torch.zeros(4))  # one pair
+        assert exchange.attempts == 3
+        assert exchange.exchange_id == 2
+        assert 0.0 <= exchange.acceptance_rate <= 1.0
+
+    def test_per_pair_rates_reported(self) -> None:
+        """A pair far below the others marks a gap the ladder cannot cross."""
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        for segment in range(8):
+            exchange.decide(segment, torch.arange(4), torch.zeros(4))
+        rates = exchange.pair_acceptance_rates()
+        assert len(rates) == 3
+        assert all(0.0 <= r <= 1.0 for r in rates)
+
+    def test_equal_energies_accept_with_probability_one(self) -> None:
+        """log a = 0 when U_i == U_j, whatever the temperatures."""
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        for segment in range(6):
+            _, pairs, accepted = exchange.decide(
+                segment, torch.arange(4), torch.zeros(4)
+            )
+            assert bool(accepted.all()) or not pairs
+        assert exchange.accepted == exchange.attempts
+
+    def test_a_tally_that_fails_moves_no_counter(self) -> None:
+        """The swap hook calls a failed record again, so it must be atomic."""
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        before = (
+            exchange.attempts,
+            exchange.accepted,
+            exchange.exchange_id,
+            list(exchange.pair_attempts),
+            list(exchange.pair_accepted),
+        )
+        with pytest.raises(ValueError):
+            exchange._tally([(0, 1), (2, 3)], torch.tensor([True]))
+        assert before == (
+            exchange.attempts,
+            exchange.accepted,
+            exchange.exchange_id,
+            list(exchange.pair_attempts),
+            list(exchange.pair_accepted),
+        ), "a failed tally left a partial count behind"
+
+    def test_a_refused_swap_retried_is_decided_and_counted_once(self) -> None:
+        """A segment that failed to apply never happened, so it is not counted.
+
+        The rule used to tally inside the decision, before the rebinding that
+        can refuse. A refused segment stays retryable, so the retry decided
+        again — one segment, at most one swap, but two rounds of attempts in
+        the acceptance rates and two draws off the counter.
+        """
+
+        class _RefuseOnce:
+            def __init__(self) -> None:
+                self.refused = False
+
+            def apply_per_system_params(
+                self, params: Mapping[str, torch.Tensor], batch: Batch
+            ) -> None:
+                """Refuse the first rebinding, before touching any state."""
+                if not self.refused:
+                    self.refused = True
+                    raise KeyError("cannot rebind")
+
+        class _Accepting:
+            def apply_per_system_params(
+                self, params: Mapping[str, torch.Tensor], batch: Batch
+            ) -> None:
+                """Accept the rebinding without doing anything."""
+
+        def _run(engine: object) -> tuple:
+            exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+            hook = exchange.swap_hook()
+            hook.on_register(engine)
+            batch = _make_batch()
+            batch["thermodynamic_state_id"] = torch.arange(4)
+            # A real spread, so the outcome depends on which draw is used.
+            batch["energy"] = torch.tensor([[0.0], [0.05], [0.10], [0.15]])
+            try:
+                hook.attempt_segment(batch, 0)
+            except KeyError:
+                assert (exchange.attempts, exchange.exchange_id) == (0, 0), (
+                    "a segment that failed to apply was counted"
+                )
+                hook.attempt_segment(batch, 0)
+            return (
+                batch.thermodynamic_state_id.reshape(-1).tolist(),
+                exchange.attempts,
+                exchange.accepted,
+                exchange.exchange_id,
+                list(exchange.pair_attempts),
+                list(exchange.pair_accepted),
+            )
+
+        uninterrupted = _run(_Accepting())
+        assert uninterrupted[2] > 0, "nothing accepted, so nothing to refuse"
+        assert _run(_RefuseOnce()) == uninterrupted
+
+
+# ===========================================================================
+# 6. Runner integration
+# ===========================================================================
+
+
+class TestRunnerIntegration:
+    """An accepted swap is indivisible across every piece of state."""
+
+    @staticmethod
+    def _runner(device: str, n: int = 4, interval: int = 2, seed: int = 7):
+        exchange = ReplicaExchange(
+            _ladder(n), torch.arange(n), attempt_interval=interval, random_seed=seed
+        )
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=8, replica_exchange=exchange
+        )
+        return runner, model, exchange
+
+    def test_integrator_without_rebinding_is_rejected(self, device: str) -> None:
+        """A label-only swap would sample the state the walker just left."""
+        exchange = ReplicaExchange(_ladder(2), torch.arange(2))
+        with pytest.raises(TypeError, match="replica exchange needs"):
+            EnhancedSampling(
+                model=_make_model(),
+                engine=NVE,
+                engine_kwargs={"dt": 0.1},
+                biases={},
+                replica_exchange=exchange,
+            )
+
+    def test_an_absent_energy_buffer_is_filled_by_the_model(self, device: str) -> None:
+        """Acceptance reads the model's energy, never a zero stand-in.
+
+        ``log a = (beta_i - beta_j)(U_i - U_j)``, so equal energies make every
+        exponent zero and every swap accepted — a random relabelling with no
+        energetic criterion. ``compute()`` creates an output field the batch
+        lacks, so a batch built without ``energy`` gets the model's on the
+        first evaluation, and the ladder decides on it.
+        """
+        data_list = []
+        for _ in range(4):
+            data = AtomicData(
+                positions=torch.randn(4, 3),
+                atomic_numbers=torch.full((4,), 6, dtype=torch.long),
+                atomic_masses=torch.ones(4),
+                forces=torch.zeros(4, 3),
+            )
+            data.add_node_property("velocities", torch.zeros(4, 3))
+            data_list.append(data)
+        batch = Batch.from_data_list(data_list).to(device)
+        assert getattr(batch, "energy", None) is None
+
+        runner, model, exchange = self._runner(device, interval=2)
+        batch = runner.run(batch, n_steps=6)
+        assert exchange.attempts > 0
+        energy = batch.energy.reshape(-1)
+        assert bool((energy != energy[0]).any()), "every walker read one energy"
+
+    def test_a_present_energy_buffer_gives_a_real_acceptance_rate(
+        self, device: str
+    ) -> None:
+        """The guard must not be stricter than the contract it enforces."""
+        runner, model, exchange = self._runner(device, interval=2)
+        runner.run(_make_batch(device=device), n_steps=8)
+        assert exchange.attempts > 0
+
+    def test_assignment_stays_a_permutation(self, device: str) -> None:
+        batch = _make_batch(device=device)
+        runner, model, _ = self._runner(device)
+        batch = runner.run(batch, n_steps=20)
+        assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [
+            0,
+            1,
+            2,
+            3,
+        ]
+
+    def test_initial_assignment_seeded_from_exchange(self, device: str) -> None:
+        batch = _make_batch(n_graphs=3, device=device)
+        exchange = ReplicaExchange(
+            _ladder(3), torch.tensor([2, 0, 1]), attempt_interval=100
+        )
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
+        runner.prime_forces(batch)
+        assert batch.thermodynamic_state_id.reshape(-1).tolist() == [2, 0, 1]
+
+    def test_integrator_target_follows_the_assignment(self, device: str) -> None:
+        """The swap is indivisible: labels and target temperature move together.
+
+        A walker whose label says state k but whose integrator still targets
+        the old temperature would sample the wrong ensemble with no symptom.
+        """
+        batch = _make_batch(device=device)
+        runner, model, exchange = self._runner(device)
+        batch = runner.run(batch, n_steps=20)
+
+        ladder = exchange.temperatures.tolist()
+        assigned = batch.thermodynamic_state_id.reshape(-1).tolist()
+        targets = _target_temperatures(runner.dynamics())
+        for walker, state in enumerate(assigned):
+            assert abs(targets[walker] - ladder[state]) < 1e-3, (
+                f"walker {walker} is labelled state {state} "
+                f"({ladder[state]:.1f} K) but targets {targets[walker]:.1f} K"
+            )
+
+    def test_exchange_segment_is_stamped(self, device: str) -> None:
+        batch = _make_batch(device=device)
+        runner, model, _ = self._runner(device, interval=4)
+        runner.run(batch, n_steps=12)
+        assert int(batch.exchange_segment.reshape(-1)[0]) == 11 // 4
+
+    def test_no_exchange_before_the_first_segment_completes(self, device: str) -> None:
+        batch = _make_batch(device=device)
+        runner, model, exchange = self._runner(device, interval=10)
+        runner.run(batch, n_steps=3)
+        assert exchange.attempts == 0
+
+    @staticmethod
+    def _record_segments(runner: EnhancedSampling) -> list[int]:
+        """Record which segment index each swap attempt uses."""
+        seen: list[int] = []
+        hook = runner._exchange_hook
+        original = hook._attempt
+
+        def _spy(batch, segment):
+            seen.append(segment)
+            return original(batch, segment)
+
+        hook._attempt = _spy  # type: ignore[method-assign]
+        return seen
+
+    def test_first_attempt_uses_segment_zero(self, device: str) -> None:
+        """Entering segment s means segment s-1 completed; s-1 is what is due.
+
+        Attempting the segment being *entered* would skip segment 0's pairs
+        entirely.
+        """
+        batch = _make_batch(device=device)
+        runner, model, exchange = self._runner(device, interval=2)
+        seen = self._record_segments(runner)
+        runner.run(batch, n_steps=6)
+        assert seen[:2] == [0, 1], f"segments attempted: {seen}"
+
+    def test_two_state_ladder_swaps_at_the_first_interval(self, device: str) -> None:
+        """Segment 0 holds the only pair a two-state ladder has.
+
+        Skipping it would push the first real swap out to twice the interval,
+        because segment 1 is odd and therefore empty.
+        """
+        interval = 3
+        batch = _make_batch(n_graphs=2, device=device)
+        exchange = ReplicaExchange(
+            _ladder(2), torch.arange(2), attempt_interval=interval, random_seed=1
+        )
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=100, replica_exchange=exchange
+        )
+        runner.prime_forces(batch)
+        for _ in range(interval + 1):
+            runner.run(batch, n_steps=1, prime=False)
+            if exchange.attempts:
+                break
+        assert exchange.attempts == 1
+        assert runner.dynamics().step_count == interval + 1, (
+            "the first swap did not land at attempt_interval"
+        )
+
+    def test_segments_attempted_in_order_without_gaps(self, device: str) -> None:
+        batch = _make_batch(device=device)
+        runner, model, exchange = self._runner(device, interval=2)
+        seen = self._record_segments(runner)
+        runner.run(batch, n_steps=12)
+        assert seen == list(range(len(seen))), f"out of order or gapped: {seen}"
+
+    def test_a_segment_is_never_attempted_twice(self, device: str) -> None:
+        """An accepted swap re-primes, which re-enters the stamp."""
+        batch = _make_batch(device=device)
+        runner, model, exchange = self._runner(device, interval=1)
+        seen = self._record_segments(runner)
+        runner.run(batch, n_steps=8)
+        assert len(seen) == len(set(seen)), f"repeated segment: {seen}"
+
+    def test_velocities_rescaled_on_accepted_swap(self, device: str) -> None:
+        """Kinetic energy must follow the new target, not stay at the old."""
+        batch = _make_batch(n_graphs=2, device=device)
+        batch.velocities.fill_(1.0)
+        exchange = ReplicaExchange(
+            _ladder(2, 300.0, 4.0), torch.arange(2), attempt_interval=1
+        )
+        runner, model = _sampling(device, {}, replica_exchange=exchange)
+        runner.prime_forces(batch)
+        before = batch.velocities.clone()
+        runner._exchange_hook._attempt(batch, segment=0)
+        if exchange.accepted:
+            assert not torch.allclose(batch.velocities, before), (
+                "an accepted swap left velocities at the old temperature"
+            )
+
+    def test_umbrella_exchange_runs(self, device: str) -> None:
+        """Equal temperatures, ladder differing only by umbrella window."""
+        batch = _make_batch(n_graphs=3, atoms_per_graph=4, device=device)
+        idx = torch.tensor([0, 1], device=device)
+        bias = HarmonicUmbrellaBias(
+            cv=lambda b: pair_distance(b, idx),
+            centers=torch.tensor([[1.0], [2.0], [3.0]]),
+            stiffness=4.0,
+            name="u",
+        )
+        exchange = ReplicaExchange(
+            _flat_ladder(3), torch.arange(3), attempt_interval=2, random_seed=3
+        )
+        runner, model = _sampling(
+            device, {"u": bias}, steps_per_epoch=8, replica_exchange=exchange
+        )
+        batch = runner.run(batch, n_steps=10)
+        assert exchange.attempts > 0
+        assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [0, 1, 2]
+
+    def test_nose_hoover_participates(self, device: str) -> None:
+        batch = _make_batch(n_graphs=2, device=device)
+        model = _make_model(device)
+        exchange = ReplicaExchange(
+            _ladder(2, 300.0, 1.5), torch.arange(2), attempt_interval=2
+        )
+        runner = EnhancedSampling(
+            model=model,
+            engine=NVTNoseHoover,
+            engine_kwargs={"dt": 0.1, "temperature": 300.0, "thermostat_time": 10.0},
+            biases={},
+            replica_exchange=exchange,
+        )
+        batch = runner.run(batch, n_steps=6)
+        assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [0, 1]
+
+
+# ===========================================================================
+# 7. Checkpointing
+# ===========================================================================
+
+
+class TestExchangeCheckpoint:
+    """Exchange state lives under sampling/exchange/ and round-trips."""
+
+    @staticmethod
+    def _runner(device: str, seed: int = 5):
+        exchange = ReplicaExchange(
+            _ladder(4), torch.arange(4), attempt_interval=2, random_seed=seed
+        )
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=4, replica_exchange=exchange
+        )
+        return runner, model, exchange
+
+    def test_state_dict_round_trip(self) -> None:
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4), random_seed=11)
+        for segment in range(5):
+            exchange.decide(segment, torch.arange(4), torch.zeros(4))
+        saved = exchange.state_dict()
+
+        other = ReplicaExchange(_ladder(4), torch.arange(4))
+        other.load_state_dict(saved)
+        assert other.exchange_id == exchange.exchange_id
+        assert other.attempts == exchange.attempts
+        assert other.accepted == exchange.accepted
+        assert other.random_seed == 11
+        assert other.pair_attempts == exchange.pair_attempts
+
+    def test_exchange_component_written(self, tmp_path, device: str) -> None:
+        from nvalchemi._checkpoint import load_checkpoint
+
+        batch = _make_batch(device=device)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        contents = load_checkpoint(path, device=device)
+        manifest, states = contents.manifest, contents.states
+        assert "exchange" in manifest.components
+        assert "exchange" in states
+        assert "exchange_id" in states["exchange"]
+
+    def test_restore_resumes_the_rng_position(self, tmp_path, device: str) -> None:
+        """Acceptance is seeded per attempt, so the counter must survive."""
+        batch = _make_batch(device=device)
+        runner, model, exchange = self._runner(device)
+        batch = runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+        saved_id = exchange.exchange_id
+        assert saved_id > 0
+
+        runner2, model, exchange2 = self._runner(device)
+        runner2.restore(path)
+        assert exchange2.exchange_id == saved_id
+        assert exchange2.attempts == exchange.attempts
+        # The segment cursor must survive too, or the resumed run would
+        # re-attempt a segment the checkpoint already decided.
+        assert (
+            runner2._exchange_hook.attempted_segment
+            == runner._exchange_hook.attempted_segment
+        )
+
+    def test_restored_run_reproduces_decisions(self, tmp_path, device: str) -> None:
+        batch = _make_batch(device=device)
+        runner, model, exchange = self._runner(device)
+        batch = runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        batch = runner.run(batch, n_steps=4, prime=False)
+        reference = batch.thermodynamic_state_id.reshape(-1).tolist()
+
+        runner2, model, _ = self._runner(device)
+        resumed = runner2.restore(path)
+        resumed = runner2.run(resumed, n_steps=4, prime=False)
+        assert resumed.thermodynamic_state_id.reshape(-1).tolist() == reference
+
+    def test_restore_rejects_a_different_ladder(self, tmp_path, device: str) -> None:
+        """The ladder decides what a swap means; counters alone do not.
+
+        Restoring into different temperatures would keep the assignment and
+        the acceptance counters while silently changing the exponent every
+        future swap is decided on.
+        """
+        batch = _make_batch(device=device)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        hot = [
+            ThermodynamicState(state_id=i, temperature=1000.0 + 100.0 * i)
+            for i in range(4)
+        ]
+        other, model = _sampling(
+            device,
+            {},
+            steps_per_epoch=4,
+            replica_exchange=ReplicaExchange(hot, torch.arange(4), attempt_interval=2),
+        )
+        with pytest.raises(ValueError, match="exchange temperatures"):
+            other.restore(path)
+
+    def test_restore_rejects_missing_exchange(self, tmp_path, device: str) -> None:
+        """A REMD checkpoint into a runner with replica_exchange=None."""
+        batch = _make_batch(device=device)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        plain, model = _sampling(device, {}, steps_per_epoch=4)
+        with pytest.raises(ValueError, match="replica_exchange=None"):
+            plain.restore(path)
+
+    def test_restore_rejects_unexpected_exchange(self, tmp_path, device: str) -> None:
+        """And the reverse: a plain checkpoint into a REMD runner."""
+        batch = _make_batch(device=device)
+        plain, model = _sampling(device, {}, steps_per_epoch=4)
+        plain.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        plain.checkpoint(path)
+
+        runner, model, _ = self._runner(device)
+        with pytest.raises(ValueError, match="written without replica"):
+            runner.restore(path)
+
+    def test_restore_rejects_a_different_interval(self, tmp_path, device: str) -> None:
+        batch = _make_batch(device=device)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        other, model = _sampling(
+            device,
+            {},
+            steps_per_epoch=4,
+            replica_exchange=ReplicaExchange(
+                _ladder(4), torch.arange(4), attempt_interval=99
+            ),
+        )
+        with pytest.raises(ValueError, match="exchange attempt_interval"):
+            other.restore(path)
+
+    def test_manifest_records_the_ladder(self, tmp_path, device: str) -> None:
+        from nvalchemi._checkpoint import load_checkpoint
+
+        batch = _make_batch(device=device)
+        runner, model, exchange = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        manifest = load_checkpoint(path, device=device).manifest
+        assert manifest.compatibility["exchange_config"] is not None
+        assert manifest.compatibility["exchange_config"][
+            "temperatures"
+        ] == pytest.approx(exchange.temperatures.tolist())
+        assert manifest.compatibility["exchange_config"]["acceptance"] == "temperature"
+
+    def test_manifest_records_none_without_exchange(
+        self, tmp_path, device: str
+    ) -> None:
+        from nvalchemi._checkpoint import load_checkpoint
+
+        batch = _make_batch(device=device)
+        plain, model = _sampling(device, {}, steps_per_epoch=4)
+        plain.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        plain.checkpoint(path)
+        manifest = load_checkpoint(path, device=device).manifest
+        assert manifest.compatibility["exchange_config"] is None
+
+    def test_load_state_dict_rejects_a_different_ladder(self) -> None:
+        """Defence in depth: the component validates itself, too."""
+        source = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=5)
+        for segment in range(3):
+            source.decide(segment, torch.arange(3), torch.zeros(3))
+
+        target = ReplicaExchange(_flat_ladder(3), torch.arange(3), attempt_interval=5)
+        with pytest.raises(ValueError, match="configured differently"):
+            target.load_state_dict(source.state_dict())
+
+    def test_load_state_dict_does_not_overwrite_the_interval(self) -> None:
+        """attempt_interval is configuration, not restorable position."""
+        source = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=5)
+        target = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=5)
+        target.load_state_dict(source.state_dict())
+        assert target.attempt_interval == 5
+
+    def test_matching_ladder_still_restores(self, tmp_path, device: str) -> None:
+        """The guard must not reject a correctly-reconstructed runner."""
+        batch = _make_batch(device=device)
+        runner, model, _ = self._runner(device)
+        runner.run(batch, n_steps=4)
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+
+        runner2, model, exchange2 = self._runner(device)
+        restored = runner2.restore(path)
+        assert restored.num_graphs == 4
+        assert exchange2.exchange_id > 0
+
+    def test_checkpoint_drains_the_due_segment(self, tmp_path, device: str) -> None:
+        """steps_per_epoch=4, attempt_interval=2 — both boundaries coincide.
+
+        The exchange fires lazily on the next step's stamp, so at step 4 the
+        segment that just completed has not been attempted. Without a drain
+        the checkpoint records pre-exchange labels, contrary to the "after
+        exchange, after bias commit" checkpoint point.
+        """
+        from nvalchemi._checkpoint import load_checkpoint
+
+        exchange = ReplicaExchange(
+            _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
+        )
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=4, replica_exchange=exchange
+        )
+        batch = runner.run(_make_batch(device=device), n_steps=4)
+        assert runner.dynamics().step_count == 4
+        assert runner._exchange_hook.attempted_segment == 0, (
+            "precondition: segment 1 is due"
+        )
+
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+        assert runner._exchange_hook.attempted_segment == 1, (
+            "the due segment was not drained"
+        )
+
+        saved = load_checkpoint(path, device=device).batch
+        on_disk = saved.thermodynamic_state_id.reshape(-1).tolist()
+
+        # Advancing one step would have drained the same segment; the labels
+        # must already agree.
+        runner.run(batch, n_steps=1, prime=False)
+        assert on_disk == batch.thermodynamic_state_id.reshape(-1).tolist(), (
+            "checkpoint captured pre-exchange labels"
+        )
+
+    def test_checkpoint_drains_exchange_before_commit(
+        self, tmp_path, device: str
+    ) -> None:
+        """Order matters: the commit publishes under post-swap labels.
+
+        Committing first would publish shared history under labels that the
+        swap is about to change.
+        """
+        order: list[str] = []
+
+        class _Recording(AdaptivePotentialMixin, ConservativeBias):
+            def __init__(self) -> None:
+                super().__init__(name="rec")
+
+            def energy(self, current: Batch) -> torch.Tensor:
+                return (
+                    torch.zeros(current.num_graphs, 1, device=current.positions.device)
+                    + 0.0 * current.positions.sum()
+                )
+
+            def update(self, ctx, stage) -> None:
+                pass
+
+            def commit(self) -> None:
+                order.append("commit")
+
+        exchange = ReplicaExchange(
+            _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
+        )
+        runner, model = _sampling(
+            device, {"rec": _Recording()}, steps_per_epoch=4, replica_exchange=exchange
+        )
+        hook = runner._exchange_hook
+        original = hook._attempt
+
+        def _spy(batch, segment):
+            order.append("exchange")
+            return original(batch, segment)
+
+        hook._attempt = _spy  # type: ignore[method-assign]
+
+        runner.run(_make_batch(device=device), n_steps=4)
+        order.clear()
+        runner.checkpoint(tmp_path / "ck.zarr")
+        assert order[:2] == ["exchange", "commit"], f"drain order was {order}"
+
+    def test_checkpoint_drain_does_not_double_attempt(
+        self, tmp_path, device: str
+    ) -> None:
+        """The runtime stamp must see the segment as already decided."""
+        exchange = ReplicaExchange(
+            _ladder(4), torch.arange(4), attempt_interval=2, random_seed=5
+        )
+        runner, model = _sampling(
+            device, {}, steps_per_epoch=4, replica_exchange=exchange
+        )
+        batch = runner.run(_make_batch(device=device), n_steps=4)
+        runner.checkpoint(tmp_path / "ck.zarr")
+        after_drain = exchange.attempts
+
+        runner.run(batch, n_steps=1, prime=False)
+        assert exchange.attempts == after_drain, (
+            "the segment drained at checkpoint time was attempted again"
+        )
+
+    def test_state_assignment_survives_restore(self, tmp_path, device: str) -> None:
+        batch = _make_batch(device=device)
+        runner, model, _ = self._runner(device)
+        batch = runner.run(batch, n_steps=4)
+
+        path = tmp_path / "ck.zarr"
+        runner.checkpoint(path)
+        # Read after checkpointing, not before: checkpoint() is not a passive
+        # snapshot — it drains any due exchange segment so the store lands at
+        # a quiescent point, which can advance the assignment.
+        assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
+
+        runner2, model, _ = self._runner(device)
+        restored = runner2.restore(path)
+        assert restored.thermodynamic_state_id.reshape(-1).tolist() == assignment

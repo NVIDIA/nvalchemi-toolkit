@@ -228,8 +228,8 @@ def _partitioned_run_worker(
     # This test targets DD control flow, not NeighborListHook compilation.
     # Running its eager body also avoids concurrent Inductor cache writes from
     # the two spawned CPU workers while preserving the real neighbor-list work.
-    eager_neighbor_call = NeighborListHook.__call__.__wrapped__
-    with patch.object(NeighborListHook, "__call__", eager_neighbor_call), dp:
+    eager_neighbor_build = NeighborListHook._build.__wrapped__
+    with patch.object(NeighborListHook, "_build", eager_neighbor_build), dp:
         local = dp.partition(_partitioned_convergence_batch() if rank == 0 else None)
         owned = local.atomic_numbers.tolist()
 

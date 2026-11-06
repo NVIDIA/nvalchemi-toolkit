@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from functools import partial
 from types import TracebackType
@@ -163,9 +163,13 @@ class _DerivativeRequest:
 
 @dataclass(slots=True)
 class _DerivativeGraph:
-    """Graph-connected state yielded while derivative preparation is active."""
+    """Graph-connected state yielded while derivative preparation is active.
 
-    data: Batch
+    ``data`` is the private working batch when the graph came from a model
+    forward and ``None`` when the caller supplied the energy.
+    """
+
+    data: Batch | None
     positions: Tensor
     energy: Tensor
 
@@ -242,8 +246,16 @@ def _gradient_vector_product(
     grad_outputs: Tensor,
     *,
     is_grads_batched: bool,
+    create_graph: bool = False,
 ) -> Tensor:
-    """Differentiate a gradient view against positions for one or many seeds."""
+    """Differentiate a gradient view against positions for one or many seeds.
+
+    The product is detached unless ``create_graph`` is set, in which case the
+    single-seed path keeps it attached to the energy graph. The batched path
+    only produces detached products, so requesting a graph there is refused.
+    """
+    if is_grads_batched and create_graph:
+        raise ValueError("create_graph is not supported with is_grads_batched=True")
     with torch.inference_mode(False), torch.enable_grad():
         if positions.numel() == 0:
             shape = (
@@ -276,11 +288,11 @@ def _gradient_vector_product(
             outputs,
             positions,
             grad_outputs=grad_outputs.detach(),
-            create_graph=False,
+            create_graph=create_graph,
             retain_graph=True,
             allow_unused=False,
         )[0]
-        return product.detach()
+        return product if create_graph else product.detach()
 
 
 @dataclass(frozen=True, slots=True)
@@ -493,11 +505,13 @@ class HessianOperator:
     """Matrix-free Hessian for repeated products at one geometry.
 
     Obtain an operator through
-    :meth:`~nvalchemi.models.base.BaseModelMixin.prepare_hessian`. Its
-    :meth:`matvec` method computes ``(d^2 E / dR^2) @ v`` using an independent
-    batch snapshot and a retained autograd graph. Keep model parameters,
-    buffers, execution mode, and pipeline wiring unchanged while the operator
-    is active. Call :meth:`close` or use a context manager to release the graph.
+    :meth:`~nvalchemi.models.base.BaseModelMixin.prepare_hessian`, which runs
+    its own energy-only forward on an independent batch snapshot, or through
+    :meth:`from_energy`, which differentiates an energy the caller already
+    computed. Its :meth:`matvec` method computes ``(d^2 E / dR^2) @ v`` from a
+    retained autograd graph. Keep model parameters, buffers, execution mode,
+    and pipeline wiring unchanged while the operator is active. Call
+    :meth:`close` or use a context manager to release the graph.
     """
 
     def __init__(
@@ -529,7 +543,84 @@ class HessianOperator:
         self._gradient = gradient
         self._closed = False
 
-    def matvec(self, vector: Tensor) -> Tensor:
+    @classmethod
+    def from_energy(cls, energy: Tensor, positions: Tensor) -> HessianOperator:
+        """Build an operator from an energy the caller already computed.
+
+        The energy must carry an autograd graph back to ``positions``, as the
+        output of a forward pass run with ``positions.requires_grad`` enabled
+        does. Nothing is re-evaluated: the operator retains the caller's graph,
+        so products taken with ``create_graph=True`` stay attached to whatever
+        produced the energy, including the model parameters and any DDP
+        wrapper whose forward computed it.
+
+        Parameters
+        ----------
+        energy : torch.Tensor
+            Floating tensor whose sum is differentiated, typically of shape
+            ``(num_graphs, 1)``.
+        positions : torch.Tensor
+            Floating tensor with ``requires_grad`` enabled that the energy was
+            computed from, on the same device as ``energy``.
+
+        Returns
+        -------
+        HessianOperator
+            Active operator over the supplied graph.
+
+        Raises
+        ------
+        TypeError
+            If either argument is not a floating-point tensor.
+        ValueError
+            If ``positions`` does not require gradients or the tensors are on
+            different devices.
+        RuntimeError
+            If ``energy`` carries no autograd graph, or its first position
+            derivative is not connected to ``positions``.
+
+        Examples
+        --------
+        >>> import torch
+        >>> from nvalchemi.models import HessianOperator
+        >>> batch.positions.requires_grad_(True)  # doctest: +SKIP
+        >>> energy = model(batch)["energy"]  # doctest: +SKIP
+        >>> with HessianOperator.from_energy(energy, batch.positions) as op:  # doctest: +SKIP
+        ...     product = op.matvec(torch.randn_like(batch.positions))
+
+        Notes
+        -----
+        No wrapper capability check runs on this path, because no wrapper is
+        involved: the caller vouches that the graph behind ``energy`` is twice
+        differentiable. An energy whose first derivative does not depend on
+        the positions, such as one linear in them, is refused rather than
+        given a zero Hessian, as :meth:`BaseModelMixin.prepare_hessian
+        <nvalchemi.models.base.BaseModelMixin.prepare_hessian>` does.
+        """
+        for name, value in (("energy", energy), ("positions", positions)):
+            if not isinstance(value, Tensor):
+                raise TypeError(
+                    f"{name} must be a torch.Tensor, got {type(value).__name__}"
+                )
+            if not value.is_floating_point():
+                raise TypeError(
+                    f"{name} must have a floating-point dtype, got {value.dtype}"
+                )
+        if not positions.requires_grad:
+            raise ValueError("positions must have requires_grad enabled")
+        if energy.device != positions.device:
+            raise ValueError(
+                "energy must be on the positions device "
+                f"{positions.device}, got {energy.device}"
+            )
+        if not energy.requires_grad or energy.grad_fn is None:
+            raise RuntimeError(
+                "Derivative energy must retain a graph connected to the position leaf"
+            )
+        graph = _DerivativeGraph(data=None, positions=positions, energy=energy)
+        return cls(nullcontext(graph))
+
+    def matvec(self, vector: Tensor, *, create_graph: bool = False) -> Tensor:
         """Multiply the retained Hessian by one position-space vector.
 
         Parameters
@@ -537,11 +628,15 @@ class HessianOperator:
         vector : torch.Tensor
             Floating tensor matching the prepared positions in shape, dtype,
             and device.
+        create_graph : bool, optional
+            Keep the product attached to the energy graph, and through it to
+            the model parameters, so a loss can backpropagate through the
+            product. Default ``False`` returns a detached product.
 
         Returns
         -------
         torch.Tensor
-            Detached Hessian-vector product aligned with the prepared positions.
+            Hessian-vector product aligned with the prepared positions.
 
         Raises
         ------
@@ -564,6 +659,7 @@ class HessianOperator:
             graph.positions,
             validated,
             is_grads_batched=False,
+            create_graph=create_graph,
         )
 
     def close(self) -> None:

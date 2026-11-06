@@ -58,6 +58,7 @@ from test.training.distillation.conftest import (
     _build_direct_force_teacher,
     _build_lj_teacher,
     _DirectForceTeacher,
+    _RecordingLossHook,
 )
 
 _TEACHER_FIELDS = ("teacher_energy", "teacher_forces", "teacher_atomic_energies")
@@ -233,21 +234,6 @@ _VALIDATION_AWARE_STRATEGY_PATH = (
     f"{_ValidationAwareStrategy.__module__}.{_ValidationAwareStrategy.__qualname__}"
 )
 """Dotted path of the validation-config-aware subclass above."""
-
-
-class _RecordingLossHook:
-    """Record the total loss of every completed training batch."""
-
-    frequency = 1
-    stage = TrainingStage.AFTER_BATCH
-
-    def __init__(self) -> None:
-        """Start with an empty loss trace."""
-        self.losses: list[float] = []
-
-    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:  # noqa: ARG002
-        """Append the loss the strategy just backpropagated."""
-        self.losses.append(float(ctx.loss))
 
 
 class _RecordingLabelHook:

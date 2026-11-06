@@ -33,6 +33,7 @@ from nvalchemi.training._validation import (
     BatchValidationCallback,
     ValidationConfig,
     ValidationLoop,
+    ensure_reiterable_validation_data,
 )
 from nvalchemi.training.finetune import FineTuningStrategy
 from nvalchemi.training.hooks import (
@@ -121,6 +122,7 @@ __all__ = [
     "create_model_spec",
     "create_model_spec_from_json",
     "default_training_fn",
+    "ensure_reiterable_validation_data",
     "eval_configured_models",
     "evaluating",
     "freeze_unconfigured_models",

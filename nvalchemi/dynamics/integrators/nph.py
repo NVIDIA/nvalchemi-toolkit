@@ -37,7 +37,11 @@ from typing import TYPE_CHECKING, Any, Literal
 import torch
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
+from nvalchemi.dynamics._ops._bridge import (
+    _arrival_atom_counts,
+    _make_state_batch,
+    _to_per_system,
+)
 from nvalchemi.dynamics._ops.npt_nph import (
     compute_barostat_mass,
     compute_pressure_tensor,
@@ -47,9 +51,8 @@ from nvalchemi.dynamics._ops.npt_nph import (
     npt_position_update,
 )
 from nvalchemi.dynamics._ops.thermostat_utils import compute_kinetic_energy
-from nvalchemi.dynamics._units import fs_to_internal_time
+from nvalchemi.dynamics._units import KB_EV, fs_to_internal_time
 from nvalchemi.dynamics.base import BaseDynamics
-from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook
@@ -168,11 +171,9 @@ class NPH(BaseDynamics):
         dtype = template_batch.positions.dtype
         barostat_time = _to_per_system(self._barostat_time_init, n, dev, dtype)
         kT_est = torch.full((n,), 300.0 * KB_EV, dtype=dtype, device=dev)
-        # Approximate atom count from template.
-        approx_n_atoms = template_batch.num_nodes // template_batch.num_graphs
-        num_atoms_per_system = torch.full(
-            (n,), approx_n_atoms, dtype=torch.int32, device=dev
-        )
+        # Size W from the arrivals' own atom counts, as _init_state does.
+        counts = _arrival_atom_counts(template_batch, n)
+        num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         W = torch.zeros(n, dtype=dtype, device=dev)
         compute_barostat_mass(kT_est, barostat_time, num_atoms_per_system, W)
         W = W / 3

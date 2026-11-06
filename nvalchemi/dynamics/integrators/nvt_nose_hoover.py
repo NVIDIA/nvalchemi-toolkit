@@ -38,21 +38,25 @@ Martyna, Tobias, Klein (1994); Tuckerman et al. (2006).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
+from nvalchemi.dynamics._ops._bridge import (
+    _arrival_atom_counts,
+    _make_state_batch,
+    _to_per_system,
+)
 from nvalchemi.dynamics._ops.nose_hoover import (
     nhc_chain_update,
     nhc_compute_masses,
     nhc_position_update,
     nhc_velocity_half_step,
 )
-from nvalchemi.dynamics._units import fs_to_internal_time
+from nvalchemi.dynamics._units import KB_EV, fs_to_internal_time
 from nvalchemi.dynamics.base import BaseDynamics
-from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook
@@ -173,26 +177,72 @@ class NVTNoseHoover(BaseDynamics):
             dev,
         )
 
+    def apply_per_system_params(
+        self, params: Mapping[str, torch.Tensor], batch: Batch
+    ) -> None:
+        """Rebind target temperature, chain masses, and velocities together.
+
+        Unlike Langevin, a Nosé-Hoover chain carries memory: the chain masses
+        ``Q`` are proportional to ``kT tau^2`` and the chain velocities
+        ``eta_dot`` are conjugate to them.  Rebinding the target without
+        transforming both leaves the thermostat driving toward the old
+        temperature and breaks detailed balance, so all four move together:
+
+        * ``temperature`` takes the new ``kT``.
+        * ``Q`` scales by ``kT_new / kT_old``, preserving ``Q ∝ kT tau^2``.
+        * ``eta_dot`` scales by ``sqrt(kT_old / kT_new)``, which keeps the
+          chain kinetic energy ``Q eta_dot^2 / 2`` invariant under the mass
+          change rather than injecting or removing thermostat energy.
+        * atomic velocities scale by ``sqrt(kT_new / kT_old)``.
+
+        ``eta`` itself is a position-like variable and is left untouched.
+
+        Parameters
+        ----------
+        params : Mapping[str, torch.Tensor]
+            Must contain ``"temperature"`` in Kelvin per graph, shape ``[B]``.
+        batch : Batch
+            The live batch; ``velocities`` is modified in place.
+
+        Raises
+        ------
+        RuntimeError
+            If called before the integrator state exists.
+        KeyError
+            If *params* names something this integrator cannot rebind.
+        """
+        state = getattr(self, "_state", None)
+        if state is None:
+            raise RuntimeError(
+                "NVTNoseHoover.apply_per_system_params: integrator state is "
+                "not initialised; run or prime the dynamics first."
+            )
+        temperature = self._validated_temperature(params, state.temperature)
+
+        old_kT = state.temperature.reshape(-1).clone()
+        new_kT = temperature * KB_EV
+        ratio = new_kT / old_kT
+        with torch.no_grad():
+            state.temperature.copy_(new_kT.reshape(state.temperature.shape))
+            state.nhc_Q.mul_(ratio.reshape(-1, 1))
+            state.nhc_eta_dot.mul_(torch.rsqrt(ratio).reshape(-1, 1))
+        self._rescale_velocities(torch.sqrt(ratio), batch)
+
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
         dev = template_batch.device
         dtype = template_batch.positions.dtype
         kT = _to_per_system(self._temperature_init * KB_EV, n, dev, dtype)
         tau = _to_per_system(self._thermostat_time_init, n, dev, dtype)
-        # Approximate Q with a reasonable default using a dummy batch.
-        dummy_masses = (
-            template_batch.atomic_masses[:n].contiguous()
-            if template_batch.atomic_masses.shape[0] >= n
-            else template_batch.atomic_masses
+        # Size each arrival's chain from its own atoms, as _init_state does;
+        # the arrivals are the last n graphs of the template.
+        counts = _arrival_atom_counts(template_batch, n)
+        batch_idx = torch.repeat_interleave(
+            torch.arange(n, dtype=torch.int32, device=dev), counts
         )
-        dummy_batch_idx = torch.zeros(
-            dummy_masses.shape[0], dtype=torch.int32, device=dev
-        )
-        Q = nhc_compute_masses(
-            kT[:1], tau[:1], dummy_masses, dummy_batch_idx, self.chain_length
-        )
-        Q = Q.expand(n, -1).contiguous()
-        approx_n_atoms = template_batch.num_nodes // template_batch.num_graphs
-        nhc_ndof = torch.full((n,), approx_n_atoms * 3, dtype=dtype, device=dev)
+        first_atom = template_batch.num_nodes - batch_idx.numel()
+        masses = template_batch.atomic_masses[first_atom:]
+        Q = nhc_compute_masses(kT, tau, masses, batch_idx, self.chain_length)
+        nhc_ndof = (counts * 3).to(dtype=dtype, device=dev)
         return _make_state_batch(
             {
                 "dt": _to_per_system(self._dt_init, n, dev, dtype),

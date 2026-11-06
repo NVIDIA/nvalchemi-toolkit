@@ -19,6 +19,7 @@ Covers all improvements made to NeighborListHook:
 * Staging-buffer pre-allocation and copy semantics
 * Algorithm-specific kwarg pre-allocation (``_alloc_nl_kwargs``)
 * Shape-change invalidation
+* Cache reset at ``ON_ADMISSION`` when new systems keep the batch shape
 * Verlet skin-check integration
 * Correct MATRIX and COO output written to the batch
 * ``@torch.compiler.disable`` isolation of allocation code
@@ -26,15 +27,24 @@ Covers all improvements made to NeighborListHook:
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics import FIRE2, FusedStage, SizeAwareSampler
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+from nvalchemi.models.lj import LennardJonesModelWrapper
+from nvalchemi.training import EnergyMSELoss, TrainingStage
+from nvalchemi.training.optimizers import OptimizerConfig
+from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,6 +52,7 @@ from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 
 _CUTOFF = 2.5
 _STAGE = DynamicsStage.BEFORE_COMPUTE
+_GRID_SITES = torch.tensor(list(itertools.product(range(3), repeat=3))).float()
 
 
 def _ctx(batch: Batch) -> HookContext:
@@ -52,11 +63,13 @@ def _cfg(
     fmt: NeighborListFormat = NeighborListFormat.MATRIX,
     cutoff: float = _CUTOFF,
     half_list: bool = False,
+    skin: float = 0.0,
 ) -> NeighborConfig:
     return NeighborConfig(
         cutoff=cutoff,
         format=fmt,
         half_list=half_list,
+        skin=skin,
     )
 
 
@@ -112,6 +125,110 @@ def _is_neighbor(
     """Return True if atom j appears in atom i's neighbor list."""
     n = int(num_neighbors[i].item())
     return j in neighbor_matrix[i, :n].tolist()
+
+
+def _sorted_pairs(batch: Batch) -> torch.Tensor:
+    """Return each atom's ``(neighbor, shift)`` pairs as sorted integer keys.
+
+    Padding slots get the largest key, so rows compare equal regardless of
+    the order the neighbors were written in.
+    """
+    neighbors = batch.neighbor_matrix.long()
+    # Image indices are small, so each fits in 4 bits after the offset.
+    sx, sy, sz = (batch.neighbor_matrix_shifts.long() + 8).unbind(-1)
+    keys = ((neighbors * 16 + sx) * 16 + sy) * 16 + sz
+    keys = keys.masked_fill(neighbors >= batch.num_nodes, torch.iinfo(torch.long).max)
+    return keys.sort(dim=1).values
+
+
+def _cluster_batch(
+    sizes: list[int],
+    device: str,
+    *,
+    pbc: bool = False,
+    positions: torch.Tensor | None = None,
+) -> Batch:
+    """One compact cluster per graph, with the given atom counts.
+
+    Every atom lies within ``_CUTOFF`` of every other atom of its cluster, so
+    an ``n``-atom cluster needs ``n - 1`` neighbor slots per atom.
+    *positions*, when given, replaces the positions of all atoms.
+    """
+    data_list = []
+    for n in sizes:
+        kwargs: dict = dict(
+            positions=0.5 * _GRID_SITES[:n],
+            atomic_numbers=torch.ones(n, dtype=torch.long),
+        )
+        if pbc:
+            kwargs["cell"] = torch.eye(3).unsqueeze(0) * 20.0
+            kwargs["pbc"] = torch.tensor([[True, True, True]])
+        data_list.append(AtomicData(**kwargs))
+    batch = Batch.from_data_list(data_list).to(device)
+    if positions is not None:
+        batch.positions.copy_(positions)
+    return batch
+
+
+def _neighbor_sets(batch: Batch) -> list[set[int]]:
+    """Return each atom's neighbors as listed in the batch's neighbor matrix."""
+    counts = batch.num_neighbors.tolist()
+    return [set(row[:n]) for row, n in zip(batch.neighbor_matrix.tolist(), counts)]
+
+
+def _edge_set(batch: Batch) -> set[tuple[int, int]]:
+    """Return the batch's COO neighbor list as a set of (src, dst) pairs."""
+    return {tuple(edge) for edge in batch.neighbor_list.tolist()}
+
+
+def _fresh_build(
+    batch: Batch, config: NeighborConfig
+) -> tuple[NeighborListHook, Batch]:
+    """Return a new hook and a copy of *batch* holding the hook's first build."""
+    hook = NeighborListHook(config, stage=_STAGE)
+    fresh = batch.clone()
+    hook(_ctx(fresh), _STAGE)
+    return hook, fresh
+
+
+class _ClusterDataset:
+    """Lennard-Jones clusters near equilibrium, sampled in dataset order."""
+
+    def __init__(self, sizes: list[int]) -> None:
+        self._sizes = sizes
+
+    def __len__(self) -> int:
+        return len(self._sizes)
+
+    def __getitem__(self, idx: int) -> tuple[AtomicData, dict]:
+        n = self._sizes[idx]
+        data = AtomicData(
+            positions=1.1 * _GRID_SITES[:n],
+            atomic_numbers=torch.full((n,), 18, dtype=torch.long),
+            forces=torch.zeros(n, 3),
+            energy=torch.zeros(1, 1),
+        )
+        data.add_node_property("velocities", torch.zeros(n, 3))
+        return data, {}
+
+    def get_metadata(self, idx: int) -> tuple[int, int]:
+        return self._sizes[idx], 0
+
+
+class _FreshBuildCheck:
+    """Compare every neighbor list built for the batch with a fresh hook's."""
+
+    stage = DynamicsStage.BEFORE_COMPUTE
+    frequency = 1
+
+    def __init__(self, config: NeighborConfig) -> None:
+        self.config = config
+        self.checks: list[tuple[list[int], bool]] = []
+
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+        _, fresh = _fresh_build(ctx.batch, self.config)
+        sizes = ctx.batch.num_nodes_per_graph.tolist()
+        self.checks.append((sizes, _neighbor_sets(ctx.batch) == _neighbor_sets(fresh)))
 
 
 # ===========================================================================
@@ -376,6 +493,48 @@ class TestAllocNlKwargs:
             f"Missing keys: {expected_keys - set(hook._buf_nl_kwargs.keys())}"
         )
 
+    @pytest.mark.parametrize("n_graphs", [1, 2])
+    def test_cell_list_cell_cap_matches_selector(self, device: str, n_graphs: int):
+        """Cell lists use the selector's per-system cell cap.
+
+        The cost model assumes 524288 cells for a single system and 8192 per
+        system for a batch. A 40 A box with a 1 A cutoff needs about 40^3 =
+        64000 cells, so a single system must not be capped at 8192.
+        """
+        from nvalchemiops.neighbors.base_dispatch import (
+            DEFAULT_BATCH_MAX_NBINS,
+            DEFAULT_SINGLE_MAX_NBINS,
+        )
+
+        gen = torch.Generator().manual_seed(0)
+        box, n_atoms = 40.0, 2000
+        data_list = [
+            AtomicData(
+                positions=torch.rand(n_atoms, 3, generator=gen) * box,
+                atomic_numbers=torch.ones(n_atoms, dtype=torch.long),
+                cell=torch.eye(3).unsqueeze(0) * box,
+                pbc=torch.tensor([[True, True, True]]),
+            )
+            for _ in range(n_graphs)
+        ]
+        batch = Batch.from_data_list(data_list).to(device)
+
+        counts = {}
+        for method in ("cell_list", "naive"):
+            hook = NeighborListHook(
+                _cfg(cutoff=1.0), method=method, stage=DynamicsStage.BEFORE_COMPUTE
+            )
+            hook(_ctx(batch), _STAGE)
+            counts[method] = batch.num_neighbors.clone()
+            if method == "cell_list":
+                n_cells = hook._buf_nl_kwargs["cell_atom_start_indices"].numel()
+
+        cap = DEFAULT_SINGLE_MAX_NBINS if n_graphs == 1 else DEFAULT_BATCH_MAX_NBINS
+        assert n_cells <= n_graphs * cap
+        if n_graphs == 1:
+            assert n_cells > DEFAULT_BATCH_MAX_NBINS
+        torch.testing.assert_close(counts["cell_list"], counts["naive"])
+
     def test_kwargs_are_tensors(self, device: str):
         """Tensor-valued pre-allocated kwargs must be torch.Tensor objects.
 
@@ -474,6 +633,180 @@ class TestShapeInvalidation:
         assert id(hook._buf_positions) == buf_pos_id, (
             "_buf_positions was reallocated despite same shape"
         )
+
+    def test_graph_count_change_rederives_k(self, device: str):
+        """A new graph count re-derives K although the atom count is unchanged."""
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
+        hook(_ctx(_cluster_batch([12, 12], device)), _STAGE)
+
+        batch = _cluster_batch([2, 2, 20], device)
+        hook(_ctx(batch), _STAGE)
+
+        fresh_hook, fresh = _fresh_build(batch, _cfg())
+        assert hook._max_neighbors == fresh_hook._max_neighbors
+        assert _neighbor_sets(batch) == _neighbor_sets(fresh)
+
+    def test_graph_count_change_rebuilds_unmoved_atoms(self, device: str):
+        """With a skin, a new graph count rebuilds lists for atoms that did not move."""
+        hook = NeighborListHook(_cfg(), skin=0.5, stage=DynamicsStage.BEFORE_COMPUTE)
+        before = _cluster_batch([6, 6], device)
+        hook(_ctx(before), _STAGE)
+
+        # The same atoms, regrouped into three graphs.
+        batch = _cluster_batch([3, 3, 6], device, positions=before.positions)
+        hook(_ctx(batch), _STAGE)
+
+        _, fresh = _fresh_build(batch, _cfg())
+        assert _neighbor_sets(batch) == _neighbor_sets(fresh)
+
+
+# ===========================================================================
+# TestMembershipChange
+# ===========================================================================
+
+
+class TestMembershipChange:
+    """New systems in a batch of unchanged shape get their own neighbor list.
+
+    Dynamics engines dispatch ``ON_ADMISSION`` after every change of batch
+    membership, for example an inflight refill that swaps two 12-atom
+    systems for a 4-atom and a 20-atom one.
+    """
+
+    @staticmethod
+    def _swap(hook: NeighborListHook, device: str, *, pbc: bool = False) -> Batch:
+        """Build for [12, 12], admit [4, 20] (same N and B), build again."""
+        hook(_ctx(_cluster_batch([12, 12], device, pbc=pbc)), _STAGE)
+        batch = _cluster_batch([4, 20], device, pbc=pbc)
+        hook(_ctx(batch), DynamicsStage.ON_ADMISSION)
+        hook(_ctx(batch), _STAGE)
+        return batch
+
+    def test_runs_at_its_stage_and_on_admission(self):
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
+
+        runs_on = {stage for stage in DynamicsStage if hook._runs_on_stage(stage)}
+
+        assert runs_on == {DynamicsStage.BEFORE_COMPUTE, DynamicsStage.ON_ADMISSION}
+        assert not any(hook._runs_on_stage(stage) for stage in TrainingStage)
+
+    def test_admission_builds_nothing(self, device: str):
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
+        batch = _cluster_batch([4, 20], device)
+
+        hook(_ctx(batch), DynamicsStage.ON_ADMISSION)
+
+        assert "neighbor_matrix" not in batch
+
+    def test_hook_registered_at_admission_still_builds(self, device: str):
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.ON_ADMISSION)
+        batch = _cluster_batch([4, 20], device)
+
+        hook(_ctx(batch), DynamicsStage.ON_ADMISSION)
+
+        _, fresh = _fresh_build(batch, _cfg())
+        assert _neighbor_sets(batch) == _neighbor_sets(fresh)
+
+    def test_skin_list_after_admission_matches_fresh_hook(self, device: str):
+        config = _cfg(skin=0.5)
+        hook = NeighborListHook(config, stage=DynamicsStage.BEFORE_COMPUTE)
+        before = _cluster_batch([12, 12], device)
+        hook(_ctx(before), _STAGE)
+        # Same atoms at the same places in new systems: no atom moved, so
+        # only the admission reset can trigger the rebuild.
+        batch = _cluster_batch([4, 20], device, positions=before.positions.clone())
+        hook(_ctx(batch), DynamicsStage.ON_ADMISSION)
+        hook(_ctx(batch), _STAGE)
+
+        fresh_hook, fresh = _fresh_build(batch, config)
+        assert hook._max_neighbors == fresh_hook._max_neighbors
+        assert _neighbor_sets(batch) == _neighbor_sets(fresh)
+
+    def test_matrix_after_admission_matches_fresh_hook(self, device: str):
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
+        batch = self._swap(hook, device)
+
+        fresh_hook, fresh = _fresh_build(batch, _cfg())
+        assert hook._max_neighbors == fresh_hook._max_neighbors
+        assert _neighbor_sets(batch) == _neighbor_sets(fresh)
+
+    def test_coo_after_admission_matches_fresh_hook(self, device: str):
+        config = _cfg(fmt=NeighborListFormat.COO)
+        hook = NeighborListHook(config, stage=DynamicsStage.BEFORE_COMPUTE)
+        batch = self._swap(hook, device)
+
+        _, fresh = _fresh_build(batch, config)
+        assert _edge_set(batch) == _edge_set(fresh)
+
+    def test_naive_pbc_after_admission_matches_fresh_hook(self, device: str):
+        hook = NeighborListHook(
+            _cfg(), method="batch_naive_scalar", stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        batch = self._swap(hook, device, pbc=True)
+
+        _, fresh = _fresh_build(batch, _cfg())
+        assert hook._buf_nl_kwargs["max_atoms_per_system"] == 20
+        assert _neighbor_sets(batch) == _neighbor_sets(fresh)
+
+    def test_registration_without_stage_raises(self):
+        dynamics = DemoDynamics(model=DemoModelWrapper(DemoModel()), n_steps=1, dt=0.5)
+
+        with pytest.raises(TypeError, match="has no stage assigned"):
+            dynamics.register_hook(NeighborListHook(_cfg()))
+
+    def test_registration_at_training_stage_on_dynamics_raises(self):
+        dynamics = DemoDynamics(model=DemoModelWrapper(DemoModel()), n_steps=1, dt=0.5)
+        hook = NeighborListHook(_cfg(), stage=TrainingStage.BEFORE_FORWARD)
+
+        with pytest.raises(TypeError, match="only accepts DynamicsStage stages"):
+            dynamics.register_hook(hook)
+
+    def test_training_registration_at_before_forward(self):
+        strategy = TrainingStrategy(
+            models=DemoModelWrapper(DemoModel()),
+            optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.Adam),
+            num_epochs=1,
+            training_fn=default_training_fn,
+            loss_fn=EnergyMSELoss(),
+        )
+
+        strategy.register_hook(
+            NeighborListHook(_cfg()), stage=TrainingStage.BEFORE_FORWARD
+        )
+
+        fired = [
+            stage for stage in TrainingStage if strategy._has_hooks_for_stage(stage)
+        ]
+        assert fired == [TrainingStage.BEFORE_FORWARD]
+
+    def test_fused_stage_refills_match_fresh_hook(self):
+        """Every build after an inflight refill matches a fresh hook's."""
+        model = LennardJonesModelWrapper(epsilon=0.01, sigma=1.0, cutoff=5.0)
+        config = model.model_config.neighbor_config
+        check = _FreshBuildCheck(config)
+        optimizer = FIRE2(
+            model=model,
+            dt=0.05,
+            n_steps=2,
+            hooks=[NeighborListHook(config, stage=_STAGE), check],
+            device_type="cpu",
+        )
+        # One size bin, so each refill admits the next two clusters in
+        # dataset order: [12, 12] -> [20, 4] -> [12, 12], always N=24, B=2.
+        sampler = SizeAwareSampler(
+            _ClusterDataset([12, 12, 20, 4, 12, 12]),
+            max_atoms=24,
+            max_batch_size=2,
+            bin_width=100,
+        )
+        fused = FusedStage(
+            sub_stages=[(0, optimizer)], sampler=sampler, device_type="cpu"
+        )
+
+        fused.run()
+
+        assert [20, 4] in [sizes for sizes, _ in check.checks]
+        assert all(matches for _, matches in check.checks)
 
 
 # ===========================================================================
@@ -797,6 +1130,49 @@ class TestSkinCheck:
         cell = batch.cell.squeeze(0)
         edge = batch.positions[1] - batch.positions[0] + shift.to(cell.dtype) @ cell
         assert torch.linalg.vector_norm(edge) < hook.config.cutoff
+
+    @pytest.mark.parametrize("method", ["naive", "cell_list", "batch_cluster_tile"])
+    def test_partial_rebuild_matches_full_build(self, device: str, method: str):
+        """A rebuild of only some systems gives the same list as a full build.
+
+        System 0 is displaced by more than ``skin / 2`` and system 1 is not,
+        so the second call rebuilds system 0 only and keeps system 1.
+        """
+        if method == "batch_cluster_tile" and device == "cpu":
+            pytest.skip("batch_cluster_tile is CUDA-only")
+        gen = torch.Generator().manual_seed(0)
+        box, n_atoms, n_graphs = 12.0, 128, 3
+        data_list = [
+            AtomicData(
+                positions=torch.rand(n_atoms, 3, generator=gen) * box,
+                atomic_numbers=torch.ones(n_atoms, dtype=torch.long),
+                cell=torch.eye(3).unsqueeze(0) * box,
+                pbc=torch.tensor([[True, True, True]]),
+            )
+            for _ in range(n_graphs)
+        ]
+        batch = Batch.from_data_list(data_list).to(device)
+        hook = NeighborListHook(
+            _cfg(), skin=0.5, method=method, stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        hook(_ctx(batch), _STAGE)
+
+        batch.positions[:n_atoms] += 0.3 * (
+            torch.rand(n_atoms, 3, generator=gen).to(device) - 0.5
+        )
+        batch.positions[0] += 0.4  # > skin / 2: system 0 must be rebuilt
+        hook(_ctx(batch), _STAGE)
+        assert hook._rebuild_flags.tolist() == [True] + [False] * (n_graphs - 1)
+        partial = _sorted_pairs(batch), batch.num_neighbors.clone()
+
+        fresh = NeighborListHook(
+            _cfg(), skin=0.5, method=method, stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        fresh(_ctx(batch), _STAGE)
+        full = _sorted_pairs(batch), batch.num_neighbors
+
+        torch.testing.assert_close(partial[1], full[1])
+        torch.testing.assert_close(partial[0], full[0])
 
 
 # ===========================================================================

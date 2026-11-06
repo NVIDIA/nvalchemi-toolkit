@@ -94,6 +94,7 @@ class OptionalDependency(Enum):
 
     ASE = ("ase", "nvalchemi-toolkit[ase]")
     PYMATGEN = ("pymatgen", "nvalchemi-toolkit[pymatgen]")
+    RDKIT = ("rdkit", "nvalchemi-toolkit[rdkit]")
     MACE = ("mace", "nvalchemi-toolkit[mace]")
     AIMNET = ("aimnet", "nvalchemi-toolkit[aimnet]")
     TENSORBOARD = ("tensorboard", "nvalchemi-toolkit[tensorboard]")
@@ -106,7 +107,7 @@ class OptionalDependency(Enum):
     CUEQUIVARIANCE_OPS = (
         "cuequivariance_ops_torch",
         "nvalchemi-toolkit[mace,cu13]",
-        "These cuequivariance CUDA kernels are CUDA-version-specific — select "
+        "These cuequivariance CUDA kernels are CUDA-version-specific -- select "
         "the 'cu12' or 'cu13' dependency group to match your CUDA build, e.g. "
         "`uv sync --extra mace --extra cu13` (or --extra cu12).",
     )

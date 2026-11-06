@@ -309,6 +309,38 @@ class TestAtomicDataValidation:
         assert data.atom_categories.shape == (3,)
         assert data.atom_categories.dtype == torch.long
 
+    def test_atom_categories_tensor_not_validated_per_element(self, monkeypatch):
+        """A tensor ``atom_categories`` is validated without per-atom work.
+
+        Validating it element by element against ``list[AtomCategory]``
+        costs one ``Tensor.item`` (a device sync on CUDA) per atom, which
+        made ``AtomicData.to`` and ``Batch.get_data`` scale with the number
+        of atoms.
+        """
+        calls = 0
+        original_item = torch.Tensor.item
+
+        def counting_item(self):
+            nonlocal calls
+            calls += 1
+            return original_item(self)
+
+        def count_item_calls(n_atoms: int) -> int:
+            nonlocal calls
+            data = AtomicData(
+                positions=torch.randn(n_atoms, 3),
+                atomic_numbers=torch.ones(n_atoms, dtype=torch.long),
+                atom_categories=torch.zeros(n_atoms, dtype=torch.long),
+            )
+            calls = 0
+            with monkeypatch.context() as m:
+                m.setattr(torch.Tensor, "item", counting_item)
+                moved = data.to("cpu")
+            assert torch.equal(moved.atom_categories, data.atom_categories)
+            return calls
+
+        assert count_item_calls(4) == count_item_calls(64)
+
     def test_use_default_velocities(self):
         """When velocities is None, validator sets zeros like positions."""
         data = AtomicData(
@@ -693,6 +725,96 @@ class TestDtypeCastWarning:
             )
         user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
         assert len(user_warnings) == 0
+
+    def test_energy_downcast_by_default(self):
+        """Default exempt set is empty: a fp64 energy is cast to positions dtype."""
+        e64 = torch.tensor([[-93873.600167206]], dtype=torch.float64)
+        data = AtomicData(
+            positions=torch.randn(2, 3, dtype=torch.float32),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+            energy=e64,
+        )
+        assert data.energy.dtype == torch.float32
+
+    def test_precision_preserving_keys_keeps_energy(self, monkeypatch):
+        """Listing a field in the public precision_preserving_keys keeps its
+        precision, including across validate_assignment re-runs on setattr."""
+        monkeypatch.setattr(
+            AtomicData, "precision_preserving_keys", frozenset({"energy"})
+        )
+        e64 = torch.tensor([[-41512.590527111]], dtype=torch.float64)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            data = AtomicData(
+                positions=torch.randn(3, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(3, dtype=torch.long),
+                energy=e64,
+            )
+        assert data.energy.dtype == torch.float64
+        assert data.energy.item() == e64.item()  # bit-exact, no fp32 round-trip
+        msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+        assert all("energy" not in m for m in msgs)
+        data.add_system_property("dataset_id", torch.tensor([0], dtype=torch.long))
+        assert data.energy.dtype == torch.float64
+        assert data.energy.item() == e64.item()
+
+    def test_non_exempt_fp_field_still_cast(self, monkeypatch):
+        """Fields not in the exempt set are still cast to the positions dtype."""
+        monkeypatch.setattr(
+            AtomicData, "precision_preserving_keys", frozenset({"energy"})
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            data = AtomicData(
+                positions=torch.randn(2, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                forces=torch.randn(2, 3, dtype=torch.float64),
+            )
+        assert data.forces.dtype == torch.float32
+        msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+        assert any("forces" in m for m in msgs)
+
+    def test_cast_warning_fires_once_per_field_dtype(self):
+        """The cast warning is emitted once per (field, dtype); repeats are silent
+        even though every instance is still cast."""
+
+        def make():
+            return AtomicData(
+                positions=torch.randn(2, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                forces=torch.randn(2, 3, dtype=torch.float64),
+            )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            first = make()
+            second = make()  # same (forces, float64 -> float32): no second warning
+            make()
+        # casting still happens for every instance, only the warning is deduped
+        assert first.forces.dtype == torch.float32
+        assert second.forces.dtype == torch.float32
+        user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
+        assert len(user_warnings) == 1
+        assert "forces" in str(user_warnings[0].message)
+
+    def test_distinct_field_dtype_casts_each_warn_once(self):
+        """A different field or a different source dtype warns on its own."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            # (forces, float64 -> float32)
+            AtomicData(
+                positions=torch.randn(2, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                forces=torch.randn(2, 3, dtype=torch.float64),
+            )
+            # distinct field (velocities) -> a separate first-time warning
+            AtomicData(
+                positions=torch.randn(2, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                velocities=torch.randn(2, 3, dtype=torch.float64),
+            )
+        user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
+        assert len(user_warnings) == 2
 
 
 # -----------------------------------------------------------------------------

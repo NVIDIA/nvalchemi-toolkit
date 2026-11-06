@@ -1694,10 +1694,12 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         checkpoint_index: int = -1,
         map_location: str | torch.device | None = None,
         *,
+        models: strategy_validation.ModelInput | None = None,
         hooks: Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]
         | None = None,
         training_fn: Callable[..., Mapping[str, torch.Tensor]] | str | None = None,
         validators: Sequence[CheckpointValidator] | None = None,
+        **runtime_overrides: Any,
     ) -> TrainingStrategy:
         """Load a restartable strategy checkpoint.
 
@@ -1715,6 +1717,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         map_location : str | torch.device | None, optional
             Device override passed through to :func:`torch.load` and the
             restored strategy metadata.
+        models : BaseModelMixin | dict[str, BaseModelMixin] | None, optional
+            Live models to restore the checkpoint's weights into, in place of
+            the ones the loader builds from the saved specs. Their names must
+            be exactly the checkpoint's; see
+            :func:`nvalchemi.training.load_checkpoint`. Default ``None``.
         hooks : Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] | None, optional
             Runtime hooks to attach to the restored strategy.
         training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional
@@ -1724,6 +1731,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         validators : Sequence[CheckpointValidator] | None, optional
             Optional loaded-checkpoint validators forwarded to the lower-level
             loader.
+        **runtime_overrides : Any
+            Runtime overrides: live objects that the saved spec cannot carry,
+            passed as extra keyword arguments and forwarded to the strategy
+            class's :meth:`from_spec_dict`. A subclass documents the ones it
+            accepts.
 
         Returns
         -------
@@ -1736,7 +1748,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         ValueError
             If the checkpoint does not contain restartable strategy metadata.
         TypeError
-            If the restored strategy is not an instance of ``cls``.
+            If the restored strategy is not an instance of ``cls``, or if a
+            runtime override reaches a ``from_spec_dict`` that does not
+            accept it.
         """
         from nvalchemi.training._checkpoint import load_checkpoint
 
@@ -1747,6 +1761,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             hooks=hooks,
             training_fn=training_fn,
             validators=validators,
+            models=models,
+            **runtime_overrides,
         )
         if not isinstance(loaded, Mapping) or loaded.get("strategy") is None:
             raise ValueError(
@@ -1771,6 +1787,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         hooks: Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]
         | None = None,
         training_fn: Callable[..., Mapping[str, torch.Tensor]] | str | None = None,
+        **runtime_overrides: Any,
     ) -> TrainingStrategy:
         """Rebuild a :class:`TrainingStrategy` from a :meth:`to_spec_dict` bundle.
 
@@ -1785,12 +1802,23 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             auto-wrapped into a single orchestrator.
         training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional
             Runtime callable or dotted-path override.
+        **runtime_overrides : Any
+            Runtime overrides: live objects that a spec cannot carry, which
+            :meth:`load_checkpoint` and :meth:`from_checkpoint_dict` forward
+            here as extra keyword arguments. A subclass documents the ones it
+            accepts; the base class accepts none.
 
         Returns
         -------
         TrainingStrategy
             A freshly validated strategy ready to :meth:`run`.
+
+        Raises
+        ------
+        TypeError
+            If ``runtime_overrides`` is not empty, naming the unexpected keys.
         """
+        strategy_spec._refuse_runtime_overrides(cls, runtime_overrides)
         required = ("optimizer_configs", "devices", "loss_fn_spec")
         missing = [k for k in required if k not in spec]
         if missing:
@@ -1828,6 +1856,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         hooks: Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]
         | None = None,
         training_fn: Callable[..., Mapping[str, torch.Tensor]] | str | None = None,
+        **runtime_overrides: Any,
     ) -> TrainingStrategy:
         """Rebuild a strategy from checkpoint metadata.
 
@@ -1842,11 +1871,21 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             Runtime hooks appended by the caller.
         training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional
             Runtime callable or dotted-path override.
+        **runtime_overrides : Any
+            Runtime overrides: live objects that a spec cannot carry, forwarded
+            as extra keyword arguments to the strategy class's
+            :meth:`from_spec_dict`. A subclass documents the ones it accepts.
 
         Returns
         -------
         TrainingStrategy
             A strategy with declarative fields and restart counters restored.
+
+        Raises
+        ------
+        TypeError
+            If a runtime override reaches a ``from_spec_dict`` that does not
+            accept it.
         """
         strategy_cls = cls
         raw_strategy_cls = spec.get("strategy_cls")
@@ -1869,6 +1908,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             models=models,
             hooks=hooks,
             training_fn=training_fn,
+            **runtime_overrides,
         )
         runtime_state = spec.get("runtime_state", {})
         if runtime_state is None:

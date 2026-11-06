@@ -14,7 +14,9 @@ dynamics/index
 models
 gen
 training/index
+enhanced_sampling
 distributed
 distributed_runtime
+csp
 typing
 ```

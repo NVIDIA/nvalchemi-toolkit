@@ -95,10 +95,8 @@ from ase.build import bulk
 from ase.data import atomic_masses as ASE_ATOMIC_MASSES
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics import KB_EV
 from nvalchemi.dynamics.hooks import EnergyDriftMonitorHook, LoggingHook
-
-# KB_EV is an internal helper used here only to set MB velocities.
-from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.dynamics.integrators.npt import NPT
 from nvalchemi.dynamics.integrators.nve import NVE
 from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin

@@ -430,6 +430,7 @@ model = MACEWrapper.from_checkpoint(
     enable_cueq=ENABLE_CUEQ,
     compile_model=False,
     atomic_energies=reference_energies,
+    train=True,
 )
 model.model_config.active_outputs = {"energy", "forces", "stress"}
 model.train()

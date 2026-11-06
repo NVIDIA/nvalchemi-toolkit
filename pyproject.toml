@@ -88,6 +88,9 @@ cu13 = [
 pymatgen = [
     "pymatgen>=2025.10.7",
 ]
+rdkit = [
+    "rdkit>=2025.3.3",
+]
 mace = [
     "cuequivariance-torch>=0.8.0",
     "mace-torch==0.3.15",
@@ -200,8 +203,16 @@ conflicts = [
     { extra = "uma-cu13" },
   ],
 ]
+exclude-dependencies = [
+  "python-hostlist",
+  "ase-db-backends",
+  "psycopg2-binary",
+  "pymysql",
+  "bibtexparser",
+  "numba",
+  "llvmlite",
+]
 override-dependencies = [
-  "python-hostlist; sys_platform == 'never'",
   # fairchem-core pins lmdb<=1.7.3, which has no cp314 wheel. lmdb>=2.0.0
   # ships cp314 wheels. Nothing in our fairchem usage touches lmdb, so from
   # 3.14 on override the pin; below 3.14, re-state fairchem's original pin.
@@ -209,15 +220,6 @@ override-dependencies = [
   # uv replaces the requirement outright — hence the explicit pair.)
   "lmdb>=1.6.2,<=1.7.3; python_version < '3.14'",
   "lmdb>=2.0.0; python_version >= '3.14'",
-]
-dependency-metadata = [
-  { name = "nvalchemi-toolkit-ops", version = "0.5.0", requires-dist = [
-    "warp-lang >= 1.13.0",
-    "numpy",
-    "torch>=2.8.0 ; extra == 'torch'",
-    "torch>=2.8.0 ; extra == 'torch-cu12'",
-    "torch>=2.8.0 ; extra == 'torch-cu13'",
-  ], provides-extras = ["torch", "torch-cu12", "torch-cu13"] },
 ]
 
 [tool.uv.sources]
@@ -233,11 +235,6 @@ torchvision = [
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "uma-cu13", marker = "sys_platform != 'darwin'" },
 ]
-# Pre-release pin: resolve nvalchemi-toolkit-ops from the 0.5.0-rc branch
-# instead of PyPI. tool.uv.sources only affects this workspace, so the
-# published package metadata is unchanged; drop this entry once ops 0.5.0
-# is released on PyPI.
-nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops", rev = "0.5.0-rc" }
 
 # these are intended to be developer facing
 [dependency-groups]

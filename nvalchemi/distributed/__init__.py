@@ -31,13 +31,13 @@ def _register_dynamo_subclass() -> None:
     that receive ShardTensor inputs (the ``_promote_positions_to_shardtensor``
     path in :class:`DistributedModel`).
 
-    Done at module import — eager-only callers pay the cost of importing
+    Done at module import -- eager-only callers pay the cost of importing
     the dynamo config module (cheap; it's already loaded in any
     torch-using process).
     """
     try:
         import torch._dynamo.config as _dynamo_config
-    except ImportError:  # pragma: no cover — torch without dynamo is rare
+    except ImportError:  # pragma: no cover -- torch without dynamo is rare
         return
     from nvalchemi.distributed._core.shard_tensor import ShardTensor as _ShardTensor
 
@@ -53,6 +53,15 @@ if TYPE_CHECKING:
     )
     from nvalchemi.distributed._core.reshard import (
         reshard_by_destination as reshard_by_destination,
+    )
+    from nvalchemi.distributed._runtime import (
+        CollectivePhase as CollectivePhase,
+    )
+    from nvalchemi.distributed._runtime import (
+        ProcessGroupContext as ProcessGroupContext,
+    )
+    from nvalchemi.distributed._runtime import (
+        collective_error_sync as collective_error_sync,
     )
     from nvalchemi.distributed.config import (
         DomainConfig as DomainConfig,
@@ -72,8 +81,8 @@ def autograd_target(t: torch.Tensor) -> torch.Tensor:
 
     Under domain decomposition the framework wraps ``data.positions`` (and
     ``data.charges``) as a :class:`ShardTensor` view of a halo-padded leaf via
-    :meth:`Tensor.as_subclass`. The view is *not* itself in the autograd graph —
-    only the underlying tensor is — so passing the view directly to
+    :meth:`Tensor.as_subclass`. The view is *not* itself in the autograd graph --
+    only the underlying tensor is -- so passing the view directly to
     :func:`torch.autograd.grad` raises "differentiated Tensors appears to not
     have been used in the graph". This helper returns the in-graph leaf instead.
 
@@ -83,7 +92,7 @@ def autograd_target(t: torch.Tensor) -> torch.Tensor:
     Parameters
     ----------
     t : torch.Tensor
-        The tensor to differentiate against — a plain tensor, or a ShardTensor
+        The tensor to differentiate against -- a plain tensor, or a ShardTensor
         view of a halo-padded leaf.
 
     Returns
@@ -197,6 +206,15 @@ def __getattr__(name: str):  # noqa: ANN201
             "nvalchemi.distributed._runtime",
             "collective_device",
         ),
+        "ProcessGroupContext": (
+            "nvalchemi.distributed._runtime",
+            "ProcessGroupContext",
+        ),
+        "CollectivePhase": ("nvalchemi.distributed._runtime", "CollectivePhase"),
+        "collective_error_sync": (
+            "nvalchemi.distributed._runtime",
+            "collective_error_sync",
+        ),
     }
     if name in _imports:
         module_path, attr = _imports[name]
@@ -239,9 +257,12 @@ __all__ = [
     "SpatialPartitioner",
     "autograd_target",
     "collective_device",
+    "collective_error_sync",
+    "CollectivePhase",
     "current_dd_context",
     "DistributedManager",
     "PhysicsNeMoUninitializedDistributedManagerWarning",
+    "ProcessGroupContext",
     "resolve_global_rank",
     "resolve_world_size",
     "neighbor_refresh_adapters",

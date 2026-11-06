@@ -44,7 +44,7 @@ For :class:`FIRE2VariableCell`: additionally ``cell_velocities [M,3,3]``.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
 
@@ -128,6 +128,14 @@ class FIRE2(BaseDynamics):
         Initial hooks.
     convergence_hook : ConvergenceHook or dict, optional
         Convergence criterion.
+    by_group : bool, optional
+        If True, update each group of graphs as a single unit, sharing
+        the adaptive timestep, mixing parameter, and adaptation counters
+        across the graphs in that group.
+        Requires a valid layout set with ``batch.set_group_layout()``.
+        A configured convergence hook must use the same ``by_group`` setting.
+        Default False. Forwarded through ``**kwargs`` to
+        :class:`~nvalchemi.dynamics.base.BaseDynamics`.
     **kwargs
         Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.
 
@@ -141,6 +149,8 @@ class FIRE2(BaseDynamics):
 
     __needs_keys__: set[str] = {"forces"}
     __provides_keys__: set[str] = {"positions", "velocities"}
+    samples_equilibrium: ClassVar[bool] = False
+    """A relaxation descends to a minimum rather than sampling an ensemble."""
 
     def __init__(
         self,
@@ -283,6 +293,8 @@ class FIRE2VariableCell(BaseDynamics):
 
     __needs_keys__: set[str] = {"forces", "stress"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
+    samples_equilibrium: ClassVar[bool] = False
+    """A relaxation descends to a minimum rather than sampling an ensemble."""
 
     def __init__(
         self,

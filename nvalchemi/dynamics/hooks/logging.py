@@ -60,10 +60,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-# Boltzmann constant in eV/K — consistent with typical atomistic MD unit
-# systems (positions in Å, masses in amu, velocities in Å/fs, energy in eV).
-_KB_EV_PER_K: float = 8.617333262e-5
-
 __all__ = ["LoggingHook"]
 
 LogBackend = Literal["csv", "tensorboard", "custom"]
