@@ -9,8 +9,8 @@ description: >-
 license: Apache-2.0
 compatibility: >-
   Runs Python and shell commands to inspect the installed nvalchemi package
-  and to run small checks. Reads public documentation over the network when
-  available. No credentials needed.
+  and to run small checks. Reads linked docs and example pages over the
+  network, never downloads code to run. No credentials needed.
 metadata:
   author: NVIDIA <agent-skills@nvidia.com>
   tags: [nvalchemi, atomistic-simulation, mlip, molecular-dynamics, training]
@@ -56,9 +56,10 @@ Work through these steps for every request.
 
 ### Scope the request first
 
-Before you write or run code, go through this checklist. If the request leaves
-out an item that changes the science or the cost, ask, or state your
-assumption in one line before you run anything.
+Before you write or run code, go through this checklist. Ask about unknown
+scientific choices, hardware, workload, correctness checks, and permissions
+(items 2, 7, 8, 9, 10). For items 1, 3, 4, 5, 6, state a one-line assumption
+if needed. Check the installed software before execution.
 
 1. **Intended result.** What number, file, or model does the user want at the
    end?
@@ -73,12 +74,12 @@ assumption in one line before you run anything.
 7. **Hardware.** CPU only, one GPU, or several. Memory limits.
 8. **Workload.** Number of systems, atoms, and steps.
 9. **Correctness check.** How the result will be checked (see each note).
-10. **Permissions.** What you may write, download, or delete.
+10. **Permissions.** What you can write, download, or delete.
 
-Keep any exploratory run small and bounded: a few systems, tens to hundreds of
-steps, seconds to a few minutes. Do not start a production-length trajectory
-or a long training run to "see what happens". Scale up only after the user
-agrees to the settings.
+Limit exploratory runs to at most 3 systems and 100 steps, with a wall-time
+limit under one minute. Do not start a production-length trajectory or a long
+training run to "see what happens". Scale up only after the user agrees to the
+settings.
 
 ### Check the installed version
 
@@ -86,30 +87,46 @@ The notes describe the API of release 0.3.0. Their links point at the
 v0.3.0 tag. Check what is installed before you apply any advice:
 
 ```bash
-python -c "import nvalchemi; print(nvalchemi.__version__, nvalchemi.__file__)"
 python - <<'EOF'
 import importlib.util as u
-for parts in (("gen",), ("dynamics", "mep"), ("enhanced_sampling",),
+for parts in ((), ("data",), ("dynamics",), ("models",), ("gen",),
+              ("dynamics", "mep"), ("enhanced_sampling",),
               ("training", "distillation")):
     m = ".".join(("nvalchemi", *parts))
-    print(m, u.find_spec(m) is not None)
+    try:
+        found = u.find_spec(m) is not None
+    except ModuleNotFoundError:
+        found = False
+    print(m, found)
+if u.find_spec("nvalchemi") is not None:
+    import nvalchemi
+    print(nvalchemi.__version__, nvalchemi.__file__)
 EOF
 ```
 
-A version below 0.3.0, or a missing module above, means the installed
-package predates the notes. Tell the user about the mismatch and what it
-affects. Do not upgrade or reinstall packages without asking.
+If the toolkit is not installed, say so. Write the code anyway, but stop
+before running it. Do not fetch source or install packages to fill the gap.
 
-The installed wheel ships no docs or examples. The notes link to them on
-GitHub. When you cannot reach the network, read the installed source: each
-note names the module that holds each API, under the path printed by
-`nvalchemi.__file__`.
+For a version mismatch or missing module, tell the user what it affects:
+
+- If version 0.2.0 or newer has the core modules nvalchemi.data,
+  nvalchemi.dynamics, and nvalchemi.models, proceed with the 0.3.0 patterns.
+  Flag each 0.3.0-only feature used. Check its API in the installed source
+  before execution. If it is absent, write the code but do not run it.
+- If a core module is missing or the version is below the 0.2.0 floor, stop
+  execution and ask before any upgrade. Do not install or upgrade on your own.
+
+The installed wheel ships no docs or examples. Read the installed package
+source and the linked docs and example pages only. Each note names the
+source module. Locate its file with Python's inspect.getfile, then read it in
+site-packages. Links are for reading, never for downloading code to run.
+If the network is unavailable, use installed source.
 
 ### Run on the GPU
 
 Pick the device once: use `cuda` when `torch.cuda.is_available()`, otherwise
 `cpu`. Put the model, batch or dataset, and optimizer on that same device.
-For dynamics, optimizer state is allocated from the batch; pass
+For dynamics, optimizer state comes from the batch. Pass
 `device_type=device.type` to the engine. Given a model, structures, and the
 agreed timestep and step budget:
 
@@ -123,11 +140,13 @@ model = model.to(device)
 batch = Batch.from_data_list(data_list).to(device)
 opt = FIRE2(model=model, dt=dt, n_steps=step_budget, device_type=device.type)
 dyn = FusedStage(sub_stages=[(0, opt)], device_type=device.type)
+for hook in model.make_neighbor_hooks():
+    dyn.register_hook(hook)
 ```
 
-Register the neighbor hooks before `dyn.run(batch)` as below. For training,
-set `Dataset(..., device=device)` and `TrainingStrategy(..., devices=[device])`;
-the strategy builds optimizers from the placed model (see the training note).
+Complete the pre-flight check below before `dyn.run(batch)`. For training,
+set `Dataset(..., device=device)` and `TrainingStrategy(..., devices=[device])`.
+The strategy builds optimizers from the placed model (see the training note).
 
 Keep the step loop on the GPU. Avoid `.item()`, `.cpu()`, `.tolist()`,
 `float(t)`, `print(t)`, `bool(t)`, a Python `if` on a tensor (including
@@ -144,27 +163,26 @@ for scratch test scripts too. Pass `device_type=device.type` there as well.
 Build `AtomicData` only at setup, to validate input. In loops, work on
 `Batch` tensors (see the data note, "Keep hot paths on `Batch`").
 
-### Two rules for batched dynamics
+### Batched dynamics pre-flight check
 
-Most failed dynamics scripts break one of these two rules. Details are in
+Before every `run()`, confirm both checks in one line. Do not run until both
+are true. Details are in
 [dynamics-optimization.md](references/dynamics-optimization.md).
 
-1. **Batch independent systems and run one pass.** Build one `Batch` with
-   `Batch.from_data_list(...)` and run one optimizer or integrator over it.
-   Do not loop over systems in Python, one run each. A plain engine stops
-   when all systems converge; wrap it in a `FusedStage` to retire each
-   system on its own.
-2. **Register the model's neighbor-list hooks before `run()`.** A model with a
-   cutoff needs its neighbor list rebuilt every step. Register
-   `model.make_neighbor_hooks()` on the dynamics (or the fused stage) before
-   the first step.
+1. **One batch, one engine or `FusedStage`.** Build one `Batch` with
+   `Batch.from_data_list(...)` for all independent systems. Do not run each
+   system in a Python loop. Use a `FusedStage` to retire each system on its
+   own when it converges.
+2. **Neighbor hooks registered.** Register every hook from
+   `model.make_neighbor_hooks()` on the engine or fused stage before the
+   first step. Models without a neighbor list return no hooks.
 
 ```python
 from nvalchemi.data import Batch
 from nvalchemi.dynamics import FIRE2, ConvergenceHook, FusedStage
 
 batch = Batch.from_data_list(data_list).to(device)  # many systems, one batch
-opt = FIRE2(model=model, dt=0.1, n_steps=200, device_type=device.type,
+opt = FIRE2(model=model, dt=0.1, n_steps=100, device_type=device.type,
             convergence_hook=ConvergenceHook.from_fmax(0.05))
 dyn = FusedStage(sub_stages=[(0, opt)], device_type=device.type)
 for hook in model.make_neighbor_hooks():      # BEFORE_COMPUTE hooks
@@ -175,22 +193,23 @@ with dyn:
 
 ### Route to a note
 
-A task can need more than one note. Read the note before you write code.
+Match the task to the routing table. If it spans notes, read each note named
+in the matching rows before you write code.
 
 | Task | Note |
 | --- | --- |
-| Build, batch, convert, or inspect atomic systems; field names; ASE input | [data.md](references/data.md) |
-| Write, read, or stream Zarr stores; DataLoader throughput | [data.md](references/data.md) |
+| Build, batch, convert, or inspect atomic systems, field names, ASE input | [data.md](references/data.md) |
+| Write, read, or stream Zarr stores, DataLoader throughput | [data.md](references/data.md) |
 | Load a pretrained model (MACE, AIMNet2, UMA, LJ, DFT-D3, Ewald, PME) | [models.md](references/models.md) |
-| Wrap a custom PyTorch model; combine models; outputs and embeddings | [models.md](references/models.md) |
+| Wrap a custom PyTorch model, combine models, outputs and embeddings | [models.md](references/models.md) |
 | Relax structures, run MD (NVE, NVT, NPT), chain stages, scans | [dynamics-optimization.md](references/dynamics-optimization.md) |
 | Built-in hooks: freezing, safety, logging, snapshots, convergence, timing | [dynamics-optimization.md](references/dynamics-optimization.md) |
-| Reaction paths and NEB; restraints and enhanced sampling | [dynamics-optimization.md](references/dynamics-optimization.md) |
+| Reaction paths and NEB, restraints and enhanced sampling | [dynamics-optimization.md](references/dynamics-optimization.md) |
 | Train from scratch, losses, checkpoints, resume, DDP | [training.md](references/training.md) |
-| Fine-tune a pretrained model; distill a teacher into a student | [training.md](references/training.md) |
-| Sample structures with a generative model; generate then relax | [generative-workflows.md](references/generative-workflows.md) |
+| Fine-tune a pretrained model, distill a teacher into a student | [training.md](references/training.md) |
+| Sample structures with a generative model, generate then relax | [generative-workflows.md](references/generative-workflows.md) |
 | Write a new hook, integrator, optimizer, loss, bias, or reporter | [composition-and-extension.md](references/composition-and-extension.md) |
-| Domain decomposition; dynamics stages on different GPUs; dashboards | [composition-and-extension.md](references/composition-and-extension.md) |
+| Domain decomposition, dynamics stages on different GPUs, dashboards | [composition-and-extension.md](references/composition-and-extension.md) |
 | Custom NEB force equation or spring policy | [dynamics-optimization.md](references/dynamics-optimization.md) |
 | Save and restore dynamics or sampling state, Hessians | [dynamics-optimization.md](references/dynamics-optimization.md), [models.md](references/models.md) |
 | Crystal structure prediction (the nvalchemi.csp package) | [generative-workflows.md](references/generative-workflows.md) |
@@ -211,26 +230,32 @@ Say which path you took and why, in one line, when you hand back the code.
 ### Workspace rules
 
 - Keep scratch files under the working folder you were given, for example in
-  a `scratch/` subfolder. Do not write elsewhere unless the user asks.
+  a scratch subfolder. Do not write elsewhere unless the user asks.
 - Do not delete files or folders with `rm -rf` or `rm -r`, even for caches or
   temporary folders. Leave `__pycache__`, Zarr scratch stores, and temporary
   folders in place. If a single file must go, name it with `rm -f <file>` and
-  say why.
-- Do not install, upgrade, or remove packages without asking.
+  say why. Ask first if the user has not granted delete permission.
+- Read only installed package source and linked docs and example pages.
+  Do not download source files, scripts, or wheels with `curl`, `wget`, or
+  `git`. Do not download code to run by any other means.
+- Do not print environment variables. Do not run `env` or `printenv`, or
+  dump os.environ. These can expose secrets in tool output.
+- Ask before you install, upgrade, or remove packages.
 
 ### Report the result
 
-In the final message, name the script you wrote, the toolkit components you
-used, and the measured result numbers with units. If the run failed or did
-not converge, say so and give the measured values; do not present a capped
-or failed run as a converged result.
+In the final message, name any script you wrote and the toolkit components
+you used. Report measured results with units only for work you ran. If you
+did not execute the work, say "Not executed" and why. Do not invent numbers.
+If the run failed or did not converge, say so and give the measured values.
+Do not present a capped or failed run as a converged result.
 
 ## Limitations
 
 - The notes track release 0.3.0. Older installs miss generative sampling,
   reaction paths, enhanced sampling, distillation, and other 0.3.0 APIs.
 - Multi-GPU and multi-node runs need a launcher (`torchrun` or Slurm). Write
-  the script and the launch command; do not start multi-GPU jobs unasked.
+  the script and the launch command. Do not start multi-GPU jobs unasked.
 - Model backends download checkpoints on first use. Offline machines need the
   checkpoint file in advance.
 
