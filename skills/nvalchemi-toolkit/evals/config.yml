@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # NVSkills CI runs the native Harbor tasks in evals/harbor/, one folder per
-# task. Those six tasks are the CI set; the other tasks in evals.json run in
+# task. Those nine tasks are the CI set; the other tasks in evals.json run in
 # the maintainers' own evaluation. Each task runs evals/setup_cpu.sh as its
 # environment healthcheck, with a 600 s budget, in both arms (with the skill
 # and the baseline), so they see the same environment. The script installs

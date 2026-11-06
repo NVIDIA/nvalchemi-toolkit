@@ -16,8 +16,9 @@
 
 SkillEvaluator runs this file in the verifier with ``grading.mode:
 default_plus_custom``, after its own judges. It reads the task's ``checks``
-list from ``entry.json``, runs them on the agent's final code and on the
-output of the agent's own runs, and reports five custom metrics:
+list from ``entry.json``, runs them on the agent's final code, on the
+output of the agent's own runs, and on the skill notes it opened (scope
+``reads``), and reports five custom metrics:
 
 ``batched``       all systems in one batch, no Python loop over systems
 ``device_aware``  the code picks cuda when a GPU exists, one device throughout
@@ -30,8 +31,10 @@ pass. A metric with no check in the task is left out (not applicable). The
 merged reward keeps SkillEvaluator's own ``overall``; the report combines
 the custom metrics with it (see the task-set report).
 
-The grader never runs agent code. ``run`` checks read the output of the
-agent's own commands from the trajectory. It also copies the agent's
+Checks marked ``needs_skill`` are skipped in the baseline arm (entry.json
+``has_skill`` false), so that arm is not marked down for skill files it
+never had. The grader never runs agent code. ``run`` checks read the output
+of the agent's own commands from the trajectory. It also copies the agent's
 workspace to ``<trial>/kept-workspace/`` for the GPU rerun (``gpu_check``),
 because Harbor deletes the workspace after grading.
 
@@ -48,6 +51,7 @@ import ast
 import json
 import os
 import re
+import shlex
 import shutil
 import sys
 from pathlib import Path
@@ -164,9 +168,79 @@ def _apply_update(old: str, body: str) -> str:
     return text
 
 
+# Commands that show a file's text. A grep or rg on a note shows the lines the
+# agent looked for, so it counts as a read too.
+_READ_VERB = re.compile(r"^(?:cat|sed|head|tail|less|more|nl|awk|grep|egrep|rg)$")
+READ_TOOLS = {"read", "read_file", "view", "open", "cat"}
+
+
+def _expand(name: str) -> list[str]:
+    """Expand one shell brace group: ``{data,models}`` -> data, models."""
+    if name.startswith("{") and name.endswith("}"):
+        return [n for n in name[1:-1].split(",") if n]
+    return [name]
+
+
+def _segments(cmd: str) -> list[list[str]]:
+    """Split a shell command into simple commands, respecting quotes."""
+    lexer = shlex.shlex(cmd, posix=True, punctuation_chars=";&|")
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    segments: list[list[str]] = [[]]
+    try:
+        for tok in lexer:
+            if tok and set(tok) <= set(";&|"):
+                segments.append([])
+            else:
+                segments[-1].append(tok)
+    except ValueError:  # unbalanced quotes: fall back to a plain split
+        segments = [seg.split() for seg in re.split(r"\|\||&&|[;|\n]", cmd)]
+    return [seg for seg in segments if seg]
+
+
+def command_reads(cmd: str, workdir: str = "") -> list[str]:
+    """Notes under ``references/`` that a shell command prints.
+
+    Counts ``cat``, ``sed``, ``head``, ``tail``, ``less``, ``grep`` and similar
+    on ``references/<note>.md``, including brace groups such as
+    ``references/{data,models}.md``, a shell variable set to a ``references``
+    folder (``S=.../references; cat $S/models.md``), and a bare ``<note>.md``
+    after a ``cd`` into ``references`` or with a ``workdir`` there.
+    """
+    found: list[str] = []
+    in_refs = workdir.rstrip("/").endswith("references")
+    ref_vars: set[str] = set()
+    for words in _segments(cmd.replace("\n", ";")):
+        assign = (
+            re.fullmatch(r"(\w+)=(\S*)", words[-1])
+            if words[0] in {words[-1], "export"}
+            else None
+        )
+        if assign:
+            if assign.group(2).rstrip("/").endswith("references"):
+                ref_vars.add(assign.group(1))
+            continue
+        if words[0] == "cd" and len(words) > 1:
+            in_refs = words[1].rstrip("/").endswith("references")
+            continue
+        if not _READ_VERB.match(words[0]):
+            continue
+        for arg in words[1:]:
+            for var in ref_vars:  # $S/models.md and ${S}/models.md
+                arg = re.sub(rf"^\$\{{?{var}\}}?/", "references/", arg)
+            m = re.fullmatch(r"(.*/)?(\{[\w,.-]+\}|[\w.-]+)\.md", arg)
+            if not m:
+                continue
+            head = (m.group(1) or "").rstrip("/")
+            if head.endswith("references") or (not head and in_refs):
+                found += [f"references/{n}.md" for n in _expand(m.group(2))]
+    return found
+
+
 def trajectory_evidence(traj: dict) -> dict:
-    """Return written files, commands, run output, and final message."""
+    """Return written files, commands, run output, notes read, and final message."""
     written: dict[str, str] = {}
+    reads: list[str] = []
     snippets: list[str] = []
     commands: list[str] = []
     outputs: list[str] = []
@@ -217,6 +291,9 @@ def trajectory_evidence(traj: dict) -> dict:
             if not isinstance(args, dict):
                 continue
             path = str(args.get("file_path") or args.get("path") or "")
+            name = str(call.get("function_name", "")).lower()
+            if path and name in READ_TOOLS:
+                reads.append(path)
             body = args.get("content")
             if path.endswith(".py") and isinstance(body, str):
                 written[path] = body
@@ -224,6 +301,7 @@ def trajectory_evidence(traj: dict) -> dict:
             if not cmd:
                 continue
             commands.append(cmd)
+            reads += command_reads(cmd, str(args.get("workdir") or ""))
             if re.search(r"(^|[\s;&|(/])python3?\b|\buv run\b", cmd) and not re.search(
                 r"python3?\s+-c\s+['\"]import\s+\w+;\s*print\(\w+\.__(version|file)__",
                 cmd,
@@ -247,6 +325,7 @@ def trajectory_evidence(traj: dict) -> dict:
         "snippets": snippets,
         "commands": commands,
         "outputs": outputs,
+        "reads": reads,
         "final": "\n\n".join(reply) or last_message,
     }
 
@@ -589,6 +668,8 @@ def _scope_text(scope: str, code: dict[str, str], ev: dict) -> str:
         return "\n".join(ev["outputs"])
     if scope == "final":
         return ev["final"]
+    if scope == "reads":
+        return "\n".join(ev.get("reads", []))
     if scope == "run":
         return "\n".join([*ev["outputs"], ev["final"]])
     if scope == "all":
@@ -649,11 +730,36 @@ def run_check(check: dict, code: dict[str, str], ev: dict) -> tuple[bool, str]:
     return ok, "; ".join(reason) or "ok"
 
 
+SKILL_NAME = "nvalchemi-toolkit"
+
+
+def skill_present(entry: dict) -> bool:
+    """True unless entry.json says this trial ran without this skill.
+
+    SkillEvaluator writes ``has_skill`` into entry.json: false in the
+    baseline arm. A run that installs a different skill under test names it
+    in ``expected_skill``. Offline runs without ``has_skill`` count as present.
+    """
+    if entry.get("has_skill") is False:
+        return False
+    return entry.get("expected_skill") in (None, SKILL_NAME)
+
+
 def grade(entry: dict, code: dict[str, str], ev: dict) -> dict:
-    """Run every check of ``entry`` and return metrics and details."""
+    """Run every check of ``entry`` and return metrics and details.
+
+    Checks marked ``"needs_skill": true`` (for example which notes the
+    agent read) are skipped when the skill is absent, so the baseline arm
+    is not marked down for files it never had.
+    """
     results = []
+    skipped = []
+    with_skill = skill_present(entry)
     for check in entry.get("checks", []):
         if check.get("kind") == "gpu":  # graded after the trial by gpu/gpu_check.py
+            continue
+        if check.get("needs_skill") and not with_skill:
+            skipped.append(check["id"])
             continue
         try:
             ok, reason = run_check(check, code, ev)
@@ -687,11 +793,22 @@ def grade(entry: dict, code: dict[str, str], ev: dict) -> dict:
         if m not in reward_metrics:
             reward_metrics[m] = 1.0
             details[m] = {"score": 1.0, "not_checked": True, "reason": "no check"}
+    for m in METRICS:  # say which checks the baseline arm skipped
+        ids = [
+            c["id"]
+            for c in entry.get("checks", [])
+            if c["id"] in skipped and c["metric"] == m
+        ]
+        if ids:
+            details[m]["reason"] += "; " + "; ".join(
+                f"{i}=not_checked (skill absent)" for i in ids
+            )
     return {
         "metrics": metrics,
         "reward_metrics": reward_metrics,
         "details": details,
         "checks": results,
+        "skipped_without_skill": skipped,
         "code_files": sorted(code),
     }
 
@@ -774,7 +891,14 @@ def offline_main(argv: list[str]) -> int:
     ev = (
         trajectory_evidence(_load(Path(a.trajectory)))
         if a.trajectory
-        else {"written": {}, "snippets": [], "commands": [], "outputs": [], "final": ""}
+        else {
+            "written": {},
+            "snippets": [],
+            "commands": [],
+            "outputs": [],
+            "reads": [],
+            "final": "",
+        }
     )
     if a.output:
         ev["outputs"].append(Path(a.output).read_text(errors="replace"))

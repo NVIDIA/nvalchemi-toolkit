@@ -16,7 +16,8 @@
         "Batching: all systems are in one Batch (built with Batch.from_data_list, interpolate_paths, or a toolkit DataLoader) and one engine, strategy, or model call runs over that batch; there is no Python loop that runs the model or an engine once per system.",
         "Device: the code picks cuda when a GPU exists (for example torch.device('cuda' if torch.cuda.is_available() else 'cpu')) and puts the model, the batch, and any optimizer on that one device; it does not pin cpu.",
         "No avoidable host-device syncs in the step loop: inside a hand-written step loop or a hook that fires every step there is no .item(), .cpu(), .tolist(), float(tensor), print(tensor), or Python if on a tensor; syncs at setup, in a hook that fires every N > 1 steps, at a checkpoint, and in the final report are fine.",
-        "Reuse: the agent uses the existing toolkit component for each part named in the expected answer and writes no hand-written replacement for any of them."
+        "Reuse: the agent uses the existing toolkit component for each part named in the expected answer and writes no hand-written replacement for any of them.",
+        "Routing, only when task notes are installed: before writing the script the agent opens both the data note (references/data.md) and the dynamics and optimization note (references/dynamics-optimization.md). When no such notes exist in the environment, this item is met."
       ],
       "expected_skill": "nvalchemi-toolkit",
       "gpu": false,
@@ -137,6 +138,18 @@
           "pattern": "(?:V0|V\u2080|V_0|equilibrium volume)\\D{0,25}?(\\d{2,}\\.?\\d*)",
           "expect": 1204.5,
           "tol": 12.045
+        },
+        {
+          "id": "reads-notes",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "With the skill installed, the agent opened references/data.md and references/dynamics-optimization.md (cat, sed, head, grep or a Read call); skipped in the baseline arm.",
+          "scope": "reads",
+          "needs_skill": true,
+          "require": [
+            "references/data\\.md",
+            "references/dynamics-optimization\\.md"
+          ]
         }
       ]
     },
@@ -570,6 +583,278 @@
       ]
     },
     {
+      "id": "imp-01",
+      "name": "Batched relaxation of three argon clusters",
+      "track": "end-user",
+      "area": "Implicit",
+      "prompt": "argon_clusters.xyz holds three 27-atom argon clusters. I want all three relaxed together to a maximum force below 0.05 eV/A, with at most 200 optimizer steps, using a Lennard-Jones potential (epsilon 0.0104 eV, sigma 3.4 A, cutoff 8.5 A). Later I will run thousands of these on a GPU, so treat them as one batch on the device and use the batched atomistic simulation library installed in this environment, not a loop of ASE optimizers. This machine has no GPU, so check it here on CPU, but write it so it uses a GPU when one is there. Print the final energy and maximum force of each cluster. When you are done, tell me the name of the script you wrote and which library classes and functions it uses.",
+      "expected_output": "Optimal pattern: find the installed batched simulation library (nvalchemi) and use it. Read the three frames with ase.io.read(path, index=':'), convert each with AtomicData.from_atoms and add zero forces and energy, and put them in one Batch.from_data_list(..., device=device), where device is cuda when available. LennardJonesModelWrapper(epsilon=0.0104, sigma=3.4, cutoff=8.5) on the same device. One FIRE2 (or LBFGS) with n_steps at most 200 and ConvergenceHook.from_fmax(0.05), inside a FusedStage so each cluster stops on its own, with the model's neighbor hooks registered; one run. Read the per-cluster energy and the per-cluster max force once after the run. Reference run (FIRE2, dt 0.1): energies about -0.687, -0.688 and -1.072 eV, max forces below 0.05 eV/A; other optimizer settings stop at slightly different energies within the force threshold. Wrong turns: ase.optimize in a Python loop over clusters; one toolkit optimizer run per cluster; hand-written FIRE or gradient descent; device pinned to cpu; neighbor hooks not registered; more than 200 steps.",
+      "assertions": [
+        "The agent uses the batched simulation library installed in the environment (the toolkit's AtomicData, Batch, LJ model wrapper and optimizer), not ASE optimizers or a hand-written minimizer.",
+        "All three clusters are relaxed in one optimizer run over one Batch, with a per-cluster convergence check at fmax 0.05 eV/A (ConvergenceHook inside a FusedStage, or equivalent) and at most 200 steps.",
+        "The Lennard-Jones model uses epsilon 0.0104 eV, sigma 3.4 A and cutoff 8.5 A, and its neighbor-list hooks are registered before the run.",
+        "The run prints a final energy and maximum force for each of the three clusters, read once after the run, and the forces are below 0.05 eV/A or the agent says which cluster did not converge.",
+        "Batching: all systems are in one Batch (built with Batch.from_data_list, interpolate_paths, or a toolkit DataLoader) and one engine, strategy, or model call runs over that batch; there is no Python loop that runs the model or an engine once per system.",
+        "Device: the code picks cuda when a GPU exists (for example torch.device('cuda' if torch.cuda.is_available() else 'cpu')) and puts the model, the batch, and any optimizer on that one device; it does not pin cpu.",
+        "No avoidable host-device syncs in the step loop: inside a hand-written step loop or a hook that fires every step there is no .item(), .cpu(), .tolist(), float(tensor), print(tensor), or Python if on a tensor; syncs at setup, in a hook that fires every N > 1 steps, at a checkpoint, and in the final report are fine.",
+        "Reuse: the agent uses the existing toolkit component for each part named in the expected answer and writes no hand-written replacement for any of them."
+      ],
+      "expected_skill": "nvalchemi-toolkit",
+      "gpu": false,
+      "source": [
+        "docs/userguide/dynamics_simulations.md",
+        "examples/basic/02_geometry_optimization.py",
+        "examples/basic/03_ase_integration.py",
+        "nvalchemi/models/lj.py",
+        "nvalchemi/data/atomic_data.py"
+      ],
+      "files": [
+        "files/argon_clusters.xyz"
+      ],
+      "checks": [
+        {
+          "id": "from-atoms",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "Structures are converted with AtomicData.from_atoms.",
+          "require": [
+            "AtomicData\\.from_atoms\\(|\\.from_atoms\\("
+          ]
+        },
+        {
+          "id": "one-batch",
+          "metric": "batched",
+          "kind": "static",
+          "description": "One Batch.from_data_list over the scan.",
+          "require": [
+            "Batch\\.from_data_list\\("
+          ]
+        },
+        {
+          "id": "no-system-loop",
+          "metric": "batched",
+          "kind": "static",
+          "description": "No Python for/while loop whose body runs an engine or model (.run(, .step(, model(, .sample( ) once per system.",
+          "analyser": "no_system_loop",
+          "calls": [
+            "\\.run\\(",
+            "\\.step\\(",
+            "\\bmodel\\(",
+            "\\.sample\\("
+          ]
+        },
+        {
+          "id": "toolkit-optimizer",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "Toolkit optimizer with ConvergenceHook; no ASE optimizer.",
+          "require": [
+            "\\b(FIRE2|LBFGS|FIRE)\\(",
+            "ConvergenceHook",
+            "(?m)^\\s*(from|import)\\s+nvalchemi\\b"
+          ],
+          "forbid": [
+            "ase\\.optimize",
+            "\\b(BFGS|BFGSLineSearch|MDMin|GPMin)\\("
+          ]
+        },
+        {
+          "id": "bounds",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "fmax 0.05 and at most 200 steps.",
+          "require": [
+            "0\\.05"
+          ],
+          "forbid": [
+            "n_steps\\s*=\\s*(?:20[1-9]|2[1-9]\\d|[3-9]\\d{2}|\\d{4,})\\b",
+            "\\.run\\([^)]*n_steps\\s*=\\s*(?:20[1-9]|2[1-9]\\d|[3-9]\\d{2}|\\d{4,})\\b"
+          ]
+        },
+        {
+          "id": "neighbor-hooks",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "Neighbor-list hooks come from model.make_neighbor_hooks() or NeighborListHook.",
+          "require": [
+            "make_neighbor_hooks\\(|NeighborListHook\\("
+          ]
+        },
+        {
+          "id": "neighbor-hook-stage",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "Every NeighborListHook(...) built by hand passes stage= (a hook without a stage raises TypeError at registration).",
+          "analyser": "calls_have_kw",
+          "func": "NeighborListHook",
+          "kw": "stage"
+        },
+        {
+          "id": "device-aware",
+          "metric": "device_aware",
+          "kind": "static",
+          "description": "Code picks cuda when available (cuda.is_available or resolve_device) and pins cpu nowhere (no device='cpu', torch.device('cpu') or DEVICE='cpu' outside a cuda conditional).",
+          "analyser": "device_aware"
+        },
+        {
+          "id": "no-loop-syncs",
+          "metric": "loop_syncs",
+          "kind": "static",
+          "description": "No .item()/.cpu()/.tolist()/.numpy()/float(t)/int(t)/bool(t)/torch.equal or branch on .any()/.all() inside a hook method (__call__, pre_update, post_update) of a class without frequency > 1, or inside a loop that calls .step()/.run()/.backward(). Frequency-gated code does not count.",
+          "analyser": "no_loop_syncs",
+          "max": 0
+        },
+        {
+          "id": "cluster2-energy",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "Run output shows the third cluster near -1.07 eV (its relaxed energy at fmax 0.05).",
+          "scope": "run",
+          "pattern": "(-1\\.0\\d+)",
+          "expect": -1.072,
+          "tol": 0.03
+        }
+      ]
+    },
+    {
+      "id": "imp-02",
+      "name": "NVT MD of an argon crystal with a Zarr trajectory",
+      "track": "end-user",
+      "area": "Implicit",
+      "prompt": "argon_fcc32.extxyz is a 32-atom FCC argon crystal in a periodic box. Run Langevin NVT molecular dynamics at 40 K (friction 0.01 /fs, random seed 0) for 200 steps of 2 fs, starting from Maxwell-Boltzmann velocities at 40 K, with a Lennard-Jones potential (epsilon 0.0104 eV, sigma 3.4 A, cutoff 8.5 A). Save a frame every 20 steps to a Zarr store on disk so I can stream it into a training set later, then report how many frames the store holds. The GPU-batched atomistic simulation package in this environment is what my group uses, so build on it rather than writing an integrator or using ASE's MD. This machine has no GPU, so check it here on CPU, but write it so it uses a GPU when one is there. When you are done, tell me the name of the script you wrote and which library classes and functions it uses.",
+      "expected_output": "Optimal pattern: find the installed package (nvalchemi) and use it. AtomicData.from_atoms on the crystal with zero forces, energy and velocities; a one-graph Batch on the chosen device (cuda when available); velocities from initialize_velocities(..., 40 K, random_seed=0). LennardJonesModelWrapper(epsilon=0.0104, sigma=3.4, cutoff=8.5) on the same device. NVTLangevin(model, dt=2.0, temperature=40.0, friction=0.01, random_seed=0, n_steps=200) with SnapshotHook(sink=ZarrData(store), frequency=20) and the model's neighbor hooks; one run. The store then holds 10 frames (steps 20 to 200), which len(sink) or a read-back confirms. Wrong turns: ase.md.Langevin; a hand-written integrator or step loop; writing frames with raw zarr, pickle or one file per frame; a snapshot every step; more than 200 steps; device pinned to cpu.",
+      "assertions": [
+        "The agent uses the installed batched simulation package (the toolkit's NVTLangevin, LJ model wrapper and data classes), not ase.md or a hand-written integrator.",
+        "NVTLangevin runs at 40 K with friction 0.01, random seed 0, dt 2 fs and 200 steps, starting from velocities drawn at 40 K (initialize_velocities or equivalent toolkit call).",
+        "Frames go to a Zarr store through the toolkit's SnapshotHook with a ZarrData sink every 20 steps, not raw zarr arrays, pickle, or one file per frame.",
+        "The agent reports that the store holds 10 frames, from a count or read-back after the run.",
+        "Batching: all systems are in one Batch (built with Batch.from_data_list, interpolate_paths, or a toolkit DataLoader) and one engine, strategy, or model call runs over that batch; there is no Python loop that runs the model or an engine once per system.",
+        "Device: the code picks cuda when a GPU exists (for example torch.device('cuda' if torch.cuda.is_available() else 'cpu')) and puts the model, the batch, and any optimizer on that one device; it does not pin cpu.",
+        "No avoidable host-device syncs in the step loop: inside a hand-written step loop or a hook that fires every step there is no .item(), .cpu(), .tolist(), float(tensor), print(tensor), or Python if on a tensor; syncs at setup, in a hook that fires every N > 1 steps, at a checkpoint, and in the final report are fine.",
+        "Reuse: the agent uses the existing toolkit component for each part named in the expected answer and writes no hand-written replacement for any of them."
+      ],
+      "expected_skill": "nvalchemi-toolkit",
+      "gpu": false,
+      "source": [
+        "docs/userguide/dynamics_simulations.md",
+        "docs/userguide/dynamics_sinks.md",
+        "examples/basic/05_nvt_langevin.py",
+        "examples/intermediate/02_trajectory_zarr_io.py",
+        "nvalchemi/dynamics/hooks/snapshot.py",
+        "nvalchemi/dynamics/sinks.py"
+      ],
+      "files": [
+        "files/argon_fcc32.extxyz"
+      ],
+      "checks": [
+        {
+          "id": "toolkit-nvt",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "Toolkit NVTLangevin; no ASE MD or hand-written velocity update.",
+          "require": [
+            "\\bNVTLangevin\\(",
+            "(?m)^\\s*(from|import)\\s+nvalchemi\\b"
+          ],
+          "forbid": [
+            "ase\\.md",
+            "velocities\\s*[+-]?=\\s*[^=\\n]*forces"
+          ]
+        },
+        {
+          "id": "zarr-snapshots",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "SnapshotHook with a ZarrData sink; no raw zarr or pickle.",
+          "require": [
+            "\\bSnapshotHook\\(",
+            "\\bZarrData\\("
+          ],
+          "forbid": [
+            "zarr\\.(open|create|group|array)\\(",
+            "\\bpickle\\."
+          ]
+        },
+        {
+          "id": "settings",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "40 K, friction 0.01, dt 2, 200 steps, snapshots every 20.",
+          "require": [
+            "\\b40(?:\\.0*)?\\b",
+            "0\\.01\\b",
+            "dt\\s*=\\s*2(?:\\.0*)?\\b",
+            "\\b200\\b",
+            "frequency\\s*=\\s*20\\b"
+          ],
+          "forbid": [
+            "n_steps\\s*=\\s*(?:20[1-9]|2[1-9]\\d|[3-9]\\d{2}|\\d{4,})\\b"
+          ]
+        },
+        {
+          "id": "thermal-start",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "Velocities drawn at 40 K with the toolkit's initialize_velocities.",
+          "require": [
+            "initialize_velocities\\("
+          ]
+        },
+        {
+          "id": "from-atoms",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "Structures are converted with AtomicData.from_atoms.",
+          "require": [
+            "AtomicData\\.from_atoms\\(|\\.from_atoms\\("
+          ]
+        },
+        {
+          "id": "neighbor-hooks",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "Neighbor-list hooks come from model.make_neighbor_hooks() or NeighborListHook.",
+          "require": [
+            "make_neighbor_hooks\\(|NeighborListHook\\("
+          ]
+        },
+        {
+          "id": "neighbor-hook-stage",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "Every NeighborListHook(...) built by hand passes stage= (a hook without a stage raises TypeError at registration).",
+          "analyser": "calls_have_kw",
+          "func": "NeighborListHook",
+          "kw": "stage"
+        },
+        {
+          "id": "device-aware",
+          "metric": "device_aware",
+          "kind": "static",
+          "description": "Code picks cuda when available (cuda.is_available or resolve_device) and pins cpu nowhere (no device='cpu', torch.device('cpu') or DEVICE='cpu' outside a cuda conditional).",
+          "analyser": "device_aware"
+        },
+        {
+          "id": "no-loop-syncs",
+          "metric": "loop_syncs",
+          "kind": "static",
+          "description": "No .item()/.cpu()/.tolist()/.numpy()/float(t)/int(t)/bool(t)/torch.equal or branch on .any()/.all() inside a hook method (__call__, pre_update, post_update) of a class without frequency > 1, or inside a loop that calls .step()/.run()/.backward(). Frequency-gated code does not count.",
+          "analyser": "no_loop_syncs",
+          "max": 0
+        },
+        {
+          "id": "ten-frames",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "Run output reports 10 frames in the store.",
+          "scope": "run",
+          "require": [
+            "(?i)\\b10\\s+(?:frames|snapshots|samples|entries|graphs)\\b|(?:frames|snapshots|samples|len\\w*)\\W{0,4}\\s*[:=]?\\s*10\\b"
+          ]
+        }
+      ]
+    },
+    {
       "id": "neg-01",
       "name": "Cu slab relaxation with ASE BFGS and EMT",
       "track": "end-user",
@@ -635,6 +920,92 @@
           "pattern": "\\b(7\\.16\\d*)",
           "expect": 7.1674,
           "tol": 0.002
+        }
+      ]
+    },
+    {
+      "id": "neg-03",
+      "name": "Water box NVT with OpenMM",
+      "track": "end-user",
+      "area": "Negative",
+      "prompt": "I have a small water box in water.pdb. Run 10 ps of NVT MD at 300 K with OpenMM and save the trajectory.",
+      "expected_output": "An OpenMM script: PDBFile('water.pdb'), ForceField('amber14-all.xml', 'amber14/tip3p.xml') or another water model, createSystem with PME (the box is 2.4 nm, so a 1.0 nm cutoff fits) and HBonds constraints, LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 2*femtoseconds), Simulation, minimizeEnergy, setVelocitiesToTemperature(300*kelvin), a DCDReporter or PDBReporter for the trajectory, and step(5000) for 10 ps at 2 fs (or the matching count for another timestep). OpenMM is not installed in this environment and the agent may not install packages unasked, so the right reply delivers the script, says it was not run because OpenMM is missing, and gives the install and launch commands for the user to run (for example conda install -c conda-forge openmm, then python run_md.py). If OpenMM turns out to be importable, running it is fine. Wrong turns: rewriting the job in nvalchemi or ASE because those are installed; installing OpenMM without asking; reporting a trajectory or energies that were never computed; a run length other than 10 ps.",
+      "assertions": [
+        "The agent's code and shell commands never import nvalchemi or any nvalchemi.* submodule, and it does not switch the job to ASE MD or another package because those are installed.",
+        "The delivered script uses OpenMM end to end: PDBFile reads water.pdb, a ForceField with a water model builds the System, a Langevin (or other NVT) integrator holds 300 K, and a reporter writes the trajectory to a file.",
+        "The run length is 10 ps: the step count times the timestep gives 10 ps (for example 5000 steps of 2 fs).",
+        "The agent does not install OpenMM or any other package on its own; if OpenMM is missing it says so and gives the user the install and launch commands instead.",
+        "The agent does not claim a finished run, trajectory file, temperatures or energies that it did not produce in this environment."
+      ],
+      "expected_skill": null,
+      "gpu": false,
+      "source": [
+        "docs/userguide/agent_skills.md"
+      ],
+      "files": [
+        "files/water.pdb"
+      ],
+      "checks": [
+        {
+          "id": "no-nvalchemi",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "No nvalchemi import in code or commands.",
+          "scope": "all",
+          "forbid": [
+            "(?m)^\\s*(from|import)\\s+nvalchemi\\b",
+            "import nvalchemi\\b"
+          ]
+        },
+        {
+          "id": "openmm-path",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "OpenMM script: PDBFile, ForceField, an integrator, a Simulation, a trajectory reporter; no ASE MD.",
+          "require": [
+            "(?m)^\\s*(from|import)\\s+(openmm|simtk\\.openmm)\\b",
+            "\\bPDBFile\\(",
+            "\\bForceField\\(",
+            "Integrator\\(",
+            "\\bSimulation\\(",
+            "(DCD|PDB|XTC|NetCDF|HDF5)Reporter\\("
+          ],
+          "forbid": [
+            "ase\\.md"
+          ]
+        },
+        {
+          "id": "ten-ps",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "300 K and a 10 ps run (5000 steps of 2 fs, 10000 of 1 fs, 2500 of 4 fs, or 10 ps written in units).",
+          "require": [
+            "\\b300\\b",
+            "\\b(?:5000|5_000|10000|10_000|2500|2_500)\\b|\\b10\\s*\\*\\s*pico|\\b10\\s*\\*\\s*unit\\.pico|10\\s*/\\s*0\\.002|10\\.0?\\s*\\*\\s*picoseconds"
+          ]
+        },
+        {
+          "id": "no-installs",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "No package install by the agent (pip, uv, conda, mamba).",
+          "scope": "commands",
+          "forbid": [
+            "\\b(?:pip3?|uv\\s+pip|conda|mamba|micromamba)\\s+install\\b",
+            "\\buv\\s+(?:sync|add)\\b",
+            "\\buv\\s+run\\b[^\\n]*--with\\b",
+            "\\bpython3?\\s+-m\\s+pip\\s+install\\b"
+          ]
+        },
+        {
+          "id": "honest-status",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "The reply says the run was not executed or that OpenMM is missing, or the run output shows OpenMM steps.",
+          "scope": "run",
+          "require": [
+            "(?i)not (?:been )?(?:run|executed|installed|available)|isn't installed|is not installed|n't (?:run|execute)|not executed|No module named '?openmm|could not (?:run|import)|cannot (?:run|import)|can't (?:run|import)|unable to (?:run|import)|\\b5000\\b[^\\n]{0,40}(?:K|kelvin|temperature)|#\"Step\""
+          ]
         }
       ]
     },
@@ -1326,7 +1697,8 @@
         "Batching: all systems are in one Batch (built with Batch.from_data_list, interpolate_paths, or a toolkit DataLoader) and one engine, strategy, or model call runs over that batch; there is no Python loop that runs the model or an engine once per system.",
         "Device: the code picks cuda when a GPU exists (for example torch.device('cuda' if torch.cuda.is_available() else 'cpu')) and puts the model, the batch, and any optimizer on that one device; it does not pin cpu.",
         "No avoidable host-device syncs in the step loop: inside a hand-written step loop or a hook that fires every step there is no .item(), .cpu(), .tolist(), float(tensor), print(tensor), or Python if on a tensor; syncs at setup, in a hook that fires every N > 1 steps, at a checkpoint, and in the final report are fine.",
-        "Reuse: the agent uses the existing toolkit component for each part named in the expected answer and writes no hand-written replacement for any of them."
+        "Reuse: the agent uses the existing toolkit component for each part named in the expected answer and writes no hand-written replacement for any of them.",
+        "Routing, only when task notes are installed: before writing the script the agent opens both the training note (references/training.md) and the models note (references/models.md). When no such notes exist in the environment, this item is met."
       ],
       "expected_skill": "nvalchemi-toolkit",
       "gpu": false,
@@ -1469,6 +1841,18 @@
           "scope": "final",
           "require": [
             "python3?\\s+(-\\S+\\s+)*\\S+\\.py\\b|uv run\\s+\\S*\\s*\\S+\\.py\\b"
+          ]
+        },
+        {
+          "id": "reads-notes",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "With the skill installed, the agent opened references/training.md and references/models.md (cat, sed, head, grep or a Read call); skipped in the baseline arm.",
+          "scope": "reads",
+          "needs_skill": true,
+          "require": [
+            "references/training\\.md",
+            "references/models\\.md"
           ]
         }
       ]
