@@ -1,11 +1,16 @@
 ---
 name: nvalchemi-toolkit
 description: >-
-  Build and change NVIDIA ALCHEMI Toolkit workflows: atomistic data, model
-  wrapping, molecular dynamics and optimization, training and fine-tuning,
-  generative workflows, and custom extensions. Use when writing or editing
-  code that imports nvalchemi. Not for ALCHEMI Toolkit-Ops kernel work,
-  other simulation packages without nvalchemi, or plain PyTorch questions.
+  Build and change NVIDIA ALCHEMI Toolkit (nvalchemi) workflows for atomistic
+  simulation and machine-learned interatomic potentials (MLIPs). Use for
+  batched structure relaxation, molecular dynamics, reaction paths, training
+  or fine-tuning an MLIP, atomistic datasets in Zarr, generative structure
+  workflows, model wrapping, and custom hooks or integrators, with the ALCHEMI
+  Toolkit (nvalchemi), or when the user asks for batched GPU atomistic
+  simulation and nvalchemi is installed or acceptable. Not for other
+  simulation packages the user asked for (ASE-only, OpenMM, LAMMPS, GROMACS)
+  when the request does not involve nvalchemi, ALCHEMI Toolkit-Ops
+  (nvalchemiops) kernel work, or plain PyTorch questions.
 license: Apache-2.0
 compatibility: >-
   Runs Python and shell commands to inspect the installed nvalchemi package
@@ -28,16 +33,17 @@ the full details.
 ## Purpose and scope
 
 Use it when the code imports `nvalchemi`, or when the user asks for a workflow
-that the toolkit covers: `AtomicData` and `Batch`, Zarr storage, model
+that the toolkit covers, including batched GPU simulation where `nvalchemi`
+is installed or acceptable: `AtomicData` and `Batch`, Zarr storage, model
 wrappers, relaxation and MD, reaction paths, enhanced sampling, training,
 fine-tuning, distillation, generative sampling, or a custom hook, integrator,
 loss, or reporter.
 
 Do not use it when:
 
-- The task is plain ASE, LAMMPS, OpenMM, or another package, and the user did
-  not ask for `nvalchemi`. Solve it with that package and do not import
-  `nvalchemi`.
+- The task is plain ASE, OpenMM, LAMMPS, GROMACS, or another package, and
+  the user did not ask for `nvalchemi`. Solve it with that package and do not
+  import `nvalchemi`.
 - The task is a Warp or CUDA kernel inside ALCHEMI Toolkit-Ops
   (`nvalchemiops`). That is a different package with its own rules.
 - The question is general PyTorch with no atomistic workflow.
