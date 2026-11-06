@@ -368,20 +368,20 @@
       "name": "Reaction barrier with NEB and AIMNet2",
       "track": "end-user",
       "area": "Dynamics (MEP)",
-      "prompt": "I want the energy barrier for the HCN <-> HNC isomerization. The reactant and product geometries are in input/hcn_reactant.extxyz and input/hcn_product.extxyz (atom order H, C, N; positions in angstrom; the AIMNet2 checkpoint path is in the environment variable $AIMNET2_CKPT). Set up a NEB path with 7 images between them, start from an IDPP-relaxed initial path, and run climbing-image NEB with the AIMNet2 potential, staying within 50 optimization steps per stage and converging the forces to 0.05 eV/A. This machine has a GPU: run the calculation on it and report the forward barrier (HCN to the transition state) in eV, and whether the NEB converged. When you are done, tell me the name of the script you wrote and which toolkit classes and functions it uses.",
-      "expected_output": "Optimal pattern (as in examples/advanced/11_batched_neb.py): both endpoints via AtomicData.from_atoms with charge=torch.zeros(1, 1), each in a one-graph Batch on cuda; band = interpolate_paths(initial, final, num_images=7); IDPP on a clone: prepare_idpp_targets(band.clone()), zero energy/forces/velocities, NEB(model=IDPPModel(), fmax=0.1, n_steps<=50).run(...); then a fresh band = band.clone() with positions.copy_(idpp_band.positions) and fresh zero energy, forces, and velocities (no IDPP status, targets, or optimizer state). model = AIMNet2Wrapper.from_checkpoint(os.environ['AIMNET2_CKPT'], device='cuda'); NEB(model=model, spring=0.1, fmax=0.05, n_steps=100, climbing=ClimbingImageConfig(mode='after_regular', regular_fmax=0.2, max_regular_steps=50, max_climbing_steps=50), diagnostics_log_path='neb.csv').run(band): n_steps caps the whole run, and max_regular_steps and max_climbing_steps cap each stage at 50. Switching to the climbing image early (regular_fmax 0.5 or more) makes the climbing stage oscillate: in a 300-step test it never converged, and a 50-step cap on n_steps alone ends with fmax above 2 eV/A. NEB builds the neighbor hooks itself. After the run the script reads, once: the forward barrier (highest interior energy minus the HCN endpoint), which equals the last energy_barrier row of the diagnostics CSV because HCN is the lower endpoint; the final fmax; and converged true or false. Reference run (AIMNet2-rxn checkpoint, CPU): converged after 93 steps in total, fmax 0.048 eV/A, forward barrier 1.634 eV. If a run does not converge, the answer says so with its fmax instead of presenting the number as the barrier. No per-step host reads in agent code (0 agent syncs per step in gpu_check). Wrong turns: ASE NEB with an ASE calculator per image; hand-placed images; IDPP on the same object later used for the model NEB; no climbing image; a 50-step cap on n_steps with climbing switched on at regular_fmax 0.5; reporting the reverse barrier or an unconverged barrier as the answer; running on cpu; a raw AIMNet2Calculator called outside NEB.",
+      "prompt": "I want the energy barrier for the HCN <-> HNC isomerization. The reactant and product geometries are in input/hcn_reactant.extxyz and input/hcn_product.extxyz (atom order H, C, N; positions in angstrom; the AIMNet2 checkpoint path is in the environment variable $AIMNET2_CKPT). Set up a NEB path with 7 images between them, start from an IDPP-relaxed initial path, and run climbing-image NEB with the AIMNet2 potential, staying within 50 optimization steps per stage and converging the forces to 0.05 eV/A. This machine has no GPU; I will run the calculation on a GPU machine. Write the script so it uses the GPU when one is present, and give me the command to launch it there. When it runs, the script should report the forward barrier (HCN to the transition state) in eV, the final fmax, and whether the NEB converged. You may run a short CPU check here (a few steps) to make sure the script runs, but do not report GPU results you have not measured. When you are done, tell me the name of the script you wrote and which toolkit classes and functions it uses.",
+      "expected_output": "Optimal pattern (as in examples/advanced/11_batched_neb.py): device = cuda if torch.cuda.is_available() else cpu, chosen once; both endpoints via AtomicData.from_atoms with charge=torch.zeros(1, 1), each in a one-graph Batch on that device; band = interpolate_paths(initial, final, num_images=7); IDPP on a clone: prepare_idpp_targets(band.clone()), zero energy/forces/velocities, NEB(model=IDPPModel(), fmax=0.1, n_steps<=50).run(...); then a fresh band = band.clone() with positions.copy_(idpp_band.positions) and fresh zero energy, forces, and velocities (no IDPP status, targets, or optimizer state). model = AIMNet2Wrapper.from_checkpoint(os.environ['AIMNET2_CKPT'], device=device); NEB(model=model, spring=0.1, fmax=0.05, n_steps=100, climbing=ClimbingImageConfig(mode='after_regular', regular_fmax=0.2, max_regular_steps=50, max_climbing_steps=50), diagnostics_log_path='neb.csv').run(band): n_steps caps the whole run, and max_regular_steps and max_climbing_steps cap each stage at 50. Switching to the climbing image early (regular_fmax 0.5 or more) makes the climbing stage oscillate: in a 300-step test it never converged, and a 50-step cap on n_steps alone ends with fmax above 2 eV/A. NEB builds the neighbor hooks itself. After the run the script reads, once: the forward barrier (highest interior energy minus the HCN endpoint), which equals the last energy_barrier row of the diagnostics CSV because HCN is the lower endpoint; the final fmax; and converged true or false; an unconverged run is reported as unconverged with its fmax, not as the barrier. A step-count override for the smoke test (an argument or environment variable) is fine as long as the default keeps the caps above. GPU readiness (graded from the code): the device is picked once with cuda when available and never pinned to cpu; the model, the band Batch, and the NEB run on that one device; the whole band is one Batch in one NEB per stage; no .item(), .cpu(), float(tensor), print(tensor), or tensor branch in agent code that runs every step; any progress hook fires every N > 1 steps with one host read per firing. With that, the expected GPU behaviour is one batched model call per NEB step and no agent-side host syncs in the step loop. What the CPU check can confirm: the script imports, loads the checkpoint, builds the band, runs IDPP and a few model NEB steps without error, writes the diagnostics CSV, and takes the cpu branch of the device choice. It cannot confirm convergence, the barrier, or GPU speed, and the answer must say the GPU run was not executed here and present the CPU run only as a smoke test. The judge must NOT require a barrier value, a step count, or convergence in the answer; the full run was not made here. Wrong turns: ASE NEB with an ASE calculator per image; hand-placed images; IDPP on the same object later used for the model NEB; no climbing image; a 50-step cap on n_steps with climbing switched on at regular_fmax 0.5; device hard-coded to cpu; a raw AIMNet2Calculator called outside NEB; presenting a smoke-test number as the barrier or claiming GPU results that were not measured.",
       "assertions": [
-        "The band is built with interpolate_paths(initial, final, num_images=7) and refined with IDPP (prepare_idpp_targets on a clone plus NEB(model=IDPPModel(), ...)) before the AIMNet2 NEB.",
-        "The AIMNet2 NEB starts from a fresh band that carries only the IDPP positions (no IDPP status, targets, or optimizer state), with zero energy, forces, and velocities re-attached.",
+        "The band is built with interpolate_paths(initial, final, num_images=7) and refined with IDPP (prepare_idpp_targets on a clone plus NEB(model=IDPPModel(), ...)), and the AIMNet2 NEB starts from a fresh band that carries only the IDPP positions (no IDPP status, targets, or optimizer state), with zero energy, forces, and velocities re-attached.",
         "AIMNet2 is loaded as a toolkit model from $AIMNET2_CKPT (AIMNet2Wrapper.from_checkpoint, or a BaseModelMixin wrapper as in the batched NEB example) and run inside the toolkit NEB with ClimbingImageConfig; not ASE's NEB.",
-        "Each NEB stage is capped at 50 steps, and the answer reports the forward barrier (HCN to the transition state) in eV, the final fmax, and whether the NEB converged to 0.05 eV/A; an unconverged run is reported as unconverged.",
+        "Bounded run: each NEB stage is capped at 50 steps with fmax 0.05 eV/A by default, and the script reads the forward barrier (HCN to the transition state, eV), the final fmax, and convergence once after the run, reporting an unconverged run as unconverged; any progress hook fires every N > 1 steps with one host read per firing.",
+        "Honest reporting: the answer gives the script name and the command that launches it on the GPU machine, states that the GPU run was not executed here, reports any CPU run only as a smoke test, and claims no GPU result, timing, or barrier it did not measure.",
         "Batching: all systems are in one Batch (built with Batch.from_data_list, interpolate_paths, or a toolkit DataLoader) and one engine, strategy, or model call runs over that batch; there is no Python loop that runs the model or an engine once per system.",
-        "GPU run: the agent runs the calculation on the GPU, and the model, the batch, and any optimizer are on cuda.",
+        "Device: the code picks cuda when a GPU exists (for example torch.device('cuda' if torch.cuda.is_available() else 'cpu')) and puts the model, the batch, and any optimizer on that one device; it does not pin cpu.",
         "No avoidable host-device syncs in the step loop: inside a hand-written step loop or a hook that fires every step there is no .item(), .cpu(), .tolist(), float(tensor), print(tensor), or Python if on a tensor; syncs at setup, in a hook that fires every N > 1 steps, at a checkpoint, and in the final report are fine.",
         "Reuse: the agent uses the existing toolkit component for each part named in the expected answer and writes no hand-written replacement for any of them."
       ],
       "expected_skill": "nvalchemi-toolkit",
-      "gpu": true,
+      "gpu": false,
       "source": [
         "examples/advanced/11_batched_neb.py",
         "docs/userguide/dynamics_mep.md",
@@ -392,7 +392,6 @@
         "files/hcn_reactant.extxyz",
         "files/hcn_product.extxyz"
       ],
-      "gpu_check": "Rerun the agent's runs unchanged on one GPU with AIMNET2_CKPT set (gpu/gpu_check.py), each in a fresh Python process. Pass if: every run exits 0 within 300 s; cuda_used is true; agent_loop_syncs_per_step <= 0.1 (agent code only; the toolkit's own NEB loop syncs are not counted); the forward barrier the script reports (HCN to the transition state, in eV, read first from a JSON file the script wrote, then from stdout; reverse barriers are ignored and kJ/mol or kcal/mol are converted) matches the last energy_barrier of its diagnostics CSV within 0.01 eV; the last CSV row has fmax <= 0.05 eV/A; and the barrier is within 0.15 eV of the reference script run in the same job (1.634 eV with AIMNet2-rxn on CPU). The HNC endpoint must stay HNC (no C-N below 1.0 A).",
       "checks": [
         {
           "id": "interpolate",
@@ -453,14 +452,23 @@
           ]
         },
         {
-          "id": "reports-convergence",
+          "id": "gpu-not-run",
           "metric": "outcome",
           "kind": "run",
-          "description": "The final message says whether the NEB converged and gives fmax.",
+          "description": "The final message states that the GPU run was not executed here.",
           "scope": "final",
           "require": [
-            "(?i)converge",
-            "(?i)fmax|max(imum)?\\W{0,3}force|force\\W{0,3}(residual|norm)|residual|eV/(Å|A|ang)"
+            "(?i)(\\bGPU\\b[^.\\n]{0,80}(not|n't|never|yet to)\\b[^.\\n]{0,30}\\b(run|ran|execut|launch|test|measur)|(not|n't|never)\\b[^.\\n]{0,30}\\b(run|ran|execut|launch|test|measur)\\w*[^.\\n]{0,60}\\bGPU\\b)"
+          ]
+        },
+        {
+          "id": "launch-command",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "The final message gives the command that launches the script.",
+          "scope": "final",
+          "require": [
+            "python3?\\s+(-\\S+\\s+)*\\S+\\.py\\b|uv run\\s+\\S*\\s*\\S+\\.py\\b"
           ]
         },
         {
@@ -500,46 +508,6 @@
           "kind": "static",
           "description": "Code picks cuda when available (cuda.is_available or resolve_device) and pins cpu nowhere (no device='cpu', torch.device('cpu') or DEVICE='cpu' outside a cuda conditional).",
           "analyser": "device_aware"
-        },
-        {
-          "id": "gpu-used",
-          "metric": "device_aware",
-          "kind": "gpu",
-          "description": "gpu_check: CUDA memory was allocated.",
-          "gpu_field": "cuda_used",
-          "expect": true
-        },
-        {
-          "id": "gpu-agent-syncs",
-          "metric": "loop_syncs",
-          "kind": "gpu",
-          "description": "gpu_check: agent syncs per step in the NEB loop.",
-          "gpu_field": "agent_loop_syncs_per_step",
-          "max": 0.1
-        },
-        {
-          "id": "gpu-barrier",
-          "metric": "outcome",
-          "kind": "gpu",
-          "description": "gpu_check: the reported forward barrier (eV) equals the CSV energy_barrier to 0.01 eV.",
-          "gpu_field": "barrier",
-          "tol": 0.01
-        },
-        {
-          "id": "gpu-converged",
-          "metric": "outcome",
-          "kind": "gpu",
-          "description": "gpu_check: the last diagnostics CSV row has fmax <= 0.05 eV/A.",
-          "gpu_field": "csv_fmax",
-          "max": 0.05
-        },
-        {
-          "id": "gpu-barrier-reference",
-          "metric": "outcome",
-          "kind": "gpu",
-          "description": "gpu_check: forward barrier within 0.15 eV of the reference run in the same job.",
-          "gpu_field": "barrier_minus_reference_eV",
-          "abs_max": 0.15
         }
       ]
     },
@@ -548,20 +516,20 @@
       "name": "Fine-tune MACE-MP on a small set and resume after a crash",
       "track": "end-user",
       "area": "Training",
-      "prompt": "I have 200 frames of a diatomic with energy and force labels in input/co_frames.extxyz (stored as REF_energy in the frame info and REF_forces per atom). Fine-tune the MACE-MP foundation model on this small dataset (the checkpoint path is in the environment variable $MACE_CKPT), but only update the readout/head parameters and keep the rest of the body frozen. Batch size 8, single GPU. This machine has a GPU, so run it there, but keep it tiny: train for 5 optimizer steps with a checkpoint at step 5, then resume from that checkpoint as if the job had crashed and train to step 10. Show me exactly how to resume. When you are done, tell me the name of the script you wrote and which toolkit classes and functions it uses.",
-      "expected_output": "Optimal pattern: frames via ase.io.read(path, index=':') -> AtomicData.from_atoms(atoms, energy_key='REF_energy', forces_key='REF_forces') -> one Batch -> InMemoryDataset(batch, device='cuda') -> toolkit DataLoader(dataset, batch_size=8). model = MACEWrapper.from_checkpoint('file://' + abspath($MACE_CKPT), device='cuda') with no compile_model (a plain local path fails with 'unknown url type' on the pinned mace-torch). FineTuningStrategy(models=model, trainable_patterns=('main.model.readouts.*',) (names checked with named_parameters), optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW, optimizer_kwargs={'lr': 1e-4}), training_fn=default_training_fn, loss_fn=EnergyMSELoss() + ForceMSELoss(), num_steps=5, devices=[cuda], hooks=[CheckpointHook(dir, step_interval=5), NeighborListHook(model.model_config.neighbor_config, stage=TrainingStage.BEFORE_FORWARD)]) .run(loader). Resume: FineTuningStrategy.load_checkpoint(dir, training_fn=default_training_fn, hooks=[...same hooks...]), set num_steps=10, .run(loader); it continues at step 5 and ends at step 10 (the CLI form is nvalchemi-training spec resume). from_pretrained_checkpoint starts a new run and is not a resume. The reference run with a DemoModelWrapper stand-in on CPU gives phase 1 at step 5 with only the readout tensors changed, a manifest.json in the checkpoint directory, and the resumed run going from step 5 to 10. No .item(), print(loss), or torch.save in the step loop. Wrong turns: a hand-written training loop on raw mace-torch; a hand-rolled batch shuffler; compile_model=True; full-model training; from_pretrained_checkpoint as the resume; NeighborListHook without a stage; more than 10 steps.",
+      "prompt": "I have 200 frames of a diatomic with energy and force labels in input/co_frames.extxyz (stored as REF_energy in the frame info and REF_forces per atom). Fine-tune the MACE-MP foundation model on this small dataset (the checkpoint path is in the environment variable $MACE_CKPT), but only update the readout/head parameters and keep the rest of the body frozen. Batch size 8, single GPU. This machine has no GPU; I will run the job on a GPU machine, so write the script so it uses the GPU when one is present. Keep it tiny: train for 5 optimizer steps with a checkpoint at step 5, then resume from that checkpoint as if the job had crashed and train to step 10. Give me the exact commands to launch both parts on the GPU machine, and show me exactly how to resume. You may run a small CPU check here (a few steps) to make sure the script runs, but do not report GPU results you have not measured. When you are done, tell me the name of the script you wrote and which toolkit classes and functions it uses.",
+      "expected_output": "Optimal pattern: device = cuda if torch.cuda.is_available() else cpu, chosen once; frames via ase.io.read(path, index=':') -> AtomicData.from_atoms(atoms, energy_key='REF_energy', forces_key='REF_forces') -> one Batch -> InMemoryDataset(batch, device=device) -> toolkit DataLoader(dataset, batch_size=8). model = MACEWrapper.from_checkpoint('file://' + abspath($MACE_CKPT), device=device) with no compile_model (a plain local path fails with 'unknown url type' on the pinned mace-torch). FineTuningStrategy(models=model, trainable_patterns=('main.model.readouts.*',) (names checked with named_parameters), optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW, optimizer_kwargs={'lr': 1e-4}), training_fn=default_training_fn, loss_fn=EnergyMSELoss() + ForceMSELoss(), num_steps=5, devices=[device], hooks=[CheckpointHook(dir, step_interval=5), NeighborListHook(model.model_config.neighbor_config, stage=TrainingStage.BEFORE_FORWARD)]) .run(loader). Resume: FineTuningStrategy.load_checkpoint(dir, training_fn=default_training_fn, hooks=[...same hooks...]), set num_steps=10, .run(loader); it continues at step 5 and ends at step 10 (the CLI form is nvalchemi-training spec resume). from_pretrained_checkpoint starts a new run and is not a resume. GPU readiness (graded from the code): the device is picked once with cuda when available and never pinned to cpu; the model, the dataset, the strategy's devices, and the optimizer state follow that one device; one DataLoader feeds one FineTuningStrategy; no .item(), print(loss), float(tensor), or torch.save in agent code that runs every step; any logging hook fires every N > 1 steps with one host read per firing. With that, the expected GPU behaviour is one batched forward and backward per optimizer step and no agent-side host syncs beyond the toolkit's own training step. What the CPU check can confirm: the script imports, loads the checkpoint with only the readout trainable, builds the loader, runs phase 1 to step 5, writes the checkpoint directory (manifest.json), and the resume continues from step 5 rather than 0, all within 10 steps in total. It cannot confirm GPU speed or GPU losses, and the answer must say the GPU run was not executed here and present the CPU run only as a smoke test. Context only, which the judge must NOT require in the answer: the reference run with a DemoModelWrapper stand-in on CPU gives phase 1 at step 5 with only the readout tensors changed, a manifest.json in the checkpoint directory, and the resumed run going from step 5 to 10. Wrong turns: a hand-written training loop on raw mace-torch; a hand-rolled batch shuffler; compile_model=True; full-model training; from_pretrained_checkpoint as the resume; NeighborListHook without a stage; more than 10 steps; device hard-coded to cpu; claiming GPU losses or timings that were not measured.",
       "assertions": [
-        "MACE-MP is loaded with MACEWrapper.from_checkpoint from $MACE_CKPT (a file:// URL, or a plain path with a note about the file:// workaround) without compile_model=True.",
-        "FineTuningStrategy trains only the readout: trainable_patterns match the readout parameters of the wrapped model (for example main.model.readouts.*), and the body stays frozen.",
+        "MACE-MP is loaded with MACEWrapper.from_checkpoint from $MACE_CKPT (a file:// URL, or a plain path with a note about the file:// workaround) without compile_model=True, and FineTuningStrategy trains only the readout: trainable_patterns match the readout parameters of the wrapped model (for example main.model.readouts.*), and the body stays frozen.",
         "The labelled frames reach the strategy through AtomicData.from_atoms(..., energy_key='REF_energy', forces_key='REF_forces') and InMemoryDataset or Dataset plus the toolkit DataLoader(batch_size=8); not a hand-written batching loop.",
-        "A CheckpointHook (or save_checkpoint) writes a checkpoint at step 5, and the run resumes from it with FineTuningStrategy.load_checkpoint (or nvalchemi-training spec resume) and continues to step 10; from_pretrained_checkpoint is not used as the resume.",
+        "Bounded run: a CheckpointHook (or save_checkpoint) writes a checkpoint at step 5, the run resumes from it with FineTuningStrategy.load_checkpoint (or nvalchemi-training spec resume) and continues to step 10, never more than 10 steps in total; from_pretrained_checkpoint is not used as the resume.",
+        "Honest reporting: the answer gives the script name and the command that launches it on the GPU machine, states that the GPU run was not executed here, reports any CPU run only as a smoke test, and claims no GPU result, timing, or loss it did not measure.",
         "Batching: all systems are in one Batch (built with Batch.from_data_list, interpolate_paths, or a toolkit DataLoader) and one engine, strategy, or model call runs over that batch; there is no Python loop that runs the model or an engine once per system.",
-        "GPU run: the agent runs the calculation on the GPU, and the model, the batch, and any optimizer are on cuda.",
+        "Device: the code picks cuda when a GPU exists (for example torch.device('cuda' if torch.cuda.is_available() else 'cpu')) and puts the model, the batch, and any optimizer on that one device; it does not pin cpu.",
         "No avoidable host-device syncs in the step loop: inside a hand-written step loop or a hook that fires every step there is no .item(), .cpu(), .tolist(), float(tensor), print(tensor), or Python if on a tensor; syncs at setup, in a hook that fires every N > 1 steps, at a checkpoint, and in the final report are fine.",
         "Reuse: the agent uses the existing toolkit component for each part named in the expected answer and writes no hand-written replacement for any of them."
       ],
       "expected_skill": "nvalchemi-toolkit",
-      "gpu": true,
+      "gpu": false,
       "source": [
         "docs/userguide/finetuning.md",
         "docs/userguide/training.md",
@@ -573,7 +541,6 @@
       "files": [
         "files/co_frames.extxyz"
       ],
-      "gpu_check": "Replay the agent's runs unchanged on one GPU with MACE_CKPT set (gpu/gpu_check.py): the 'python <script> <args>' commands the agent ran, in its order, at most 3 and 300 s each, each in a fresh Python process, in one fresh copy of the workspace so a resume run finds the checkpoint of the run before it. CPU-only and check-only runs are skipped when real runs exist. Pass if: every run exits 0; cuda_used is true; at most 10 optimizer steps in total; agent_loop_syncs_per_step <= 0.2 (agent code only; the toolkit's training step itself syncs about 3 times per step and is not counted); the checkpoint directory holds manifest.json; a readout tensor changed and a body tensor did not; and the resumed part starts at the saved step (5), not at 0.",
       "timeout_multiplier": 3,
       "checks": [
         {
@@ -685,28 +652,24 @@
           "analyser": "device_aware"
         },
         {
-          "id": "gpu-used",
-          "metric": "device_aware",
-          "kind": "gpu",
-          "description": "gpu_check: CUDA memory was allocated.",
-          "gpu_field": "cuda_used",
-          "expect": true
-        },
-        {
-          "id": "gpu-agent-syncs",
-          "metric": "loop_syncs",
-          "kind": "gpu",
-          "description": "gpu_check: agent syncs per optimizer step.",
-          "gpu_field": "agent_loop_syncs_per_step",
-          "max": 0.2
-        },
-        {
-          "id": "gpu-steps",
+          "id": "gpu-not-run",
           "metric": "outcome",
-          "kind": "gpu",
-          "description": "gpu_check: at most 10 optimizer steps in total.",
-          "gpu_field": "steps",
-          "max": 10
+          "kind": "run",
+          "description": "The final message states that the GPU run was not executed here.",
+          "scope": "final",
+          "require": [
+            "(?i)(\\bGPU\\b[^.\\n]{0,80}(not|n't|never|yet to)\\b[^.\\n]{0,30}\\b(run|ran|execut|launch|test|measur)|(not|n't|never)\\b[^.\\n]{0,30}\\b(run|ran|execut|launch|test|measur)\\w*[^.\\n]{0,60}\\bGPU\\b)"
+          ]
+        },
+        {
+          "id": "launch-command",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "The final message gives the command that launches the script.",
+          "scope": "final",
+          "require": [
+            "python3?\\s+(-\\S+\\s+)*\\S+\\.py\\b|uv run\\s+\\S*\\s*\\S+\\.py\\b"
+          ]
         }
       ]
     },
