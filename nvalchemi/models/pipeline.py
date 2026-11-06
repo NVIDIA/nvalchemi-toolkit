@@ -180,11 +180,12 @@ class _PipelineNeighborListHook:
         if stage is _admission_stage():
             # Each source hook drops the caches sized for the old systems.
             for hook in self.hooks:
-                hook(ctx, stage)
-            return
+                hook._reset_for_new_membership()
+            if stage is not self.stage:
+                return
         source_data: list[_NeighborSourceData] = []
         for source, hook in zip(self.sources, self.hooks, strict=True):
-            hook(ctx, stage)
+            hook._build(ctx)
             source_data.append(self._capture_source_data(ctx.batch, source, hook))
 
         ctx.batch.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR] = tuple(source_data)
