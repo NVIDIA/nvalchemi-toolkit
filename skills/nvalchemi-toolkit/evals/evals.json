@@ -262,9 +262,9 @@
       "track": "end-user",
       "area": "Underspecified",
       "prompt": "Here is my structure, ammonia_dimer.xyz. Run MD on it and give me the trajectory.",
-      "expected_output": "The request lacks every decision an MD run needs: the interatomic model (no checkpoint or potential is given), the ensemble and temperature, and the run length. The expected reply asks for those choices, or states explicit assumptions for each one before writing or running any code: which model or checkpoint to use (and, if none is available, that a checkpoint must be supplied or a stand-in will be used), which ensemble at which temperature (e.g. NVTLangevin with temperature=300.0, friction=0.01), and how many steps or how much simulated time. Any code the agent produces keeps the run small and bounded (a first check of order 100 steps or fewer, or an explicit TODO for the user to fill in), loads the structure through AtomicData.from_atoms, and does not reference a checkpoint path that was never provided. If the agent runs anything with a stand-in such as DemoModel or the LJ model, it says plainly that the resulting trajectory is not physically meaningful. The agent does not silently launch a production-scale run or scale up the workload.",
+      "expected_output": "The request lacks every decision an MD run needs: the interatomic model (no checkpoint or potential is given), the ensemble and temperature, and the run length. The expected reply must ask which model or checkpoint to use; naming a stand-in alone does not settle that choice. A stand-in smoke check is acceptable only alongside that question. For the other choices it asks or states explicit assumptions before writing or running any code: which ensemble at which temperature (e.g. NVTLangevin with temperature=300.0, friction=0.01), and how many steps or how much simulated time. Any code the agent produces keeps the run small and bounded (a first check of order 100 steps or fewer, or an explicit TODO for the user to fill in), loads the structure through AtomicData.from_atoms, and does not reference a checkpoint path that was never provided. If the agent runs anything with a stand-in such as DemoModel or the LJ model, it says plainly that the resulting trajectory is not physically meaningful. The agent does not silently launch a production-scale run or scale up the workload.",
       "assertions": [
-        "The agent identifies that the interatomic model is unspecified: it asks which model or checkpoint to use, or states explicitly in its reply that it will use a named stand-in (e.g. the Lennard-Jones model or DemoModel) because no checkpoint was given.",
+        "The agent asks which interatomic model or checkpoint to use. A named stand-in (e.g. the Lennard-Jones model or DemoModel) is acceptable for a smoke check only if it also asks which model or checkpoint to use for the real run.",
         "The agent asks for, or states as explicit assumptions, the temperature and ensemble and the run length (number of steps or simulated time); none of model, temperature/ensemble, and run length is left silently defaulted.",
         "Any MD code the agent writes sets a bounded step count for a first check (n_steps of order 100 or fewer, or an explicit placeholder for the user to choose), rather than copying the 10,000-step defaults shown in the docs examples or leaving the run length unbounded.",
         "The agent does not reference a model checkpoint file that the user never provided as if it were present; it either asks where to get one or says a checkpoint must be supplied before a real run (e.g. via a from_checkpoint path or a checkpoint argument it does not have).",
@@ -287,10 +287,10 @@
           "id": "asks-model",
           "metric": "outcome",
           "kind": "run",
-          "description": "Final message asks for or states the model or checkpoint.",
+          "description": "Final message asks which model or checkpoint to use; naming a stand-in alone is not enough.",
           "scope": "final",
           "require": [
-            "(?i)\\b(model|potential|checkpoint|force field|MLIP)\\b"
+            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:model|potential|checkpoint|force field|MLIP)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:model|checkpoint|potential)\\b)"
           ]
         },
         {
@@ -332,6 +332,239 @@
           "scope": "commands",
           "forbid": [
             "pip3? install|uv pip install|conda install"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scope-02",
+      "name": "Clarify a fine-tuning request",
+      "track": "end-user",
+      "area": "Underspecified",
+      "prompt": "I want to fine-tune a model with the ALCHEMI Toolkit on my DFT data in input/co_frames.extxyz. Can you set that up?",
+      "expected_output": "Reply with a short, request-specific set of questions before setting up a training run. Ask which base model or checkpoint to use, which targets to fit (energy, forces, stress) and their loss weights, and what hardware or time budget is available. Ask about the validation split and the success criterion, or state a clear provisional assumption for those lower-stakes items. A few grouped questions are enough, not the whole ten-item checklist. Reading the file to identify REF_energy and REF_forces and the absence of stress labels is welcome but not required; labels present in a file do not decide the training objective. Do not train, install packages, invent a checkpoint path, or silently choose the base model or targets. No script, checkpoint or measured training result is required in this one reply.",
+      "assertions": [
+        "The agent asks which base model or checkpoint to fine-tune; it does not silently choose one or treat a named stand-in as the answer.",
+        "The agent asks which targets to fit or how to weight the energy, force and stress losses; merely listing the labels in the file does not settle the objective.",
+        "The agent asks what hardware or time budget is available before proposing a training workload.",
+        "The agent asks about the validation split and the success criterion, or states short provisional assumptions for them; it does not leave them silently defaulted.",
+        "The question list is short and specific to fine-tuning this data, not a generic ten-item checklist. File inspection to report available labels is allowed but not required.",
+        "The agent does not start training, install packages, or supply a checkpoint path that the user never gave. No trained model or executable script is required."
+      ],
+      "expected_skill": "nvalchemi-toolkit",
+      "gpu": false,
+      "source": [
+        "docs/userguide/finetuning.md",
+        "docs/userguide/training.md",
+        "nvalchemi/training/finetune.py"
+      ],
+      "files": [
+        "files/co_frames.extxyz"
+      ],
+      "checks": [
+        {
+          "id": "asks-model",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "Asks which base model or checkpoint to use.",
+          "scope": "final",
+          "require": [
+            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:model|potential|checkpoint|force field|MLIP)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:model|checkpoint|potential)\\b)"
+          ]
+        },
+        {
+          "id": "asks-targets",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "Asks about targets or loss weights, not only available labels.",
+          "scope": "final",
+          "require": [
+            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:targets?|loss(?: weights?)?|weights?|energy|forces?|stress)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:targets?|loss(?: weights?)?|weights?|energy|forces?|stress)\\b)"
+          ]
+        },
+        {
+          "id": "asks-budget",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "Asks about hardware or time budget.",
+          "scope": "final",
+          "require": [
+            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:hardware|budget|GPU|CPU|devices?|time|hours?)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:hardware|budget|GPU|CPU|devices?|time|hours?)\\b)"
+          ]
+        },
+        {
+          "id": "no-training-code",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "No executed training calls, optimizer updates or training launchers.",
+          "scope": "code",
+          "forbid": [
+            "\\.(?:fit|train)\\(\\s*[^)\\s]",
+            "\\.fit\\(\\s*\\)",
+            "\\b(?:strategy|trainer|finetun\\w*)\\.(?:run|fit|train)\\s*\\(",
+            "(?s)\\b(?:FineTuningStrategy|TrainingStrategy)\\([^;]*?\\)\\s*\\.run\\s*\\(",
+            "\\.(?:backward|step)\\(\\s*\\)",
+            "\\bnvalchemi-training\\s+spec\\s+(?:run|resume)\\b",
+            "\\b(?:python3?|torchrun|uv\\s+run)\\s+(?:\\S*/)?(?:train|finetun\\w*)\\.py\\b"
+          ]
+        },
+        {
+          "id": "no-invented-checkpoint-code",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "No literal checkpoint path that was never supplied.",
+          "scope": "code",
+          "forbid": [
+            "\\b(?:from_checkpoint|load_checkpoint|from_pretrained_checkpoint|CheckpointHook)\\(\\s*[\\'\\\"][^\\'\\\"]+[\\'\\\"]",
+            "\\b(?:checkpoint_path|checkpoint_dir|ckpt_path|ckpt)\\s*=\\s*[\\'\\\"][^\\'\\\"]+[\\'\\\"]",
+            "[\\'\\\"][^\\'\\\"\\n]+\\.(?:pt|pth|ckpt|model)[\\'\\\"]"
+          ]
+        },
+        {
+          "id": "no-training-commands",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "No executed training calls, optimizer updates or training launchers.",
+          "scope": "commands",
+          "forbid": [
+            "\\.(?:fit|train)\\(\\s*[^)\\s]",
+            "\\.fit\\(\\s*\\)",
+            "\\b(?:strategy|trainer|finetun\\w*)\\.(?:run|fit|train)\\s*\\(",
+            "(?s)\\b(?:FineTuningStrategy|TrainingStrategy)\\([^;]*?\\)\\s*\\.run\\s*\\(",
+            "\\.(?:backward|step)\\(\\s*\\)",
+            "\\bnvalchemi-training\\s+spec\\s+(?:run|resume)\\b",
+            "\\b(?:python3?|torchrun|uv\\s+run)\\s+(?:\\S*/)?(?:train|finetun\\w*)\\.py\\b"
+          ]
+        },
+        {
+          "id": "no-invented-checkpoint-commands",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "No literal checkpoint path that was never supplied.",
+          "scope": "commands",
+          "forbid": [
+            "\\b(?:from_checkpoint|load_checkpoint|from_pretrained_checkpoint|CheckpointHook)\\(\\s*[\\'\\\"][^\\'\\\"]+[\\'\\\"]",
+            "\\b(?:checkpoint_path|checkpoint_dir|ckpt_path|ckpt)\\s*=\\s*[\\'\\\"][^\\'\\\"]+[\\'\\\"]",
+            "[\\'\\\"][^\\'\\\"\\n]+\\.(?:pt|pth|ckpt|model)[\\'\\\"]"
+          ]
+        },
+        {
+          "id": "no-installs",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "No package installs or environment changes.",
+          "scope": "commands",
+          "forbid": [
+            "\\b(?:pip3?|uv\\s+pip|conda|mamba)\\s+install\\b",
+            "\\buv\\s+(?:sync|add)\\b",
+            "\\buv\\s+run\\b[^\\n]*--with\\b",
+            "\\bpython3?\\s+-m\\s+pip\\s+install\\b"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scope-03",
+      "name": "Read structure facts before asking",
+      "track": "end-user",
+      "area": "Underspecified",
+      "prompt": "Please set up NVT MD with the ALCHEMI Toolkit for input/ar_scope.extxyz. Use its Lennard-Jones model with epsilon=0.0104 eV, sigma=3.4 A and cutoff=5.0 A, dt=1 fs, Langevin friction=0.01 /fs and random seed 0. Draw initial thermal velocities at the thermostat temperature. This is CPU-only, with at most one minute for an optional smoke check. I want a script and a short report of the input and settings; the check is that the energy and forces remain finite. You may write them in this workspace; do not install or download anything. What else do you need before setting it up?",
+      "expected_output": "Read input/ar_scope.extxyz first (ASE or a text reader is enough). Report or use its facts: 32 Ar atoms, a cubic 10.8 A cell, periodic in all three directions, positions in angstrom under the usual extxyz convention. The model, ensemble, timestep, friction, seed, velocity initialization rule, hardware, permissions, deliverables and smoke-check criterion are already given. Only the thermostat temperature and run length remain open. Ask only for those, or state explicit provisional assumptions for both before any execution. Do not ask the user for the cell, periodicity, atom count, species or units already supplied by the input. A reply that reads and asks is sufficient: no MD execution or finished script is required. If a check is run, keep it to at most 100 steps and under one minute on CPU, describe any chosen temperature and length as provisional, and do not present smoke-test numbers as production results. Do not silently choose either open setting.",
+      "assertions": [
+        "The agent reads the provided file, rather than guessing, and reports or uses its 32 Ar atoms, cubic cell with 10.8 A sides and periodic boundaries in all three directions; extxyz positions use angstrom.",
+        "The agent asks only about the thermostat temperature and run length, or states explicit provisional assumptions for both. It does not silently choose either setting.",
+        "The agent does not ask the user for facts in the file (cell, periodicity, atom count, species or units), or reopen choices already supplied in the prompt.",
+        "Reading and asking is sufficient; no MD execution or finished script is required. Any optional check stays on CPU, below one minute and at 100 steps or fewer, with provisional settings and no production claim.",
+        "If code is written, it uses the supplied Lennard-Jones model and toolkit NVT integrator, keeps the supplied periodic cell, and registers the model neighbor hooks before running; it does not install or download packages."
+      ],
+      "expected_skill": "nvalchemi-toolkit",
+      "gpu": false,
+      "source": [
+        "docs/userguide/data.md",
+        "docs/userguide/dynamics_simulations.md",
+        "nvalchemi/models/lj.py"
+      ],
+      "files": [
+        "files/ar_scope.extxyz"
+      ],
+      "checks": [
+        {
+          "id": "input-facts",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "Reply reports atom count, species, and periodic cell from the input.",
+          "scope": "final",
+          "require": [
+            "(?i)\\b32\\s+(?:Ar\\s+|argon\\s+)?atoms?\\b|\\b(?:atom count|atoms?)\\s*[:=]\\s*32\\b",
+            "(?i)\\bAr\\b|\\bargon\\b",
+            "(?i)\\b10\\.8(?:0*)\\b",
+            "(?i)periodic[^.!?\\n]{0,60}(?:all|three|3|xyz|x[ ,/]+y[ ,/]+z)|pbc[^.!?\\n]{0,60}(?:true[^\\n]*true[^\\n]*true|T[ ,]+T[ ,]+T)"
+          ]
+        },
+        {
+          "id": "temperature-open",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "Asks for thermostat temperature or labels an assumption.",
+          "scope": "final",
+          "require": [
+            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:temperature|thermostat(?: target)?|kelvin|\\bK\\b)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:temperature|thermostat(?: target)?|kelvin|\\bK\\b)\\b)|(?:\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b[^.!?\\n]{0,140}(?:temperature|thermostat(?: target)?|kelvin|\\bK\\b)|(?:temperature|thermostat(?: target)?|kelvin|\\bK\\b)[^.!?\\n]{0,140}\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b)"
+          ]
+        },
+        {
+          "id": "length-open",
+          "metric": "outcome",
+          "kind": "run",
+          "description": "Asks for run length or labels an assumption.",
+          "scope": "final",
+          "require": [
+            "(?i)\\b(?:(?:which|what|how|should I|should we|is|are|have you|can I|may I|do you|could you|can you|would you)[^.!?\\n]{0,100}\\b(?:run length|duration|steps?|simulated time|\\bps\\b|\\bfs\\b|\\bns\\b)\\b[^.!?\\n]{0,100}\\?|please\\s+(?:provide|specify|choose|confirm)[^.!?\\n]{0,100}\\b(?:run length|duration|steps?|simulated time|\\bps\\b|\\bfs\\b|\\bns\\b)\\b)|(?:\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b[^.!?\\n]{0,140}(?:run length|duration|steps?|simulated time|\\bps\\b|\\bfs\\b|\\bns\\b)|(?:run length|duration|steps?|simulated time|\\bps\\b|\\bfs\\b|\\bns\\b)[^.!?\\n]{0,140}\\b(?:assum\\w*|provisional\\w*|tentative\\w*)\\b)|\\bhow long\\b[^.!?\\n]{0,100}\\?"
+          ]
+        },
+        {
+          "id": "no-redundant-questions",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "Does not ask for facts already in the structure file.",
+          "scope": "final",
+          "forbid": [
+            "(?i)\\b(?:what|which|how|is|are|does|do|can you|could you|please (?:provide|specify|confirm|tell))[^.!?\\n]{0,70}\\b(?:cell|lattice|box (?:size|dimensions)|pbc|periodic(?:ity)?|number of atoms|atom count|species|elements?|units?)\\b[^.!?\\n]{0,80}\\?",
+            "(?i)\\bhow many (?:\\w+\\s+){0,3}atoms\\b[^.!?\\n]{0,80}\\?"
+          ]
+        },
+        {
+          "id": "bounded-code",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "No literal step budget above 100; dynamic budgets remain judge-checked.",
+          "scope": "code",
+          "forbid": [
+            "\\b(?:n_steps|num_steps|max_steps|steps)\\s*=\\s*(?:10[1-9]|1[1-9]\\d|[2-9]\\d{2}|\\d{4,})\\b",
+            "\\.run\\(\\s*(?:10[1-9]|1[1-9]\\d|[2-9]\\d{2}|\\d{4,})\\b"
+          ]
+        },
+        {
+          "id": "bounded-commands",
+          "metric": "outcome",
+          "kind": "static",
+          "description": "No literal step budget above 100; dynamic budgets remain judge-checked.",
+          "scope": "commands",
+          "forbid": [
+            "\\b(?:n_steps|num_steps|max_steps|steps)\\s*=\\s*(?:10[1-9]|1[1-9]\\d|[2-9]\\d{2}|\\d{4,})\\b",
+            "\\.run\\(\\s*(?:10[1-9]|1[1-9]\\d|[2-9]\\d{2}|\\d{4,})\\b"
+          ]
+        },
+        {
+          "id": "no-installs",
+          "metric": "reuse",
+          "kind": "static",
+          "description": "No package installs or environment changes.",
+          "scope": "commands",
+          "forbid": [
+            "\\b(?:pip3?|uv\\s+pip|conda|mamba)\\s+install\\b",
+            "\\buv\\s+(?:sync|add)\\b",
+            "\\buv\\s+run\\b[^\\n]*--with\\b",
+            "\\bpython3?\\s+-m\\s+pip\\s+install\\b"
           ]
         }
       ]

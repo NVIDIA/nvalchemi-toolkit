@@ -67,7 +67,8 @@ if needed. Check the installed software before execution.
    temperature, pressure, timestep, convergence threshold, run length. Do not
    pick these silently.
 3. **Inputs.** Structure files and their format, units, which fields they
-   carry (energies, forces, velocities, cells).
+   carry (energies, forces, velocities, cells). Read the files first and ask
+   only for what they do not say.
 4. **Deliverables.** Script, data store, checkpoint, plot, or a short report.
 5. **Reuse.** Which shipped component already does this (see the reuse rule).
 6. **Software environment.** Installed `nvalchemi` version and extras.

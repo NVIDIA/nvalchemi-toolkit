@@ -30,7 +30,7 @@ harbor:
   # CI runs only the first max_cases tasks of evals.json, in file order, so
   # the order matters. The remaining tasks run in the maintainers' own
   # evaluation.
-  max_cases: 4
+  max_cases: 6
   n_attempts: 3
   # 3, not 2: baseline runs on CPU are slow and should not hit the agent
   # timeout.
