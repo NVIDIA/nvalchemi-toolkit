@@ -604,6 +604,10 @@
   Large single systems were therefore given a coarse grid, which made
   neighbor-list builds considerably slower. The single-system cap is now used
   when the hook builds a cell list for one system.
+- Atom migration under `DomainParallel` no longer reshards neighbor-list arrays
+  (`neighbor_matrix`, `neighbor_matrix_shifts`, `num_neighbors`). They are
+  rebuilt after the move, and ranks that had grown `max_neighbors` to different
+  widths stalled in the exchange.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
