@@ -58,6 +58,14 @@ MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_TOTAL_BYTES = 200 * 1024 * 1024
 MAX_CODE_FILE_BYTES = 512 * 1024
 SKIP_DIRS = {"input", "skills", "__pycache__", ".git", ".venv", "node_modules"}
+# evals/setup_cpu.sh builds the toolkit venv in /workspace/.nvalchemi-env.*
+# and links /workspace/.venv to it. Neither is the agent's code.
+ENV_PREFIX = ".nvalchemi-env."
+
+
+def _skip_dir(name: str) -> bool:
+    return name in SKIP_DIRS or name.startswith(ENV_PREFIX)
+
 
 # Calls that copy a tensor to the host or wait for the device.
 SYNC_METHODS = {"item", "cpu", "tolist", "numpy"}
@@ -79,7 +87,11 @@ def keep_workspace(workspace: Path, dest: Path) -> dict:
     for root, dirs, files in os.walk(workspace):
         rel_root = Path(root).relative_to(workspace)
         if rel_root == Path("."):
-            dirs[:] = [d for d in dirs if d != "skills"]
+            dirs[:] = [
+                d
+                for d in dirs
+                if d not in {"skills", ".venv"} and not d.startswith(ENV_PREFIX)
+            ]
         dirs[:] = [d for d in dirs if d not in {"__pycache__", ".git"}]
         for name in sorted(files):
             src = Path(root) / name
@@ -236,7 +248,10 @@ def workspace_code(root: Path, fixtures: set[str] = frozenset()) -> dict[str, st
         return files
     for path in sorted(root.rglob("*.py")):
         rel = path.relative_to(root)
-        if set(rel.parts[:-1]) & (SKIP_DIRS - {"input"}) or path.name in fixtures:
+        if (
+            any(_skip_dir(part) and part != "input" for part in rel.parts[:-1])
+            or path.name in fixtures
+        ):
             continue
         if path.is_symlink() or path.stat().st_size > MAX_CODE_FILE_BYTES:
             continue
