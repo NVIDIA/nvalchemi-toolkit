@@ -604,6 +604,11 @@
   Large single systems were therefore given a coarse grid, which made
   neighbor-list builds considerably slower. The single-system cap is now used
   when the hook builds a cell list for one system.
+- `NVTNoseHoover`, `NPT`, and `NPH` now size the thermostat and barostat state
+  of systems admitted mid-run (inflight refill or pipeline receive) from each
+  system's own atom count, as for the first batch, instead of the batch
+  average. Arrivals far from the average size were thermostatted to the wrong
+  temperature and given the wrong barostat mass.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
@@ -652,6 +657,13 @@
   default `fmax < 0.05` criterion before, so in
   `FIRE2 + NVTLangevin(n_steps=...) + NVE(n_steps=...)` the NVT stage ran
   0 steps (#238). A non-final sub-stage with neither raises a `UserWarning`.
+- `NeighborListHook` also runs at `DynamicsStage.ON_ADMISSION` and re-derives
+  its neighbor width, buffers, and skin reference for the admitted systems. An
+  inflight refill or pipeline receive that kept the atom and graph counts left
+  them sized for the old systems, so MATRIX models silently lost neighbors
+  and computed wrong energies and forces. A change in graph count alone now
+  re-derives them too, and multi-source pipeline neighbor hooks reset every
+  source.
 
 ### Deprecated
 
