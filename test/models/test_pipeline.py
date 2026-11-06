@@ -1801,9 +1801,11 @@ class TestPipelineCompile:
         out_eager = pipe(batch)
         assert out_eager["forces"] is not None
 
-        torch._dynamo.config.suppress_errors = True
-        compiled_pipe = torch.compile(pipe, fullgraph=False)
-        out_compiled = compiled_pipe(batch)
+        # patch(), not assignment: a bare assignment leaks the setting into
+        # every later test in the session.
+        with torch._dynamo.config.patch(suppress_errors=True):
+            compiled_pipe = torch.compile(pipe, fullgraph=False)
+            out_compiled = compiled_pipe(batch)
 
         torch.testing.assert_close(
             out_compiled["energy"], out_eager["energy"], atol=1e-5, rtol=1e-5
@@ -1834,9 +1836,11 @@ class TestPipelineCompile:
         assert out_eager["energy"] is not None
         assert out_eager["forces"] is not None
 
-        torch._dynamo.config.suppress_errors = True
-        compiled_pipe = torch.compile(pipe, fullgraph=False)
-        out_compiled = compiled_pipe(batch)
+        # patch(), not assignment: a bare assignment leaks the setting into
+        # every later test in the session.
+        with torch._dynamo.config.patch(suppress_errors=True):
+            compiled_pipe = torch.compile(pipe, fullgraph=False)
+            out_compiled = compiled_pipe(batch)
 
         torch.testing.assert_close(
             out_compiled["energy"], out_eager["energy"], atol=1e-4, rtol=1e-4

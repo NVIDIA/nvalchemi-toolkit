@@ -91,6 +91,11 @@ with LBFGS(
     relaxed = opt.run(batch)
 ```
 
+- Fixed-cell `LBFGS(by_group=True)` updates each graph group as one unit, sharing
+  curvature history and step scaling. Set groups with
+  `batch.set_group_layout(group_idx)` and use `by_group=True` on any convergence
+  hook. Grouped sampling/refill and variable-cell grouping are unsupported.
+
 - `LBFGSVariableCell` needs tensile-positive `stress` and aligned cells: a cell
   is "aligned" when it is lower-triangular (`a` along x, `b` in the xy-plane; see
   {py:class}`~nvalchemi.dynamics.hooks.AlignCellHook`). On admission (and again

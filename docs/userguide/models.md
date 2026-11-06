@@ -137,8 +137,12 @@ UMA (Universal Models for Atoms) is a multi-task foundation model: one
 checkpoint ships task heads for molecules (`omol`), bulk crystals (`omat`),
 catalysis (`oc20`), direct air capture (`odac`), and molecular crystals
 (`omc`). {py:class}`~nvalchemi.models.uma.UMAWrapper` pins a single task at
-construction; `active_outputs` is `{energy, forces}` for molecular tasks and
-`{energy, forces, stress}` for periodic ones.
+construction. Every task declares and activates energy, forces, and stress
+by default. OMol omits stress when `cell` is absent or `None`; with a supplied
+cell, stress is returned if active and produced by the prediction unit.
+
+`UMAWrapper.from_checkpoint` enables OMol stress during loading. A directly
+supplied prediction unit must already support the declared outputs.
 
 **1. Install the optional dependency** with the CUDA extra for the host (in its
 own environment, per the note above):

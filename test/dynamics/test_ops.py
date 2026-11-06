@@ -28,6 +28,11 @@ from __future__ import annotations
 import pytest
 import torch
 
+# FIRE is deprecated in favour of FIRE2; these tests still exercise it.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:FIRE(VariableCell)? is deprecated:DeprecationWarning"
+)
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -217,7 +222,7 @@ class TestThermostatUtils:
             compute_kinetic_energy,
             initialize_velocities,
         )
-        from nvalchemi.dynamics.hooks._utils import KB_EV
+        from nvalchemi.dynamics._units import KB_EV
 
         M, N = 1, 200  # large enough for good statistics
         vel = torch.zeros(N, 3, dtype=dtype, device=device)
@@ -238,7 +243,7 @@ class TestThermostatUtils:
             compute_kinetic_energy,
             initialize_velocities,
         )
-        from nvalchemi.dynamics.hooks._utils import KB_EV
+        from nvalchemi.dynamics._units import KB_EV
 
         M, N = 1, 200
         vel = torch.zeros(N, 3, dtype=dtype, device=device)
@@ -288,7 +293,7 @@ class TestThermostatUtils:
             compute_kinetic_energy,
             initialize_velocities,
         )
-        from nvalchemi.dynamics.hooks._utils import KB_EV
+        from nvalchemi.dynamics._units import KB_EV
 
         M, N = 1, 200
         torch.manual_seed(7)
@@ -319,7 +324,7 @@ class TestThermostatUtils:
             compute_kinetic_energy,
             initialize_velocities,
         )
-        from nvalchemi.dynamics.hooks._utils import KB_EV
+        from nvalchemi.dynamics._units import KB_EV
 
         N_per = 100
         M = 3

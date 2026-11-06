@@ -22,6 +22,15 @@ A two-stage streaming pipeline — FIRE relaxation then NVT Langevin MD — wher
 per stage; here each stage is a whole **domain sub-mesh** cooperating on one large
 system, and the two stages form the pipeline dimension.
 
+.. note::
+
+   ``FIRE`` is deprecated in favour of ``FIRE2``, and constructing it emits a
+   ``DeprecationWarning``. This example still uses ``FIRE`` on purpose:
+   ``FIRE2`` is not supported under ``DomainParallel`` yet, because it does not
+   declare the global ``v·f``, ``v·v`` and ``f·f`` reductions that the domain
+   coordinator needs, so its timestep adaptation would run on per-shard values.
+   Switch this example to ``FIRE2`` once it supports ``DomainParallel``.
+
 .. rubric:: Topology
 
 .. graphviz::

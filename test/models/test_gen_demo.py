@@ -31,6 +31,7 @@ from nvalchemi.models.gen import (
     DemoGANModel,
     GenerativeModelMixin,
 )
+from nvalchemi.training._spec import BaseSpec
 from test.gen.conftest import DemoDiffusionGenerate, DemoGANGenerate, make_batch
 
 
@@ -163,3 +164,33 @@ class TestDemoHelperLegs:
         default = fn(num_samples=2, rng=torch.Generator().manual_seed(3))
         wider = fn(num_samples=2, rng=torch.Generator().manual_seed(3), sigma_max=20.0)
         assert not torch.allclose(default.positions, wider.positions)
+
+
+class TestDemoSamplerSpecs:
+    """The demo samplers capture their construction via ``to_spec``."""
+
+    def test_gan_sampler_to_spec(self) -> None:
+        """The GAN sampler specs its class with the model spec nested."""
+        fn = DemoGANGenerate(DemoGANModel(num_atoms=5, latent_dim=8, hidden=16))
+        spec = fn.to_spec()
+        assert isinstance(spec, BaseSpec)
+        assert spec.cls_path.endswith("DemoGANGenerate")
+        rebuilt = spec.build()
+        assert rebuilt(num_samples=2).num_graphs == 2
+        assert rebuilt.model.num_atoms == 5
+        assert rebuilt.model.latent_dim == 8
+        assert rebuilt.model.hidden == 16
+
+    def test_diffusion_sampler_to_spec_captures_sampler_kwargs(self) -> None:
+        """``to_spec`` records the constructor-bound sampler hyperparameters."""
+        fn = DemoDiffusionGenerate(
+            DemoDiffusionModel(num_atoms=4), num_steps=8, sigma_max=3.0
+        )
+        spec = fn.to_spec()
+        assert isinstance(spec, BaseSpec)
+        assert spec.cls_path.endswith("DemoDiffusionGenerate")
+        assert spec.num_steps == 8
+        assert spec.sigma_max == 3.0
+        rebuilt = spec.build()
+        assert rebuilt.num_steps == 8
+        assert rebuilt(num_samples=1).num_graphs == 1

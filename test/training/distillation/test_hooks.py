@@ -35,6 +35,11 @@ from nvalchemi.training.distillation.scoring import TeacherLabels
 from test.dynamics.conftest import make_dynamics_context
 from test.training.conftest import _build_batch, _build_demo_model
 
+# FIRE is deprecated in favour of FIRE2; these tests still exercise it.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:FIRE(VariableCell)? is deprecated:DeprecationWarning"
+)
+
 _TEACHER_CUTOFF = 5.0
 """Cutoff of the neighbor list the ephemeral-key tests put on the live batch."""
 

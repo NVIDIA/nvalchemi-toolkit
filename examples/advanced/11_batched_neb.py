@@ -39,6 +39,9 @@ improved-tangent method. Per-path diagnostics are written to ``neb.csv`` during
 optimization. The optimized AIMNet2-rxn bands are then compared with reference NEB bands
 optimized using DFT.
 
+:class:`~nvalchemi.dynamics.optimizers.LBFGS` can also be used for both IDPP and
+physical-model NEB by passing ``optimizer=LBFGS`` to each ``NEB`` instance.
+
 Dataset DOI: https://doi.org/10.6084/m9.figshare.19614657.v4
 
 Reference: Schreiner, M. et al., "Transition1x - a dataset for building

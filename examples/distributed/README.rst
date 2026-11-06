@@ -31,7 +31,7 @@ communication buffers:
              fontname="Helvetica", fontsize=11];
        edge [fontname="Helvetica", fontsize=10];
 
-       rank0 [label="Rank 0: FIRE\n(upstream)"];
+       rank0 [label="Rank 0: FIRE2\n(upstream)"];
        rank1 [label="Rank 1: Langevin\n(downstream + sink)"];
 
        rank0 -> rank1 [label="NCCL"];
@@ -52,7 +52,7 @@ Key concepts:
 Running the Examples
 --------------------
 
-**01 — Parallel FIRE → Langevin** (4 GPUs required):
+**01 — Parallel FIRE2 → Langevin** (4 GPUs required):
 
 .. code-block:: bash
 
@@ -74,7 +74,7 @@ Example Descriptions
 --------------------
 
 **01 — Distributed Pipeline**
-   Two independent FIRE → NVTLangevin sub-pipelines running on 4 GPUs.
+   Two independent FIRE2 → NVTLangevin sub-pipelines running on 4 GPUs.
    Demonstrates DistributedPipeline wiring, BufferConfig, and HostMemory sinks.
 
 **02 — Distributed Monitoring**

@@ -17,7 +17,7 @@ Processing Large Datasets with Inflight Batching
 =================================================
 
 **The problem**: a production relaxation campaign may require running
-thousands of structures through FIRE → NVT stages.  Loading all of them into
+thousands of structures through FIRE2 → NVT stages.  Loading all of them into
 GPU memory at once is impossible; processing one at a time wastes GPU
 throughput.
 
@@ -40,7 +40,7 @@ Lifecycle of a system:
        edge [fontname="Helvetica" fontsize=10]
 
        dataset [label="Dataset\\nSizeAwareSampler.request_replacement()" fillcolor="#eeeeee" fontcolor="#111111"]
-       stage0  [label="Live batch (GPU)\\nstage 0 — FIRE relaxation"]
+       stage0  [label="Live batch (GPU)\\nstage 0 — FIRE2 relaxation"]
        stage1  [label="Live batch (GPU)\\nstage 1 — NVT equilibration"]
        sink    [label="ConvergedSnapshotHook\\n→ HostMemory sink" fillcolor="#f9e2ae" fontcolor="#111111"]
        freed   [label="Slot freed" fillcolor="#eeeeee" fontcolor="#111111"]
@@ -77,7 +77,7 @@ import logging
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import FIRE, NVTLangevin, SizeAwareSampler
+from nvalchemi.dynamics import FIRE2, NVTLangevin, SizeAwareSampler
 from nvalchemi.dynamics.base import ConvergenceHook, FusedStage
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
@@ -260,7 +260,7 @@ logging.info(
 # ----------------------
 # Two sub-stages:
 #
-# * Stage 0 — FIRE geometry relaxation (convergence at fmax < 0.5 eV/Å;
+# * Stage 0 — FIRE2 geometry relaxation (convergence at fmax < 0.5 eV/Å;
 #   deliberately loose so most systems converge quickly in this demo).
 # * Stage 1 — NVT equilibration for 20 steps.
 #
@@ -278,9 +278,9 @@ model.eval()
 results_sink = HostMemoryWithSystemId(capacity=30)
 converged_hook = ConvergedSnapshotHook(sink=results_sink)
 
-fire_stage = FIRE(
+fire_stage = FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     convergence_hook=ConvergenceHook.from_forces(threshold=0.5),
 )
 nvt_stage = NVTLangevin(

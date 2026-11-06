@@ -38,9 +38,10 @@ Hyperparameters:
 * ``curvature_eps`` — pair acceptance floor (default ``None``: by dtype)
 * ``maxstep``       — maximum displacement per step (default 0.2)
 
-State spans two levels: per-system scalars and a segmented ``"lbfgs_dofs"``
+State spans two levels: per-update-unit scalars and a segmented ``"lbfgs_dofs"``
 level (one row per atom, plus two per system for variable cell) holding
-the history.  Positions must not be edited between steps (e.g. by
+the history. Fixed-cell LBFGS can treat a group of graphs as one update unit.
+Positions must not be edited between steps (e.g. by
 ``WrapPeriodicHook``): the next step differences them against the last.
 """
 
@@ -49,7 +50,7 @@ from __future__ import annotations
 import functools
 import math
 import warnings
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
 
@@ -362,12 +363,19 @@ class _LBFGSMixin:
 
     def _init_state(self, batch: Batch) -> None:
         _warn_if_wraps_positions(self)
+        if self.by_group:
+            layout = batch.group_layout
+            atoms_per_update = torch.bincount(
+                layout.node_to_group, minlength=layout.num_groups
+            )
+        else:
+            atoms_per_update = batch.num_nodes_per_graph
         self._state = _build_state(
-            batch.num_nodes_per_graph,
+            atoms_per_update,
             self.history_size,
             batch.positions.dtype,
             batch.device,
-            **self._extra_state_kwargs(batch, batch.num_graphs),
+            **self._extra_state_kwargs(batch, atoms_per_update.numel()),
         )
 
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
@@ -407,6 +415,14 @@ class LBFGS(_LBFGSMixin, BaseDynamics):
         Initial hooks.
     convergence_hook : ConvergenceHook or dict, optional
         Convergence criterion.
+    by_group : bool, optional
+        If True, update each group of graphs as a single unit, sharing
+        curvature history and step scaling across the graphs in that group.
+        Requires a valid layout set with ``batch.set_group_layout()``.
+        A configured convergence hook must use the same ``by_group`` setting.
+        Grouped sampling and refill are unsupported. Default False.
+        Forwarded through ``**kwargs`` to
+        :class:`~nvalchemi.dynamics.base.BaseDynamics`.
     **kwargs
         Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.
 
@@ -420,6 +436,8 @@ class LBFGS(_LBFGSMixin, BaseDynamics):
 
     __needs_keys__: set[str] = {"forces"}
     __provides_keys__: set[str] = {"positions"}
+    samples_equilibrium: ClassVar[bool] = False
+    """A relaxation descends to a minimum rather than sampling an ensemble."""
 
     def pre_update(self, batch: Batch) -> None:
         """Full L-BFGS step using current forces.
@@ -435,7 +453,7 @@ class LBFGS(_LBFGSMixin, BaseDynamics):
             batch.positions.detach(),
             batch.forces,
             _ops_state(self._state),
-            batch.batch_idx.int(),
+            self._update_idx(batch),
             maxstep=self.maxstep,
             curvature_eps=self.curvature_eps,
         )
@@ -448,6 +466,8 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
     stress.  Cells must be aligned: install
     :class:`~nvalchemi.dynamics.hooks.AlignCellHook` (``frequency=1``) on this
     optimizer or its ``FusedStage``, or pass pre-aligned cells.
+    ``by_group=True`` is unsupported because cell degrees of freedom remain
+    graph-level.
 
     Parameters
     ----------
@@ -489,6 +509,8 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
 
     __needs_keys__: set[str] = {"forces", "stress"}
     __provides_keys__: set[str] = {"positions", "cell"}
+    samples_equilibrium: ClassVar[bool] = False
+    """A relaxation descends to a minimum rather than sampling an ensemble."""
 
     def __init__(
         self,
@@ -576,6 +598,11 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
         return cell
 
     def _extra_state_kwargs(self, batch: Batch, n: int) -> dict[str, Any]:
+        if self.by_group:
+            raise NotImplementedError(
+                "LBFGSVariableCell does not support by_group=True because cell "
+                "degrees of freedom remain graph-level."
+            )
         return dict(
             cell=self._reference_cells(batch, n),
             cell_force_scale=self.cell_force_scale,

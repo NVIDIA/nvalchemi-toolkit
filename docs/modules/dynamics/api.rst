@@ -17,6 +17,7 @@ Core classes
    :nosignatures:
 
    BaseDynamics
+   DynamicsStrategy
    DemoDynamics
    FusedStage
    DistributedPipeline
@@ -38,6 +39,15 @@ Convergence
    :nosignatures:
 
    ConvergenceHook
+
+Constants
+---------
+
+.. autosummary::
+   :toctree: _generated
+   :nosignatures:
+
+   KB_EV
 
 Hooks
 -----

@@ -17,7 +17,9 @@
 The built-in terms in :mod:`nvalchemi.training.losses` already cover every
 teacher signal that has a total-energy, force, or stress shape — point their
 ``target_key`` at the matching ``teacher_*`` field. This subpackage adds the
-terms that have no supervised counterpart.
+terms that have no supervised counterpart: the teacher's per-atom energy
+decomposition, its per-atom representations, the curvature of its energy
+surface, and the Boltzmann distribution its energies define.
 """
 
 from __future__ import annotations
@@ -25,5 +27,17 @@ from __future__ import annotations
 from nvalchemi.training.distillation.losses.atomic_energy import (
     AtomicEnergyMatchingLoss,
 )
+from nvalchemi.training.distillation.losses.distribution import BoltzmannMatchingLoss
+from nvalchemi.training.distillation.losses.embedding import (
+    EmbeddingMatchingLoss,
+    EmbeddingProjector,
+)
+from nvalchemi.training.distillation.losses.hessian import HessianMatchingLoss
 
-__all__ = ["AtomicEnergyMatchingLoss"]
+__all__ = [
+    "AtomicEnergyMatchingLoss",
+    "BoltzmannMatchingLoss",
+    "EmbeddingMatchingLoss",
+    "EmbeddingProjector",
+    "HessianMatchingLoss",
+]

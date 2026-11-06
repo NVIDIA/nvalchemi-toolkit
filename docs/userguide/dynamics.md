@@ -128,7 +128,7 @@ from nvalchemi.dynamics import FIRE2, ConvergenceHook
 
 with FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     n_steps=500,
     convergence_hook=ConvergenceHook.from_fmax(0.05),
 ) as opt:
@@ -148,10 +148,10 @@ MD at increasing temperatures, then relax again. The
 with the `+` operator:
 
 ```python
-from nvalchemi.dynamics import FIRE, NVTLangevin, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, NVTLangevin, ConvergenceHook
 
-relax = FIRE(
-    model=model, dt=0.1, n_steps=200, convergence_hook=ConvergenceHook.from_fmax(0.05)
+relax = FIRE2(
+    model=model, dt=0.05, n_steps=200, convergence_hook=ConvergenceHook.from_fmax(0.05)
 )
 md = NVTLangevin(model=model, dt=1.0, temperature=300.0, friction=0.01, n_steps=5000)
 
@@ -226,13 +226,13 @@ dictionary keyed by global rank and handed to
 {py:class}`~nvalchemi.dynamics.base.DistributedPipeline`:
 
 ```python
-from nvalchemi.dynamics import FIRE, NVTLangevin, DistributedPipeline
+from nvalchemi.dynamics import FIRE2, NVTLangevin, DistributedPipeline
 from nvalchemi.dynamics.base import BufferConfig
 
 buffer_cfg = BufferConfig(num_systems=4, num_nodes=50, num_edges=0)
 
 stages = {
-    0: FIRE(model=model, buffer_config=buffer_cfg, ...),        # upstream — relaxation
+    0: FIRE2(model=model, buffer_config=buffer_cfg, ...),        # upstream — relaxation
     1: NVTLangevin(model=model, buffer_config=buffer_cfg, ...),  # downstream — MD
 }
 
@@ -250,10 +250,10 @@ on each stage:
 ```python
 stages = {
     # Sub-pipeline A: rank 0 → rank 1
-    0: FIRE(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=1, ...),
+    0: FIRE2(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=1, ...),
     1: NVTLangevin(model=model, buffer_config=buffer_cfg, prior_rank=0, next_rank=None, ...),
     # Sub-pipeline B: rank 2 → rank 3
-    2: FIRE(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=3, ...),
+    2: FIRE2(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=3, ...),
     3: NVTLangevin(model=model, buffer_config=buffer_cfg, prior_rank=2, next_rank=None, ...),
 }
 ```
@@ -400,6 +400,54 @@ The {doc}`/examples/distributed/index` gallery contains end-to-end examples,
 including multi-pipeline topologies and monitoring with persistent storage.
 ```
 
+(dynamics-structure-sources)=
+
+## Structure sources
+
+A run that graduates structures needs fresh ones to take their place, and a run
+that starts many trajectories needs them dealt out once.
+{py:class}`~nvalchemi.dynamics.OrderedStructureSampler` is that supply: a
+dataset served in row order from one position, `next_row`. The initial batch,
+and every later *backfill* (the structures drawn to replace the ones that
+finished) read from that position. A structure is therefore propagated once per
+pass over the rows, and a sampler restored from its `state_dict()` (`next_row`,
+`wraps`, `next_system_id`, `rank`, and `world_size`) picks up where it stopped
+rather than at row zero. `shard()` resets the position, so a caller that
+re-shards at start-up, as the distillation segment loop does, begins at the
+first row of the shard unless it restores the state afterwards.
+
+An *unbudgeted* sampler serves every row it owns as one batch, so that batch
+*is* the set of systems the run generates from. A budget --- `max_atoms`,
+`max_batch_size`, or `max_edges` --- packs the initial batch first-fit in row
+order instead. Packing stops at the first structure that does not fit and leaves
+the remainder, in row order, for the backfill. The initial packing and each
+backfill are one {py:meth}`~nvalchemi.dynamics.OrderedStructureSampler.draw`
+call under a {py:class}`~nvalchemi.dynamics.WithinBudget` policy: the initial
+batch with `on_miss="stop"`, and a backfill with `on_miss="skip"`, which passes
+over a row that does not fit rather than stalling on it. When you drive `draw`
+yourself, `fits=` takes any {py:class}`~nvalchemi.dynamics.FitPolicy`, a
+callable over the running atom and edge totals of the batch being drawn.
+`max_edges` counts the edges a store saved, not the neighbor list a propagator's
+hook rebuilds each step, so set it only when the stored count is the one that
+matters.
+
+{py:meth}`~nvalchemi.dynamics.OrderedStructureSampler.shard` narrows the
+sampler to the rows one rank owns, dealt strided and unpadded through
+{py:func}`~nvalchemi.data.datapipes.distributed_shard`: rank `r` takes every
+`world_size`-th row from offset `r`, so the shards are disjoint and cover the
+dataset. `recycle=True` wraps the position to the front of the shard when it
+reaches the end instead of reporting the sampler exhausted; `wraps` counts how
+often that happened, and the `system_id`s keep climbing across a wrap. One
+`draw` reaches every row at most once, so a single call never serves two copies
+of one structure.
+
+Every batch the sampler hands over is stamped with the bookkeeping an in-flight
+run maintains: `status` zeros and consecutive `system_id`s. A store written by an
+earlier run, whose exit statuses a propagator would otherwise read as finished,
+can therefore be propagated again without a manual cleanup pass. Any object
+satisfying the {py:class}`~nvalchemi.dynamics.StructureSource` protocol can
+stand in for the sampler; {doc}`/modules/dynamics/api` lists its members.
+
 ## What's next
 
 ```{toctree}
@@ -410,7 +458,7 @@ dynamics_mep
 dynamics_sinks
 ```
 
-- [Optimization and Integrators](dynamics_simulations) --- FIRE, NVE, NVT, NPT and
+- [Optimization and Integrators](dynamics_simulations) --- FIRE2, NVE, NVT, NPT and
   their configuration.
 - [Reaction Paths and NEB](dynamics_mep_guide) --- batched nudged elastic band,
   using either the high-level `NEB` strategy or hooks attached directly to an

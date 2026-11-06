@@ -79,6 +79,34 @@ coalesced ranges or orthogonal selections, and then restores the caller's reques
 sample order. This is why downstream code should prefer `read_many` for batches
 instead of looping over `read`.
 
+Pass `fields` to `AtomicDataZarrReader` to load only the stored arrays you need.
+Unselected arrays are skipped during data reads, reducing I/O and memory use.
+With `fields=None` (the default), the reader loads every stored field.
+
+The selection is fixed when the reader is constructed. `reader.field_names`
+reports the selected names; `reader.field_levels` describes all fields in the
+store. Selected names must be present when the reader opens and after each
+`refresh()`. A missing name raises `KeyError`; subsequent reads also fail until
+the field is restored and `refresh()` succeeds.
+
+Field selection also works through `Dataset`. For its default validation, select
+both `atomic_numbers` and `positions`. For example, this dataset reads those
+fields and `energy`:
+
+```python
+from nvalchemi.data.datapipes import AtomicDataZarrReader, Dataset
+
+reader = AtomicDataZarrReader(
+    "dataset.zarr",
+    fields=["atomic_numbers", "positions", "energy"],
+)
+dataset = Dataset(reader, device="cpu")
+```
+
+When using `Dataset(..., skip_validation=True)`, select `atomic_numbers` so
+`Batch.from_raw_dicts` can determine atom counts. Include `neighbor_list` when
+selecting edge fields so it can also determine edge counts.
+
 ```{tip}
 The writer supports per-group compression and chunking via
 {py:class}`~nvalchemi.data.datapipes.ZarrWriteConfig`. See the

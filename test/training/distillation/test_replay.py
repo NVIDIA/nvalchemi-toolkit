@@ -33,6 +33,7 @@ from nvalchemi.training.distillation import (
     label_dataset,
 )
 from nvalchemi.training.distillation.replay import (
+    EvictionPolicy,
     _batch_allocation,
     _minimum_batch_size,
 )
@@ -272,6 +273,23 @@ class _DropTooFew:
         return torch.tensor([0])
 
 
+class _DropOutOfRange:
+    """Eviction policy naming a frame past the resident ones."""
+
+    def select(self, buffer: Batch, incoming: Batch, capacity: int) -> torch.Tensor:  # noqa: ARG002
+        """Name the excess frames starting one past the last resident frame."""
+        excess = buffer.num_graphs - capacity
+        return torch.arange(buffer.num_graphs, buffer.num_graphs + excess)
+
+
+class _DropDuplicates:
+    """Eviction policy naming the first frame as many times as the excess."""
+
+    def select(self, buffer: Batch, incoming: Batch, capacity: int) -> torch.Tensor:  # noqa: ARG002
+        """Repeat index zero, so the distinct count falls short."""
+        return torch.zeros(buffer.num_graphs - capacity, dtype=torch.long)
+
+
 class _DropFractional:
     """Eviction policy naming frames by a fractional index."""
 
@@ -365,7 +383,42 @@ class TestReplayBufferEvictionPolicy:
         with pytest.raises(ValueError, match="must return integer indices"):
             buffer.extend(_make_frames([3.0]))
 
-        assert _tags(buffer.dataset.in_memory_batch) == [0.0, 1.0, 2.0, 3.0]
+        assert _tags(buffer.dataset.in_memory_batch) == [0.0, 1.0, 2.0]
+
+    @pytest.mark.parametrize(
+        "policy",
+        [_DropOutOfRange(), _DropDuplicates(), _DropTooFew()],
+        ids=["out_of_range", "duplicates", "too_few"],
+    )
+    def test_a_refused_eviction_leaves_the_buffer_as_it_was(
+        self, policy: EvictionPolicy
+    ) -> None:
+        """Frames are appended before the selection is checked, so a refusal rolls them back."""
+        buffer = _make_buffer([0.0, 1.0, 2.0], capacity=3, eviction=policy)
+        schema = buffer.schema
+
+        with pytest.raises(ValueError, match="distinct in-range indices"):
+            buffer.extend(_make_frames([3.0, 4.0]))
+
+        assert len(buffer) == 3
+        assert _tags(buffer.dataset.in_memory_batch) == [0.0, 1.0, 2.0]
+        assert buffer.schema == schema
+        buffer.eviction = FIFO()
+        buffer.extend(_make_frames([5.0]))
+        assert _tags(buffer.dataset.in_memory_batch) == [1.0, 2.0, 5.0]
+
+    def test_a_refused_first_extend_leaves_the_buffer_empty(self) -> None:
+        """A first call the policy fails freezes no schema and fixes no device."""
+        buffer = ReplayBuffer(capacity=1, eviction=_DropOutOfRange())
+
+        with pytest.raises(ValueError, match="distinct in-range indices"):
+            buffer.extend(_make_frames([0.0, 1.0]))
+
+        assert len(buffer) == 0
+        assert buffer.schema == frozenset()
+        assert buffer.device is None
+        with pytest.raises(RuntimeError, match="holds no frames yet"):
+            _ = buffer.dataset
 
     def test_the_fifo_object_matches_the_string(self) -> None:
         """``FIFO()`` and ``"fifo"`` keep the same newest frames."""

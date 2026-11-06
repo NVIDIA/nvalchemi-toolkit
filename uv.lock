@@ -74,8 +74,8 @@ overrides = [
 [[manifest.dependency-metadata]]
 name = "nvalchemi-toolkit-ops"
 version = "0.5.0"
-requires-dist = ["warp-lang>=1.13.0", "numpy", "torch>=2.8.0 ; extra == 'torch'", "torch>=2.8.0 ; extra == 'torch-cu12'", "torch>=2.8.0 ; extra == 'torch-cu13'"]
-provides-extras = ["torch", "torch-cu12", "torch-cu13"]
+requires-dist = ["warp-lang>=1.16.0", "numpy", "torch>=2.10.0 ; extra == 'torch'", "torch>=2.10.0 ; extra == 'torch-cu12'", "torch>=2.10.0 ; extra == 'torch-cu13'", "jax[cuda13] ; extra == 'jax'", "jax[cuda12] ; extra == 'jax-cu12'", "jax[cuda13] ; extra == 'jax-cu13'"]
+provides-extras = ["torch", "torch-cu12", "torch-cu13", "jax", "jax-cu12", "jax-cu13"]
 
 [[package]]
 name = "absl-py"
@@ -3393,6 +3393,9 @@ mace = [
 pymatgen = [
     { name = "pymatgen" },
 ]
+rdkit = [
+    { name = "rdkit" },
+]
 tensorboard = [
     { name = "tensorboard" },
 ]
@@ -3489,6 +3492,7 @@ requires-dist = [
     { name = "plum-dispatch", specifier = ">=2.5.7" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pymatgen", marker = "extra == 'pymatgen'", specifier = ">=2025.10.7" },
+    { name = "rdkit", marker = "extra == 'rdkit'", specifier = ">=2025.3.3" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "setuptools", marker = "extra == 'uma'", specifier = ">=70.0.0,<81" },
     { name = "setuptools", marker = "extra == 'uma-cu12'", specifier = ">=70.0.0,<81" },
@@ -3506,7 +3510,7 @@ requires-dist = [
     { name = "torchvision", marker = "sys_platform != 'darwin' and extra == 'uma-cu13'", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "nvalchemi-toolkit", extra = "uma-cu13" } },
     { name = "zarr", specifier = ">=3" },
 ]
-provides-extras = ["aimnet", "ase", "cu12", "cu13", "mace", "pymatgen", "tensorboard", "uma", "uma-cu12", "uma-cu13"]
+provides-extras = ["aimnet", "ase", "cu12", "cu13", "mace", "pymatgen", "rdkit", "tensorboard", "uma", "uma-cu12", "uma-cu13"]
 
 [package.metadata.requires-dev]
 build = [
@@ -7175,17 +7179,17 @@ wheels = [
 
 [[package]]
 name = "warp-lang"
-version = "1.14.0"
+version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or extra == 'extra-17-nvalchemi-toolkit-uma' or extra == 'extra-17-nvalchemi-toolkit-uma-cu12' or extra == 'extra-17-nvalchemi-toolkit-uma-cu13' or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (python_full_version >= '3.12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (python_full_version >= '3.12' and extra == 'extra-17-nvalchemi-toolkit-mace') or (python_full_version >= '3.12' and extra != 'extra-17-nvalchemi-toolkit-uma' and extra != 'extra-17-nvalchemi-toolkit-uma-cu12' and extra != 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build')" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/0f/28ba3c563a87adb85884fb59f5f281446f99a338c907e2b3f0b9f2f4a76c/warp_lang-1.14.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:12656050545cc77bf9b9b155399496c1a6279b5b6c59e407507d6858a2beb4a2", size = 24755239, upload-time = "2026-06-01T15:15:53.395Z" },
-    { url = "https://files.pythonhosted.org/packages/9a/32/784829665b0cc6fadada337f103c811b7bf92a951a69c08f7e3cd6ab2580/warp_lang-1.14.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:70cd127d0e9109417099649fedf9d00f39f1307ccb7a6e9fb87661337868d7de", size = 138666257, upload-time = "2026-06-01T15:15:59.163Z" },
-    { url = "https://files.pythonhosted.org/packages/6f/e1/1f882dfbf4b2528093722423b389984eb65433ac5ebe53f94a1f9a72c262/warp_lang-1.14.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:f482787e8da9c9ef045601fde99095e16d604fbcc3cbb4a1e0cef0769388b316", size = 140159761, upload-time = "2026-06-01T15:16:04.039Z" },
-    { url = "https://files.pythonhosted.org/packages/bc/6a/f530a27d627c19302d40d100ad986b7d1722237866fe178a0c5233a4717e/warp_lang-1.14.0-py3-none-win_amd64.whl", hash = "sha256:936b49ec78237f9760e58cbe9c46ee6f4244aefbd62071c4fa9fd3b313dfa878", size = 121919902, upload-time = "2026-06-01T15:16:05.777Z" },
+    { url = "https://files.pythonhosted.org/packages/be/b0/9b1de407fa10b380f5ca4ed1c3e5b129be55ea26a927c7a49e45cdde14b0/warp_lang-1.17.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:f2fec43afb81caa2190c0b7fa3aaf4d869f3599839f0c40b9ead84331f91e993", size = 27544218, upload-time = "2026-08-31T05:52:29.177Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/a1/e11aa6898e8bbb6910e89fe31a3338fb2566f038912010875c072e6dafd1/warp_lang-1.17.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:47cd93636828dd16e55eeb4e77a0e3547b5fb0f383000a3d228629df68f28fd8", size = 164347636, upload-time = "2026-08-31T05:53:14.441Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/4f/a17b1f0ebfeabe37326f01afb6109961f20a0165c1258242f46d10a554f5/warp_lang-1.17.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:5051271048da956a8b94e2db9771ce60ce9591a3ac5bb49037f3d6812d1eea00", size = 172665443, upload-time = "2026-08-31T05:53:52.47Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/7a/36306a503085cbfc79c35a28e441c59dd1d8070d2dd65152345ebf2dfec2/warp_lang-1.17.0-py3-none-win_amd64.whl", hash = "sha256:ca35c82242a7553046f09023bbe56750b5c3d9af72625bd1a905a56d3189771d", size = 151236515, upload-time = "2026-08-31T05:54:27.944Z" },
 ]
 
 [[package]]

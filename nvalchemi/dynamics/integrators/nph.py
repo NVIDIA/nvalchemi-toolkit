@@ -47,9 +47,8 @@ from nvalchemi.dynamics._ops.npt_nph import (
     npt_position_update,
 )
 from nvalchemi.dynamics._ops.thermostat_utils import compute_kinetic_energy
-from nvalchemi.dynamics._units import fs_to_internal_time
+from nvalchemi.dynamics._units import KB_EV, fs_to_internal_time
 from nvalchemi.dynamics.base import BaseDynamics
-from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook

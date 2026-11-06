@@ -324,8 +324,10 @@ class ReplayBuffer:
     Parameters
     ----------
     capacity : int | None, optional
-        Maximum number of frames kept. Bound it on long runs. Default ``None``
-        (unbounded).
+        Maximum number of frames kept. Bound it on long runs. Also bound it on
+        any run whose objective reads a batch as a sample of the current
+        policy, because a draw over a buffer that never retires frames is a
+        draw over every policy the run has had. Default ``None`` (unbounded).
     eviction : {"fifo"} | EvictionPolicy, optional
         Policy deciding which frames leave a full buffer. Default ``"fifo"``,
         which builds :class:`FIFO`.
@@ -424,7 +426,8 @@ class ReplayBuffer:
             from the buffer's, if the admission policy returns anything but one
             boolean per graph, or if the eviction policy returns non-integer
             indices, an index outside the resident frames, or fewer frames
-            than the buffer's excess over capacity.
+            than the buffer's excess over capacity. A refused eviction leaves
+            the buffer as it was before the call.
         """
         if frames.num_graphs == 0:
             return
@@ -433,6 +436,7 @@ class ReplayBuffer:
             if admitted is None:
                 return
             frames = admitted
+        given_device = self.device
         if self.device is None:
             self.device = frames.device
         else:
@@ -444,11 +448,28 @@ class ReplayBuffer:
             self._dataset = InMemoryDataset(
                 in_memory_batch=frames.clone(), device=self.device
             )
-        else:
-            self._check_schema(incoming)
-            self._check_dtypes(_frame_dtypes(frames))
-            self._dataset.in_memory_batch.append(frames)
-        self._evict(frames)
+            try:
+                self._evict(frames)
+            except ValueError:
+                self._dataset = None
+                self._schema = frozenset()
+                self._dtypes = {}
+                self.device = given_device
+                raise
+            return
+        self._check_schema(incoming)
+        self._check_dtypes(_frame_dtypes(frames))
+        resident_count = len(self._dataset)
+        self._dataset.in_memory_batch.append(frames)
+        try:
+            self._evict(frames)
+        except ValueError:
+            # Appending is in place, so a refused selection is rolled back here.
+            resident = self._dataset.in_memory_batch
+            self._dataset.in_memory_batch = resident.index_select(
+                torch.arange(resident_count, device=resident.device)
+            )
+            raise
 
     def _admit(self, frames: Batch) -> Batch | None:
         """Return the admitted frames, or ``None`` if the policy admits none."""

@@ -130,6 +130,13 @@ DDPHook(
 )
 ```
 
+A desynchronized world does not fail fast. A rank that stalls or raises while
+`DDPHook` owns the process group leaves a live job that never advances, and its
+peers wait for the process group's default timeout. The hook exposes no timeout
+setting of its own. To bound the wait, initialize the process group yourself,
+before the run, with an explicit `timeout=`; the hook then finds communication
+already established and leaves it alone.
+
 ### Custom distributed sampler
 
 When the default sampler does not fit, you can supply your own, and `DDPHook` gets

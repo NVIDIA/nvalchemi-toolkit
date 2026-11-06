@@ -12,11 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Conversions between public MD time units and kernel time units."""
+"""Physical constants and conversions between public MD units and kernel units."""
 
 from __future__ import annotations
 
 import torch
+
+KB_EV: float = 8.617333262e-5
+"""Boltzmann constant in eV per kelvin (CODATA 2018)."""
 
 FS_PER_INTERNAL_TIME: float = 10.180505710759414
 

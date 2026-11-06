@@ -37,6 +37,15 @@ weights per graph, divides, and averages the per-graph means. Loss
 terms that mean over graphs rather than over atoms share it instead of
 re-deriving the per-graph numerator and denominator.
 
+Masked scalar (``V ... → ()``)
+------------------------------
+
+:func:`masked_mean` is the reduction a per-node loss term with a
+``normalize_by_atom_count`` switch ends in: the global mean of a masked
+residual over its valid entries, or :func:`graph_balanced_mean` when the
+switch is on, reading ``batch_idx`` and ``num_graphs`` from a batch when
+they are not passed. Both branches accumulate in at least fp32.
+
 Matrix reductions (``B ... m n → B ...``)
 -----------------------------------------
 
@@ -89,7 +98,13 @@ from nvalchemi._typing import BatchIndices
 if TYPE_CHECKING:
     from jaxtyping import Float, Num
 
-__all__ = ["frobenius_mse", "graph_balanced_mean", "per_graph_mean", "per_graph_sum"]
+__all__ = [
+    "frobenius_mse",
+    "graph_balanced_mean",
+    "masked_mean",
+    "per_graph_mean",
+    "per_graph_sum",
+]
 
 _NumGraphs: TypeAlias = int | torch.Tensor
 
@@ -323,6 +338,76 @@ def graph_balanced_mean(
     per_graph_valid = per_graph_sum(per_node_valid, batch_idx, num_graphs=num_graphs)
     per_sample = per_graph_residual / per_graph_valid.clamp_min(1.0)
     return per_sample.mean(), per_sample
+
+
+def masked_mean(
+    residual: Float[torch.Tensor, "V ..."],  # noqa: F722
+    valid: Num[torch.Tensor, "V ..."],  # noqa: F722
+    *,
+    graph_balanced: bool,
+    batch_idx: BatchIndices | None = None,
+    num_graphs: int | None = None,
+    batch: Any | None = None,
+    loss_name: str = "masked_mean",
+) -> tuple[Float[torch.Tensor, ""], Float[torch.Tensor, "B"] | None]:  # noqa: F722
+    r"""Mean of a masked residual, over every valid entry or balanced over graphs.
+
+    Without *graph_balanced* this is the global mean: the residual summed
+    over every entry and divided by the number of valid entries, so every
+    atom weighs the same and a large graph weighs more than a small one.
+    With it, the reduction is :func:`graph_balanced_mean`, so every graph
+    weighs the same. Both branches accumulate in at least float32, so a
+    half-precision residual reduces to a float32 scalar, and a residual with
+    no valid entry reduces to ``0.0`` on either branch.
+
+    Parameters
+    ----------
+    residual : Float[torch.Tensor, "V ..."]
+        Per-node residual, already zeroed where ``valid`` is false.
+    valid : Num[torch.Tensor, "V ..."]
+        Per-node validity mask or weights, same shape as ``residual``.
+    graph_balanced : bool
+        Whether to average within each graph first and then over graphs.
+    batch_idx : BatchIndices | None, optional
+        Node-to-graph assignment, read only when *graph_balanced*. Default
+        ``None`` reads it from *batch*.
+    num_graphs : int | None, optional
+        Number of graphs in the batch, read only when *graph_balanced*.
+        Default ``None`` reads it from *batch*.
+    batch : Any | None, optional
+        Object carrying ``batch_idx`` and ``num_graphs`` for the keywords
+        left ``None``, as the ``batch=`` keyword a composed loss forwards.
+        Default ``None``.
+    loss_name : str, optional
+        Name of the calling loss, used in the metadata error. Default
+        ``"masked_mean"``.
+
+    Returns
+    -------
+    tuple[Float[torch.Tensor, ""], Float[torch.Tensor, "B"] | None]
+        The scalar loss and, when *graph_balanced*, the per-graph means it
+        averages, suitable for a loss term's ``per_sample_loss``; ``None``
+        otherwise.
+
+    Raises
+    ------
+    ValueError
+        If *graph_balanced* and neither the keywords nor *batch* supply
+        ``batch_idx`` and ``num_graphs``, or if the leading dim of
+        ``residual`` does not match ``batch_idx``.
+    """
+    if not graph_balanced:
+        acc_dtype = torch.promote_types(residual.dtype, torch.float32)
+        total = residual.to(acc_dtype).sum() / valid.sum(dtype=acc_dtype).clamp_min(1.0)
+        return total, None
+    if batch is not None:
+        if batch_idx is None:
+            batch_idx = getattr(batch, "batch_idx", None)
+        if num_graphs is None:
+            num_graphs = getattr(batch, "num_graphs", None)
+    return graph_balanced_mean(
+        residual, valid, batch_idx, num_graphs, loss_name=loss_name
+    )
 
 
 def frobenius_mse(

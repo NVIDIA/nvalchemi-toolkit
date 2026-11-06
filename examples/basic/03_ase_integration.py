@@ -22,9 +22,9 @@ workflow.  ASE provides a rich library of molecular and crystal builders,
 file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
 :class:`ase.Atoms` objects via :meth:`AtomicData.from_atoms`.
 
-* **Part 1** — FIRE geometry optimization of rattled molecules (H2O, CH4,
+* **Part 1** — FIRE2 geometry optimization of rattled molecules (H2O, CH4,
   CH3CH2OH).
-* **Part 2** — FusedStage (FIRE + NVT Langevin) on a Cu(111) slab with a CO
+* **Part 2** — FusedStage (FIRE2 + NVT Langevin) on a Cu(111) slab with a CO
   adsorbate — a classic surface-science system.  Slab atoms are frozen with
   :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`.
 
@@ -46,7 +46,7 @@ from ase.io import write
 
 from nvalchemi._typing import AtomCategory
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import FIRE, NVTLangevin
+from nvalchemi.dynamics import FIRE2, NVTLangevin
 from nvalchemi.dynamics.base import ConvergenceHook
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -108,12 +108,12 @@ def batch_to_atoms_list(batch: Batch) -> list[Atoms]:
 
 
 # %%
-# Part 1: FIRE Geometry Optimization of Rattled Molecules
+# Part 1: FIRE2 Geometry Optimization of Rattled Molecules
 # --------------------------------------------------------
 # Build three molecules from the ASE G2 database, rattle them slightly so
-# the optimizer has work to do, and relax them in a single batched FIRE run.
+# the optimizer has work to do, and relax them in a single batched FIRE2 run.
 
-print("=== Part 1: FIRE Optimization — Rattled Molecules ===")
+print("=== Part 1: FIRE2 Optimization — Rattled Molecules ===")
 
 molecules = []
 for name, seed in [("H2O", 1), ("CH4", 2), ("CH3CH2OH", 3)]:
@@ -132,9 +132,9 @@ data_list_opt = [atoms_to_data(mol) for mol in molecules]
 batch_opt = Batch.from_data_list(data_list_opt)
 print(f"\nBatch: {batch_opt.num_graphs} systems, {batch_opt.num_nodes} atoms total\n")
 
-fire_opt = FIRE(
+fire_opt = FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     n_steps=200,
     convergence_hook=ConvergenceHook(
         criteria=[
@@ -147,7 +147,7 @@ with LoggingHook(backend="csv", log_path="03_fire_opt.csv", frequency=10) as log
     fire_opt.register_hook(log_hook)
     batch_opt = fire_opt.run(batch_opt)
 
-print(f"\nCompleted {fire_opt.step_count} FIRE steps. Log: 03_fire_opt.csv")
+print(f"\nCompleted {fire_opt.step_count} FIRE2 steps. Log: 03_fire_opt.csv")
 
 relaxed_molecules = batch_to_atoms_list(batch_opt)
 write(OUTPUT_DIR / "molecules_relaxed.xyz", relaxed_molecules)
@@ -159,7 +159,7 @@ print(
 # Part 2: FusedStage — Surface + Adsorbate System with Frozen Slab
 # ------------------------------------------------------------------
 # Build a Cu(111) slab with a CO molecule adsorbed on top.  This is a
-# textbook surface-science setup: relax the adsorbate geometry with FIRE
+# textbook surface-science setup: relax the adsorbate geometry with FIRE2
 # (status 0), then run NVT Langevin MD at 300 K (status 1).
 #
 # The copper slab atoms are frozen using :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`,
@@ -216,7 +216,7 @@ n_frozen = int((batch_fused.atom_categories == AtomCategory.SPECIAL.value).sum()
 n_free = int((batch_fused.atom_categories == AtomCategory.GAS.value).sum().item())
 print(f"  Frozen (slab): {n_frozen} atoms, Free (adsorbate): {n_free} atoms")
 
-# All systems start in the FIRE stage (status = 0).
+# All systems start in the FIRE2 stage (status = 0).
 batch_fused["status"] = torch.zeros(batch_fused.num_graphs, 1, dtype=torch.long)
 
 print(
@@ -225,7 +225,7 @@ print(
 
 # FreezeAtomsHook: keeps slab positions fixed, zeros their velocities and forces.
 # Both stages share the same hook instance so the snapshot/restore logic is
-# consistent across the FIRE -> Langevin transition.
+# consistent across the FIRE2 -> Langevin transition.
 freeze_hook = FreezeAtomsHook()
 
 # Create LoggingHooks before the stage constructors so they can be passed via
@@ -235,10 +235,10 @@ langevin_logger = LoggingHook(
     backend="csv", log_path="03_langevin_stage.csv", frequency=10
 )
 
-# FIRE sub-stage (relaxation) — only adsorbate atoms relax
-fire_stage = FIRE(
+# FIRE2 sub-stage (relaxation) — only adsorbate atoms relax
+fire_stage = FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     convergence_hook=ConvergenceHook(
         criteria=[
             {"key": "forces", "threshold": 0.05, "reduce_op": "norm", "reduce_dims": -1}
@@ -259,7 +259,7 @@ langevin_stage = NVTLangevin(
     n_steps=200,
 )
 
-# Compose: status 0 → FIRE, status 1 → Langevin
+# Compose: status 0 → FIRE2, status 1 → Langevin
 fused = fire_stage + langevin_stage
 print(f"Created: {fused}\n")
 
@@ -268,7 +268,7 @@ with fire_logger, langevin_logger:
     batch_fused = fused.run(batch_fused, n_steps=n_fused_steps)
 
 status_final = batch_fused.status.squeeze(-1).tolist()
-print(f"\nFinal status: {status_final}  (0=FIRE, 1=Langevin)")
+print(f"\nFinal status: {status_final}  (0=FIRE2, 1=Langevin)")
 print(f"FusedStage total steps: {fused.step_count}")
 
 final_systems = batch_to_atoms_list(batch_fused)

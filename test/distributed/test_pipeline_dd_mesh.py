@@ -55,6 +55,11 @@ from test.distributed.test_fire_dd import (
     _make_fire_lj,
 )
 
+# FIRE is deprecated in favour of FIRE2; these tests still exercise it.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:FIRE(VariableCell)? is deprecated:DeprecationWarning"
+)
+
 # The two cross-stage hand-off gates below deadlock under gloo's single-threaded
 # progress engine on a single machine: the pipeline-group lead↔lead P2P can't be
 # serviced while a rank is blocked in the concurrent domain-group all_to_all. This

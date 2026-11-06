@@ -26,15 +26,16 @@ Organised in tiers:
 * **Checkpoint tests** load a real fairchem checkpoint (default
   ``uma-s-1p1``, override via ``NVALCHEMI_UMA_CKPT`` / ``NVALCHEMI_UMA_DEVICE``)
   and cover forward-equivalence vs ``FAIRChemCalculator``, charged-input
-  response, NVE energy conservation (``@slow``), and the turbo /
-  ``torch.compile`` device path (``@slow``, CUDA only). They skip
-  cleanly when the gated checkpoint cannot be downloaded.
+  response, periodic OMol stress equivalence, NVE energy conservation
+  (``@slow``), and the turbo / ``torch.compile`` device path (``@slow``, CUDA
+  only). They skip cleanly when the gated checkpoint cannot be downloaded.
 """
 
 from __future__ import annotations
 
 import math
 import os
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -47,7 +48,7 @@ pytest.importorskip(
 )
 
 from ase import Atoms  # noqa: E402
-from ase.build import bulk  # noqa: E402
+from ase.build import bulk, molecule  # noqa: E402
 from fairchem.core.datasets.atomic_data import AtomicData as FCAtomicData  # noqa: E402
 
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
@@ -225,30 +226,72 @@ class TestConstruction:
         assert any(p.requires_grad for p in w.predict_unit.model.parameters())
         assert w.training is True
 
-    def test_from_checkpoint_forwards_default_preset_unchanged(self, mock_pu):
+    @pytest.mark.parametrize("registered", [True, False], ids=["registry", "path"])
+    @pytest.mark.parametrize("preset", [True, False], ids=["preset", "settings-object"])
+    def test_from_checkpoint_copies_settings_and_enables_omol_stress(
+        self, mock_pu, tmp_path, registered, preset
+    ):
         from fairchem.core.calculate import pretrained_mlip
+        from fairchem.core.units.mlip_unit.api import inference
+
+        shared_settings = SimpleNamespace(
+            compile=True,
+            merge_mole=True,
+            tf32=True,
+            predict_untrained_stress={"omc"},
+        )
+        settings = "batch" if preset else shared_settings
+        name_or_path = "uma-test"
+        if registered:
+            available_models = ["uma-test"]
+        else:
+            name_or_path = tmp_path / "uma-test.pt"
+            name_or_path.touch()
+            available_models = []
 
         with (
-            patch.object(pretrained_mlip, "available_models", ["uma-test"]),
+            patch.object(pretrained_mlip, "available_models", available_models),
             patch.object(
                 pretrained_mlip, "get_predict_unit", return_value=mock_pu
             ) as get_predict_unit,
+            patch(
+                "fairchem.core.units.mlip_unit.load_predict_unit",
+                return_value=mock_pu,
+            ) as load_predict_unit,
+            patch.object(
+                inference, "guess_inference_settings", return_value=shared_settings
+            ) as guess_settings,
         ):
-            UMAWrapper.from_checkpoint("uma-test")
+            UMAWrapper.from_checkpoint(
+                name_or_path, inference_settings=settings, task_name="omol"
+            )
 
-        get_predict_unit.assert_called_once_with(
-            "uma-test",
-            inference_settings="default",
-            overrides=None,
-            device="cpu",
+        loader_mock = get_predict_unit if registered else load_predict_unit
+        loader_mock.assert_called_once()
+        configured = loader_mock.call_args.kwargs["inference_settings"]
+        assert configured is not shared_settings
+        assert configured.predict_untrained_stress == {"omc", "omol"}
+        assert (configured.compile, configured.merge_mole, configured.tf32) == (
+            True,
+            True,
+            True,
         )
+        assert shared_settings.predict_untrained_stress == {"omc"}
+        if preset:
+            guess_settings.assert_called_once_with("batch")
+        else:
+            guess_settings.assert_not_called()
 
 
 class TestModelConfig:
     def test_omol_active_outputs(self, mock_omol):
-        active = mock_omol.model_config.active_outputs
-        assert "energy" in active and "forces" in active
-        assert "stress" not in active  # molecular — no stress
+        config = mock_omol.model_config
+        assert config.outputs >= {"energy", "forces", "stress"}
+        assert config.active_outputs >= {"energy", "forces", "stress"}
+        assert config.autograd_outputs >= {"forces", "stress"}
+        assert config.needs_pbc is False
+        assert config.required_inputs == frozenset()
+        assert config.optional_inputs == frozenset({"cell", "charge", "spin", "tags"})
 
     def test_omat_active_outputs(self, mock_omat):
         active = mock_omat.model_config.active_outputs
@@ -277,22 +320,56 @@ class TestModelConfig:
 
 
 class TestAdaptInput:
-    def test_molecular_single_system(self, mock_omol):
-        batch = Batch.from_data_list([_make_propane()])
-        fc = mock_omol.adapt_input(batch)
+    def test_omol_missing_cell_and_pbc_defaults_to_molecule(self, mock_omol):
+        data = AtomicData.from_atoms(molecule("H2O"))
+        assert data.cell is None
+        assert data.pbc is None
+
+        fc = mock_omol.adapt_input(data)
 
         assert isinstance(fc, FCAtomicData)
-        assert fc.pos.shape == (11, 3)
-        assert fc.atomic_numbers.shape == (11,)
-        assert fc.natoms.tolist() == [11]
+        assert fc.pos.shape == (3, 3)
+        assert fc.atomic_numbers.shape == (3,)
+        assert fc.natoms.tolist() == [3]
         assert fc.cell.shape == (1, 3, 3)
         assert fc.pbc.shape == (1, 3)
-        assert fc.pbc.any().item() is False  # omol — no PBC
+        assert torch.count_nonzero(fc.cell).item() == 0
+        assert fc.pbc.any().item() is False
         assert fc.edge_index.shape == (2, 0)
         assert fc.nedges.tolist() == [0]
         assert fc.charge.tolist() == [0]  # default for omol
         assert fc.spin.tolist() == [1]  # OMol default multiplicity = singlet
         assert fc.dataset == ["omol"]
+
+    def test_omol_cell_without_pbc_defaults_to_periodic(self, mock_omol):
+        cell = (torch.eye(3, dtype=torch.float32) * 3.615).unsqueeze(0)
+        data = AtomicData(
+            positions=torch.zeros(1, 3),
+            atomic_numbers=torch.tensor([29]),
+            cell=cell,
+        )
+
+        fc = mock_omol.adapt_input(data)
+
+        torch.testing.assert_close(fc.cell, cell)
+        assert fc.pbc.all().item() is True
+
+    def test_omol_explicit_cell_and_pbc_are_preserved(self, mock_omol):
+        cell = (torch.eye(3, dtype=torch.float32) * 4.0).unsqueeze(0)
+        pbc = torch.tensor([[True, False, True]])
+        data = AtomicData(
+            positions=torch.zeros(1, 3),
+            atomic_numbers=torch.tensor([6]),
+            cell=cell,
+            pbc=pbc,
+        )
+
+        fc = mock_omol.adapt_input(data)
+
+        torch.testing.assert_close(fc.cell, cell)
+        torch.testing.assert_close(fc.pbc, pbc)
+        assert fc.spin.tolist() == [1]
+        assert fc.charge.tolist() == [0]
 
     def test_periodic_single_system(self, mock_omat):
         batch = Batch.from_data_list([_make_periodic_cu()])
@@ -688,6 +765,42 @@ class TestAdaptOutput:
         out = mock_omat.adapt_output(raw)
         assert out["stress"].shape == (1, 3, 3)
 
+    def test_stress_reshape_and_cast_to_base_precision(self, mock_omat):
+        mock_omat.predict_unit.inference_settings.base_precision_dtype = torch.float32
+        raw = {
+            "energy": torch.tensor([1.5]),
+            "forces": torch.zeros(1, 3),
+            "stress": torch.full((1, 9), 0.25, dtype=torch.float64),
+        }
+
+        out = mock_omat.adapt_output(raw)
+
+        assert out["stress"].shape == (1, 3, 3)
+        assert out["stress"].dtype == torch.float32
+        torch.testing.assert_close(out["stress"], torch.full((1, 3, 3), 0.25))
+
+    def test_missing_active_stress_remains_absent(self, mock_omol):
+        raw = {
+            "energy": torch.tensor([1.5]),
+            "forces": torch.zeros(5, 3),
+        }
+
+        out = mock_omol.adapt_output(raw)
+
+        assert "stress" not in out
+
+    def test_omol_adapt_output_without_data_keeps_stress(self, mock_omol):
+        raw = {
+            "energy": torch.tensor([1.5]),
+            "forces": torch.zeros(1, 3),
+            "stress": torch.full((1, 9), 0.25, dtype=torch.float64),
+        }
+
+        out = mock_omol.adapt_output(raw)
+
+        assert out["stress"].shape == (1, 3, 3)
+        assert out["stress"].dtype == torch.float32
+
     def test_stress_flat_reshape(self, mock_omat):
         """fairchem sometimes returns stress flattened to (B, 9)."""
         raw = {
@@ -719,6 +832,70 @@ class TestForward:
         out = mock_omol(batch)
         assert out["energy"].shape == (2, 1)
         assert out["forces"].shape == (22, 3)
+
+    def test_cellless_then_periodic_omol_forward_without_config_mutation(self, mock_pu):
+        def predict(data, undo_element_references=True):
+            return {
+                "energy": torch.ones(data.num_graphs, dtype=data.pos.dtype),
+                "forces": torch.zeros_like(data.pos),
+                "stress": torch.ones(data.num_graphs, 9, dtype=torch.float64),
+            }
+
+        mock_pu.predict = Mock(side_effect=predict)
+        wrapper = UMAWrapper(mock_pu, task_name="omol")
+        active_outputs = set(wrapper.model_config.active_outputs)
+        outputs = wrapper.model_config.outputs
+
+        molecular = AtomicData.from_atoms(molecule("H2O"))
+        molecular_out = wrapper(molecular)
+        assert "stress" not in molecular_out
+        assert torch.isfinite(molecular_out["energy"]).all()
+        assert torch.isfinite(molecular_out["forces"]).all()
+        assert wrapper.model_config.active_outputs == active_outputs
+
+        cell = (torch.eye(3, dtype=torch.float32) * 3.615).unsqueeze(0)
+        periodic = AtomicData(
+            positions=torch.zeros(1, 3),
+            atomic_numbers=torch.tensor([29]),
+            cell=cell,
+        )
+        periodic_out = wrapper(periodic)
+        assert periodic_out["stress"].shape == (1, 3, 3)
+        assert periodic_out["stress"].dtype == torch.float32
+        assert wrapper.model_config.active_outputs == active_outputs
+        assert wrapper.model_config.outputs == outputs
+
+    @pytest.mark.parametrize("graph_padding", [False, True])
+    def test_compile_shape_policy_tracks_graph_padding(self, mock_pu, graph_padding):
+        from nvalchemi.models.uma import UMAWrapper
+
+        settings = SimpleNamespace(
+            base_precision_dtype=torch.float32, compile=True, merge_mole=False
+        )
+        mock_pu.inference_settings = settings
+        mock_pu.lazy_model_intialized = False
+        mock_pu.device = torch.device("cpu")
+        mock_pu.move_to_device = Mock()
+
+        def predict(data, undo_element_references=True):
+            torch.compile(lambda: None, dynamic=True)
+            return {
+                "energy": torch.ones(data.num_graphs),
+                "forces": torch.zeros(data.pos.shape[0], 3),
+            }
+
+        mock_pu.predict = Mock(side_effect=predict)
+        dd_context = SimpleNamespace(
+            graph_padder=object() if graph_padding else None,
+            maybe_pad_graph=lambda data: data,
+        )
+        with (
+            patch("nvalchemi.models.uma.current_dd_context", return_value=dd_context),
+            patch("torch.compile", side_effect=lambda fn, **kwargs: fn) as compile_fn,
+        ):
+            UMAWrapper(mock_pu, task_name="omol")(_make_propane())
+
+        assert compile_fn.call_args.kwargs["dynamic"] is (not graph_padding)
 
 
 # ===========================================================================
@@ -936,10 +1113,39 @@ def predict_unit():
 
 
 @pytest.fixture(scope="module")
-def calc_omol(predict_unit):
+def wrapper_omol() -> UMAWrapper:
+    """Load an OMol wrapper through its checkpoint factory in eager batch mode."""
+    from huggingface_hub.errors import (
+        EntryNotFoundError,
+        HfHubHTTPError,
+        LocalEntryNotFoundError,
+        OfflineModeIsEnabled,
+    )
+
+    try:
+        return UMAWrapper.from_checkpoint(
+            _CKPT,
+            task_name="omol",
+            device=_DEVICE,
+            inference_settings="batch",
+        )
+    except (
+        HfHubHTTPError,
+        EntryNotFoundError,
+        LocalEntryNotFoundError,
+        OfflineModeIsEnabled,
+    ) as e:
+        pytest.skip(f"no access to UMA checkpoint {_CKPT}: {e}")
+
+
+@pytest.fixture(scope="module")
+def calc_omol(wrapper_omol):
     from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
 
-    return FAIRChemCalculator(predict_unit=predict_unit, task_name="omol")
+    return FAIRChemCalculator(
+        predict_unit=wrapper_omol.predict_unit,
+        task_name="omol",
+    )
 
 
 @pytest.fixture(scope="module")
@@ -947,11 +1153,6 @@ def calc_omat(predict_unit):
     from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
 
     return FAIRChemCalculator(predict_unit=predict_unit, task_name="omat")
-
-
-@pytest.fixture(scope="module")
-def wrapper_omol(predict_unit) -> UMAWrapper:
-    return UMAWrapper(predict_unit, task_name="omol")
 
 
 @pytest.fixture(scope="module")
@@ -992,15 +1193,15 @@ def _atomicdata_from_ase(atoms: Atoms) -> AtomicData:
     """Convert an ASE ``Atoms`` into our ``AtomicData`` (CPU tensors)."""
     pos = torch.as_tensor(np.asarray(atoms.positions), dtype=torch.float32)
     numbers = torch.as_tensor(np.asarray(atoms.get_atomic_numbers()), dtype=torch.long)
-    kwargs: dict = {"positions": pos, "atomic_numbers": numbers}
-    if np.any(atoms.pbc):
-        kwargs["cell"] = torch.as_tensor(
+    fields = {"positions": pos, "atomic_numbers": numbers}
+    if atoms.get_pbc().any():
+        fields["cell"] = torch.as_tensor(
             np.asarray(atoms.cell.array), dtype=torch.float32
         ).unsqueeze(0)
-        kwargs["pbc"] = torch.as_tensor(
+        fields["pbc"] = torch.as_tensor(
             np.asarray(atoms.pbc), dtype=torch.bool
         ).reshape(1, 3)
-    return AtomicData(**kwargs)
+    return AtomicData(**fields)
 
 
 def _bcc_fe_batch(device: str | torch.device, seed: int = 42) -> Batch:
@@ -1049,7 +1250,7 @@ def _bcc_fe_batch(device: str | torch.device, seed: int = 42) -> Batch:
 
 
 class TestOMolEquivalence:
-    """Propane molecular energy/forces match ``FAIRChemCalculator``."""
+    """OMol energy/forces and periodic stress match ``FAIRChemCalculator``."""
 
     @pytest.fixture(autouse=True)
     def _setup(self, wrapper_omol, calc_omol):
@@ -1068,14 +1269,18 @@ class TestOMolEquivalence:
 
     def _wrapper_result(self) -> dict[str, np.ndarray]:
         data = _atomicdata_from_ase(self.atoms)
+        assert data.cell is None
+        assert data.pbc is None
         batch = Batch.from_data_list([data])
         batch.charge = torch.tensor([0], dtype=torch.long)
         batch.spin = torch.tensor([1], dtype=torch.long)
         out = self.wrapper(batch)
-        return {
-            "energy": float(out["energy"].detach().cpu().numpy().flatten()[0]),
-            "forces": out["forces"].detach().cpu().numpy(),
-        }
+        assert "stress" not in out
+        energy = float(out["energy"].detach().cpu().numpy().flatten()[0])
+        forces = out["forces"].detach().cpu().numpy()
+        assert np.isfinite(energy)
+        assert np.isfinite(forces).all()
+        return {"energy": energy, "forces": forces}
 
     def test_energy_matches(self):
         ref = self._reference()
@@ -1091,6 +1296,55 @@ class TestOMolEquivalence:
         ours = self._wrapper_result()
         assert ours["forces"].shape == ref["forces"].shape
         np.testing.assert_allclose(ours["forces"], ref["forces"], atol=1e-4, rtol=1e-4)
+
+    def test_periodic_energy_forces_stress_match(self):
+        atoms = self.atoms.copy()
+        atoms.set_cell([8.0, 8.0, 8.0])
+        atoms.center()
+        atoms.pbc = True
+
+        atoms.calc = self.calc
+        ref = {
+            "energy": atoms.get_potential_energy(),
+            "forces": atoms.get_forces(),
+            "stress": atoms.get_stress(voigt=False),
+        }
+
+        data = _atomicdata_from_ase(atoms)
+        assert data.cell is not None
+        data.pbc = None  # Exercise OMol's cell-present, PBC-omitted default.
+        batch = Batch.from_data_list([data])
+        assert batch.cell is not None
+        assert not hasattr(batch, "pbc")
+        batch.charge = torch.tensor([0], dtype=torch.long)
+        batch.spin = torch.tensor([1], dtype=torch.long)
+        ours = self.wrapper(batch)
+
+        assert np.isfinite(ref["energy"])
+        assert np.isfinite(ref["forces"]).all()
+        assert np.isfinite(ref["stress"]).all()
+        energy = float(ours["energy"].detach().cpu().numpy().flatten()[0])
+        forces = ours["forces"].detach().cpu().numpy()
+        stress = ours["stress"]
+        assert np.isfinite(energy)
+        assert np.isfinite(forces).all()
+        assert stress.shape == (1, 3, 3)
+        assert (
+            stress.dtype
+            == self.wrapper.predict_unit.inference_settings.base_precision_dtype
+        )
+        assert torch.isfinite(stress).all()
+        assert np.isclose(energy, ref["energy"], atol=1e-4, rtol=1e-5), (
+            f"energy mismatch: ours={energy:.6f} "
+            f"ref={ref['energy']:.6f} diff={energy - ref['energy']:.2e}"
+        )
+        np.testing.assert_allclose(forces, ref["forces"], atol=1e-4, rtol=1e-4)
+        np.testing.assert_allclose(
+            stress[0].detach().cpu().numpy(),
+            ref["stress"],
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
 
 class TestOMatEquivalence:

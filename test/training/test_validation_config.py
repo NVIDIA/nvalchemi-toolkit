@@ -19,7 +19,11 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from nvalchemi.training import EnergyMSELoss, ForceMSELoss
+from nvalchemi.training import (
+    EnergyMSELoss,
+    ForceMSELoss,
+    ensure_reiterable_validation_data,
+)
 from nvalchemi.training._validation import ValidationConfig
 from nvalchemi.training.losses.composition import ComposedLossFunction
 
@@ -128,3 +132,22 @@ class TestValidationDataReiterability:
         """A non-iterable value is rejected with a clear error."""
         with pytest.raises(ValidationError, match="iterable"):
             ValidationConfig(validation_data=42)
+
+
+class TestEnsureReiterableValidationData:
+    """The public guard a caller runs before handing data to a validation pass."""
+
+    def test_a_reiterable_container_is_returned_unchanged(self) -> None:
+        """The same object comes back, so a DataLoader keeps its identity."""
+        data = [object(), object()]
+        assert ensure_reiterable_validation_data(data) is data
+
+    def test_a_one_shot_iterator_raises(self) -> None:
+        """A generator would be exhausted after the first pass."""
+        with pytest.raises(ValueError, match="re-iterable"):
+            ensure_reiterable_validation_data(x for x in [1, 2])
+
+    def test_a_non_iterable_raises(self) -> None:
+        """Something that cannot be iterated at all is named by type."""
+        with pytest.raises(ValueError, match="got int"):
+            ensure_reiterable_validation_data(42)

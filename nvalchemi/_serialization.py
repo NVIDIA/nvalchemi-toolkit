@@ -18,13 +18,19 @@ from __future__ import annotations
 
 import importlib
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import lru_cache
-from types import NoneType, UnionType
-from typing import Annotated, Any, Union, get_args, get_origin
+from types import ModuleType, NoneType, UnionType
+from typing import Annotated, Any, Self, Union, get_args, get_origin
 
 import torch
-from pydantic import BeforeValidator, PlainSerializer
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    PlainSerializer,
+    ValidationError,
+)
 
 _TYPE_SERIALIZERS: dict[type, tuple[Callable[[Any], Any], Callable[[Any], Any]]] = {}
 """Registry mapping a type to its ``(serialize, deserialize)`` callable pair."""
@@ -155,8 +161,98 @@ def _import_callable(target_path: str) -> Callable[..., Any]:
     return obj
 
 
+def capture_callable_spec(fn: Callable[..., Any], *, field_name: str) -> "BaseSpec":
+    """Capture a callable field as a :class:`~nvalchemi.training.BaseSpec`.
+
+    Uses the object's own ``to_spec()`` when it provides one (model-owning
+    procedures carry their construction), else a dotted-path capture through
+    :func:`_import_callable` as the recorded builder. Lambdas, closures, and
+    ``functools.partial`` objects carry no import path and are rejected by
+    :func:`_callable_path_of`.
+
+    Parameters
+    ----------
+    fn
+        The live callable to capture.
+    field_name
+        The model field being serialized; labels capture errors.
+
+    Returns
+    -------
+    BaseSpec
+        The captured construction spec.
+
+    Raises
+    ------
+    TypeError
+        If ``fn.to_spec()`` does not return a
+        :class:`~nvalchemi.training.BaseSpec`.
+    """
+    from nvalchemi.training import BaseSpec, create_model_spec
+
+    to_spec = getattr(fn, "to_spec", None)
+    if callable(to_spec):
+        spec = to_spec()
+        if not isinstance(spec, BaseSpec):
+            raise TypeError(
+                f"{field_name}.to_spec() must return a BaseSpec, "
+                f"got {type(spec).__name__}."
+            )
+        return spec
+    return create_model_spec(_import_callable, target_path=_callable_path_of(fn))
+
+
 def _callable_path_of(target: Callable[..., Any]) -> str:
     """Return the canonical dotted path (``module.QualName``) for ``target``."""
+    owner = getattr(target, "__self__", None)
+    if owner is not None and not isinstance(owner, (type, ModuleType)):
+        raise TypeError(
+            f"{target!r} is an instance-bound method and cannot be captured by "
+            "import path alone. Wrap it in a callable object with a to_spec() "
+            "method that returns a BaseSpec."
+        )
+    function = getattr(target, "__func__", None)
+    if isinstance(owner, type) and function is not None:
+        try:
+            owner_path = _cls_path_of(owner)
+            if _import_cls(owner_path) is not owner:
+                raise TypeError("the imported owner is a different class")
+        except (AttributeError, ImportError, TypeError) as error:
+            raise TypeError(
+                f"{target!r} has a class-bound owner that is not importable by "
+                "dotted path. Wrap it in a callable object with a to_spec() "
+                "method that returns a BaseSpec."
+            ) from error
+
+        candidate_names = [getattr(target, "__name__", None)]
+        candidate_names.extend(
+            name
+            for base in owner.__mro__
+            for name, descriptor in vars(base).items()
+            if isinstance(descriptor, classmethod) and descriptor.__func__ is function
+        )
+        seen: set[str] = set()
+        for name in candidate_names:
+            if not isinstance(name, str) or name in seen:
+                continue
+            seen.add(name)
+            if getattr(owner, name, None) is None:
+                continue
+            try:
+                imported = _import_callable(f"{owner_path}.{name}")
+            except (AttributeError, ImportError, TypeError):
+                continue
+            if (
+                getattr(imported, "__self__", None) is owner
+                and getattr(imported, "__func__", None) is function
+            ):
+                return f"{owner_path}.{name}"
+        raise TypeError(
+            f"{target!r} has no importable class attribute on {owner_path!r} "
+            "that preserves its classmethod binding. Wrap it in a callable "
+            "object with a to_spec() method that returns a BaseSpec."
+        )
+
     module = getattr(target, "__module__", None)
     qualname = getattr(target, "__qualname__", None)
     if not module or not qualname or "<locals>" in qualname or "<lambda>" in qualname:
@@ -324,3 +420,74 @@ SerializableOptionalClass = Annotated[
     PlainSerializer(_serialize_type),
 ]
 """``type | None`` field annotation that round-trips via dotted-path strings."""
+
+
+class MeasurementRecord(BaseModel):
+    """Frozen measurement that exports as a plain dictionary and rebuilds from one.
+
+    A *measurement record* holds the results of one measurement. Subclasses
+    declare their fields as annotations. ``to_dict`` returns the field dump and
+    keeps tuples and ``None`` values as they are. ``from_dict`` validates a
+    mapping back into the record. A list read out of JSON therefore returns as
+    the tuple its field declares, and a non-finite float that a strict writer
+    spelled as a string returns as the number. The rebuild refuses a key the
+    record does not declare and a required field the export lacks.
+
+    Examples
+    --------
+    >>> from nvalchemi._serialization import MeasurementRecord
+    >>> class Timing(MeasurementRecord):
+    ...     steps: int
+    ...     seconds: float | None = None
+    >>> Timing.from_dict(Timing(steps=3).to_dict())
+    Timing(steps=3, seconds=None)
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return every field as a plain dictionary."""
+        return self.model_dump()
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Self:
+        """Rebuild the record from a :meth:`to_dict` export.
+
+        Raises
+        ------
+        ValueError
+            If *data* carries a key the record does not declare, omits one of
+            its fields that has no default, or holds a value that fails a
+            field's validation.
+        """
+        try:
+            return cls.model_validate(dict(data))
+        except ValidationError as exc:
+            raise ValueError(_rebuild_failure(cls, exc)) from exc
+
+
+def _rebuild_failure(cls: type[MeasurementRecord], exc: ValidationError) -> str:
+    """Return the rebuild error for *exc*, naming the keys or the fields at fault."""
+    unknown = sorted(
+        str(error["loc"][0])
+        for error in exc.errors()
+        if error["type"] == "extra_forbidden"
+    )
+    if unknown:
+        return (
+            f"{cls.__name__} cannot be rebuilt from a mapping carrying "
+            f"{unknown!r}; expected keys from {sorted(cls.model_fields)!r}."
+        )
+    missing = sorted(
+        str(error["loc"][0]) for error in exc.errors() if error["type"] == "missing"
+    )
+    if missing:
+        return (
+            f"{cls.__name__} cannot be rebuilt from a mapping missing the "
+            f"required {missing!r}."
+        )
+    faults = "; ".join(
+        f"{cls.__name__}.{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+        for error in exc.errors()
+    )
+    return f"{cls.__name__} cannot be rebuilt from a mapping: {faults}."

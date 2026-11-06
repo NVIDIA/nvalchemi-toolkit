@@ -58,6 +58,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
+    ClassVar,
     Literal,
     TypeAlias,
 )
@@ -1581,6 +1582,12 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     by_group : bool
         Whether dynamics update units are graph groups rather than individual
         graphs. Grouped batches must provide a valid group layout.
+    samples_equilibrium : ClassVar[bool]
+        Whether stepping samples an equilibrium ensemble, so that a frame
+        along a trajectory is a draw from a distribution rather than a point
+        on a path to a minimum. ``True`` here and on the integrators;
+        ``False`` on the relaxation optimizers, which descend. A
+        distribution-matching objective reads it to tell the two apart.
     __needs_keys__ : set[str]
         Set of output keys that this dynamics requires from the model.
         Empty by default on ``BaseDynamics``. Subclasses declare their
@@ -1629,6 +1636,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     __needs_keys__: set[str] = set()
     __provides_keys__: set[str] = set()
+
+    samples_equilibrium: ClassVar[bool] = True
 
     _mutable_fields: tuple[str, ...] = ("positions", "velocities", "cell")
 
@@ -2251,6 +2260,259 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             dynamics does not maintain per-system state.
         """
         return None
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the integrator state needed to resume this run exactly.
+
+        Covers the step counter, the RNG seed, and every per-system tensor in
+        ``self._state`` — thermostat chain variables, per-system timesteps,
+        barostat auxiliaries, whatever the subclass put there.
+
+        Nothing here is a Python object graph: values are tensors and
+        scalars, so the result is directly representable in Zarr without a
+        pickle payload.
+
+        Returns
+        -------
+        dict[str, Any]
+            ``step_count``, ``random_seed`` (when the integrator has one),
+            and a ``state`` submapping of per-system tensors.  ``state`` is
+            empty for an integrator that keeps none, and for one whose lazy
+            initialisation has not run yet.
+
+        Notes
+        -----
+        Reproducibility of stochastic integrators
+            ``NVTLangevin`` derives its noise from ``random_seed +
+            step_count`` rather than advancing a stateful generator, so
+            restoring those two integers reproduces the identical noise
+            sequence.  There is no generator object to serialise.
+        """
+        state: dict[str, torch.Tensor] = {}
+        internal = getattr(self, "_state", None)
+        if internal is not None:
+            # Batch yields (name, value) pairs from __iter__; it has no .items().
+            for key, value in internal:
+                if isinstance(value, torch.Tensor):
+                    state[key] = value.detach().clone()
+
+        out: dict[str, Any] = {
+            "step_count": int(self.step_count),
+            "state": state,
+        }
+        seed = getattr(self, "_random_seed", None)
+        if seed is not None:
+            out["random_seed"] = int(seed)
+        return out
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore integrator state produced by :meth:`state_dict`.
+
+        Parameters
+        ----------
+        state:
+            The mapping previously returned by :meth:`state_dict`.
+
+        Raises
+        ------
+        RuntimeError
+            If the checkpoint carries per-system state but this integrator
+            has not initialised its own — restoring into an uninitialised
+            integrator would leave the two silently out of step.  Prime the
+            dynamics once (or run a step) before restoring.
+        KeyError
+            If a restored key is absent from the live state, which means the
+            checkpoint came from a differently-configured integrator.
+        """
+        self.step_count = int(state.get("step_count", 0))
+        if "random_seed" in state and hasattr(self, "_random_seed"):
+            self._random_seed = int(state["random_seed"])
+
+        saved: Mapping[str, torch.Tensor] = state.get("state", {}) or {}
+        if not saved:
+            return
+
+        internal = getattr(self, "_state", None)
+        if internal is None:
+            raise RuntimeError(
+                f"{type(self).__name__}.load_state_dict: the checkpoint holds "
+                f"per-system integrator state ({sorted(saved)}) but this "
+                "instance has not initialised its own yet. Prime the dynamics "
+                "against the restored batch before loading, so the shapes are "
+                "known."
+            )
+        for key, value in saved.items():
+            target = getattr(internal, key, None)
+            if target is None:
+                raise KeyError(
+                    f"{type(self).__name__}.load_state_dict: checkpoint key "
+                    f"{key!r} has no counterpart in the live integrator state "
+                    f"({sorted(k for k, _ in internal)}). The "
+                    "checkpoint was written by a differently-configured "
+                    "integrator."
+                )
+            with torch.no_grad():
+                target.copy_(value.reshape(target.shape).to(target.device))
+
+    def redistribute_state(self, walker_ids: torch.Tensor) -> None:
+        """Reorder per-system state to match a new walker layout.
+
+        Needed only when a checkpoint is restored into a batch whose rows are
+        ordered differently from the one it was written from.  Batch position
+        is not an identity, so the caller supplies the permutation.
+
+        Parameters
+        ----------
+        walker_ids : torch.Tensor
+            Row permutation, shape ``[B]``: entry *i* is the index in the
+            current state that should become row *i*.
+
+        Raises
+        ------
+        RuntimeError
+            If the integrator has no per-system state to reorder.
+        """
+        internal = getattr(self, "_state", None)
+        if internal is None:
+            raise RuntimeError(
+                f"{type(self).__name__}.redistribute_state: no per-system "
+                "state to reorder."
+            )
+        # Index on the state's own device: ``self.device`` reports the
+        # process compute device, which is CUDA whenever a GPU is visible even
+        # for state that was never moved off the CPU.
+        index = walker_ids.reshape(-1).to(dtype=torch.long)
+        for key, value in list(internal):
+            if isinstance(value, torch.Tensor) and value.shape[0] == index.numel():
+                internal[key] = value[index.to(value.device)].contiguous()
+
+    def apply_per_system_params(
+        self, params: Mapping[str, torch.Tensor], batch: Batch
+    ) -> None:
+        """Rebind per-system parameters — temperature, timestep, and so on.
+
+        The reusable half of any method that permutes per-system state across
+        walkers: replica exchange over a temperature ladder, basin hopping
+        with swaps, a population or evolutionary structure search, any
+        annealing schedule.  What they share is "walker *b* is now running
+        under these parameters"; what differs is the rule that decided it.
+
+        Implementations must transform dependent private state — thermostat
+        chain masses, velocity scaling — as **one indivisible change**.  An
+        integrator that accepted the new target while leaving its velocities
+        and thermostat at the old one would keep sampling the ensemble the
+        walker just left, with no symptom the run would show.  That is why
+        *batch* is a parameter rather than a follow-up call: the velocity
+        rescale needs the live batch, and a caller who forgot the second call
+        would get exactly the silent failure this method exists to prevent.
+
+        Parameters
+        ----------
+        params : Mapping[str, torch.Tensor]
+            Parameter name to its new per-graph value, shape ``[B]``.
+            ``"temperature"`` is in Kelvin.
+        batch : Batch
+            The live batch, so dependent fields — velocities — move with the
+            parameters.
+
+        Raises
+        ------
+        NotImplementedError
+            Always, on the base class.  An integrator that cannot rebind must
+            fail rather than silently accept a label-only change.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support per-system parameter "
+            "rebinding. Methods that permute per-system state across walkers "
+            "require an integrator that can rescale velocities and transform "
+            "its thermostat state; NVTLangevin and NVTNoseHoover implement "
+            "this."
+        )
+
+    def _validated_temperature(
+        self, params: Mapping[str, torch.Tensor], reference: torch.Tensor
+    ) -> torch.Tensor:
+        """Check *params* and return the new per-graph temperature in Kelvin.
+
+        Shared by every integrator whose rebindable parameter set is exactly
+        ``{"temperature"}``, so the two checks cannot drift apart between
+        them.  Both run **before** any state is touched, which is what
+        ``apply_per_system_params`` promises: a rebinding it refuses leaves
+        the integrator and the batch as they were, and callers that permute
+        per-system state build their own atomicity on that.
+
+        Temperature is rejected unless strictly positive and finite.  It is
+        not merely out of range — it propagates:
+
+        * a negative target makes the velocity scale ``sqrt(T_new / T_old)``
+          imaginary, so velocities come back ``nan``;
+        * zero scales a Nosé-Hoover chain's masses ``Q ∝ kT`` to zero — a
+          massless thermostat — and ``eta_dot ∝ 1/sqrt(kT)`` to infinity;
+        * infinity reaches velocities and chain masses directly.
+
+        None of those raise on their own.  The run continues with ``nan``
+        coordinates a few steps later, pointing at the integrator rather than
+        at the caller that asked for the temperature.
+
+        Parameters
+        ----------
+        params : Mapping[str, torch.Tensor]
+            Parameter name to its new per-graph value.
+        reference : torch.Tensor
+            Existing per-system temperature, for device and dtype.
+
+        Returns
+        -------
+        torch.Tensor
+            The new temperature in Kelvin, shape ``[B]``.
+
+        Raises
+        ------
+        KeyError
+            If *params* names anything other than ``"temperature"``.
+        ValueError
+            If any temperature is non-positive or not finite.
+        """
+        name = type(self).__name__
+        unknown = sorted(set(params) - {"temperature"})
+        if unknown:
+            raise KeyError(
+                f"{name}.apply_per_system_params: cannot rebind {unknown}; "
+                "this integrator rebinds 'temperature' only. Silently "
+                "ignoring a parameter would leave the walker sampling the "
+                "state it was supposed to leave."
+            )
+        temperature = (
+            params["temperature"]
+            .reshape(-1)
+            .to(device=reference.device, dtype=reference.dtype)
+        )
+        if not bool(temperature.isfinite().all()) or bool((temperature <= 0).any()):
+            raise ValueError(
+                f"{name}.apply_per_system_params: temperature must be "
+                f"positive and finite, got {temperature.tolist()}. A "
+                "non-positive or infinite target does not fail here on its "
+                "own — it makes the velocity rescale imaginary or infinite "
+                "and, for a thermostat chain, its masses zero or infinite, "
+                "so the run continues and surfaces as nan coordinates later."
+            )
+        return temperature
+
+    def _rescale_velocities(self, scale_per_graph: torch.Tensor, batch: Batch) -> None:
+        """Scale each graph's velocities by a per-graph factor, in place.
+
+        Parameters
+        ----------
+        scale_per_graph : torch.Tensor
+            Multiplicative factor per graph, shape ``[B]``.
+        batch : Batch
+            The live batch; ``velocities`` is modified in place.
+        """
+        velocities = getattr(batch, "velocities", None)
+        if velocities is None:
+            return
+        with torch.no_grad():
+            velocities.mul_(scale_per_graph[batch.batch_idx].unsqueeze(-1))
 
     def _autograd_input_tensors(
         self, batch: Batch | AtomsLike

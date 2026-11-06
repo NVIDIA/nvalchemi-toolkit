@@ -132,7 +132,7 @@ Key fields:
 | `spring` | `0.1` | Constant spring force, or a custom {py:class}`~nvalchemi.dynamics.mep.SpringConfig` |
 | `method` | `"improved_tangent"` | Named method, custom Warp `NEBMethod`, or callable `TorchNEBMethod` |
 | `climbing` | `None` | `None` runs regular NEB only; set a `ClimbingImageConfig` to enable climbing-image NEB |
-| `optimizer` | `FIRE2` | `BaseDynamics` subclass supporting fixed-cell, group-aware updates |
+| `optimizer` | `FIRE2` | `BaseDynamics` subclass supporting fixed-cell, group-aware updates, such as `FIRE2` or `LBFGS` |
 | `optimizer_kwargs` | `{}` | Arguments forwarded to each optimizer stage; unspecified parameters use NEB-tuned defaults for `FIRE2`, or the custom optimizer's own defaults |
 | `fmax` | `0.05` | Force threshold for the final (or only) stage |
 | `n_steps` | `None` | Limit on the total number of optimization steps; `None` for no fixed limit |

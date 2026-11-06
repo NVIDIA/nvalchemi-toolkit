@@ -12,6 +12,7 @@ knowledge-distillation workflows.
 
 .. seealso::
 
+   - **User guide**: :ref:`distillation_guide`
    - **Training strategy API**: :ref:`training-strategy-api`
    - **Fine-tuning API**: :ref:`training-finetuning-api`
    - **Loss API**: :ref:`losses-api`
@@ -23,9 +24,9 @@ Scoring
 A scorer turns a :class:`~nvalchemi.data.Batch` into named teacher signals,
 each a :class:`~nvalchemi.training.distillation.TeacherSignal` mapping one
 teacher output to a batch field, a level, and a canonical shape. The built-in
-ones — ``energy``, ``forces``, ``stress``, ``atomic_energies``, and
-``embeddings`` — are requested by name; any other teacher output is requested
-as a spec of its own, passed beside the built-in names:
+ones — ``energy``, ``forces``, ``stress``, ``atomic_energies``,
+``embeddings``, and ``hessian`` — are requested by name; any other teacher
+output is requested as a spec of its own, passed beside the built-in names:
 
 .. code-block:: python
 
@@ -66,8 +67,17 @@ device default when no region is open, the caller's region's dtype when one is.
    SignalLevel
    SignalNormalizer
    NeighborListPolicy
-   BUILTIN_SIGNALS
-   SUPPORTED_SIGNALS
+
+.. data:: BUILTIN_SIGNALS
+   :type: Mapping[str, TeacherSignal]
+
+   The built-in :class:`~nvalchemi.training.distillation.TeacherSignal` specs,
+   keyed by signal name.
+
+.. data:: SUPPORTED_SIGNALS
+   :type: frozenset[str]
+
+   The names of the built-in signals: the keys of ``BUILTIN_SIGNALS``.
 
 .. data:: TeacherLabels
    :type: TypeAlias
@@ -125,6 +135,22 @@ appeared and puts back the ones that were replaced, so a teacher never leaves
 its charges, or a positions tensor cut loose from the student's graph, behind
 for a later student forward to read.
 
+Forward-pass signals share one teacher pass, and ``embeddings`` adds a second.
+``hessian`` labels a *Hessian-vector product*: the product of the teacher's
+energy Hessian with a random probe direction, computed without forming the
+Hessian. It adds an energy-only pass plus the backward passes that
+:class:`~nvalchemi.models.HessianOperator` takes through it: the first
+position derivative, a connectivity probe of that derivative, and the
+product itself. ``hessian`` is the only built-in signal that writes two
+fields: the product
+in ``teacher_hvp`` and the probe direction in ``teacher_hvp_probe``. The
+student is later differentiated along that same probe.
+:meth:`~nvalchemi.training.distillation.InProcessTeacherScorer.label_hvp`
+computes one product for a probe the caller chooses. ``probe_seed`` pins the
+probe direction. Left unset, every labeling draws a fresh direction, which is
+what covers the Hessian over a run.
+:class:`~nvalchemi.training.distillation.DistillationStrategy` sets it per
+validation batch, so that the validation metric is comparable across passes.
 
 Labeling
 --------
@@ -259,6 +285,28 @@ teacher.
 
    DistillationStrategy
    default_distillation_fn
+
+Two objectives need a prediction that the student's forward pass does not
+return, and each ships the training function that produces it. Both functions
+are module-level, so a recipe that uses one still survives
+:meth:`~nvalchemi.training.distillation.DistillationStrategy.to_spec_dict`.
+Both are additive: they return the stock ``predicted_*`` outputs plus one key.
+:func:`~nvalchemi.training.distillation.embedding_distillation_fn` runs the
+student's ``compute_embeddings`` and routes the result through the
+``"projector"`` model when one is registered.
+:func:`~nvalchemi.training.distillation.hessian_distillation_fn` differentiates
+the student's energy twice along the labeled probe. A recipe that needs both
+predictions writes one module-level function of its own. Calling both stock
+functions runs the student forward pass twice; building the union from
+:meth:`HessianOperator.from_energy <nvalchemi.models.HessianOperator.from_energy>`
+on the student's energy and the student's ``compute_embeddings`` avoids that.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   embedding_distillation_fn
+   hessian_distillation_fn
 
 
 On-policy generation
@@ -540,7 +588,26 @@ segment's loader.
 Because ``on_policy`` and ``reference_dataset`` hold live runtime objects,
 :meth:`~nvalchemi.training.distillation.DistillationStrategy.to_spec_dict`
 leaves them out and warns. A strategy rebuilt from that spec runs offline until
-they are supplied again.
+they are supplied again. Every rebuild entry point takes them as keyword
+arguments:
+:meth:`~nvalchemi.training.distillation.DistillationStrategy.from_spec_dict`,
+:meth:`~nvalchemi.training.distillation.DistillationStrategy.from_checkpoint_dict`,
+and
+:meth:`~nvalchemi.training.distillation.DistillationStrategy.load_checkpoint`
+all accept ``on_policy`` and ``reference_dataset``. The checkpoint entry points
+pass them to ``from_spec_dict`` as *runtime overrides*: live objects that a
+spec cannot carry, which :func:`nvalchemi.training.load_checkpoint` forwards as
+extra keyword arguments. The segment loop is tied to the student it
+propagates, so pass back the ``models`` the propagator was built around as
+well, through the loader's own ``models=`` keyword. The checkpoint's weights
+are then restored into those very objects.
+Alternatively, calling
+:meth:`~nvalchemi.training.TrainingStrategy.restore_checkpoint` on a strategy
+already constructed with the loop reaches the same result. The
+re-supply is mandatory for a Boltzmann term, which matches the teacher's
+Boltzmann distribution over the configurations the student generated (see
+:ref:`distillation-advanced-objectives`). The term is defined only on
+generated batches, so it refuses to rebuild as an offline run.
 
 Relaxation
 ----------
@@ -644,12 +711,21 @@ size, so a sink that fits the initial batch fits every later one, and the
 growth happens at most once, for the first segment. The converged route keeps
 its own host-memory sink, one frame per graph.
 
-A custom :class:`~nvalchemi.training.distillation.InitialStructuresSource`
+A custom :class:`~nvalchemi.dynamics.StructureSource`
 drives the lifecycle too, provided its ``initial_batch`` stamps the ``status``
 zeros and ``system_id`` numbers the lifecycle graduates and backfills on.
 Distribution-matching objectives are defined on equilibrium ensembles, which a
-relaxation path is not. Pointwise energy, force, and atomic-energy matching
-distill a relaxation path exactly as they distill a trajectory.
+relaxation path is not. A Boltzmann term is therefore refused at construction
+beside a relaxation propagator. When ``on_policy.samples_equilibrium`` is left
+``None``, whether the propagator samples an equilibrium ensemble is inferred
+from the propagator itself: from the
+:attr:`~nvalchemi.dynamics.BaseDynamics.samples_equilibrium` its class
+declares, which the relaxation optimizers set to ``False``, and from the
+convergence criteria it or the loop carries. ``True`` admits a propagator that
+the inference would refuse, and ``False`` refuses one that it would admit.
+Pointwise energy,
+force, and atomic-energy matching distill a relaxation path exactly as they
+distill a trajectory.
 
 .. _distillation-scaling-out:
 
@@ -734,9 +810,12 @@ then separates nothing.
 
 A multi-rank launch whose student nothing wraps is refused. The check is only
 that *something* owns ``models["student"]`` after setup, so a wrapper of your
-own passes it just as ``DDPHook`` does. A wrapper that works in place, such as
-FSDP2's ``fully_shard`` or hook-based gradient synchronization, leaves nothing
-for the check to find. For such a wrapper, ``require_wrapped_student=False``
+own passes it just as ``DDPHook`` does. A student handed over already wrapped
+passes only as a :class:`~torch.nn.parallel.DistributedDataParallel` or FSDP
+replica, the wrappers known to reduce gradients, since setup replaces nothing
+for the check to compare. A wrapper that works in place, such as FSDP2's
+``fully_shard`` or hook-based gradient synchronization, leaves nothing for the
+check to find either. For such a wrapper, ``require_wrapped_student=False``
 waives the check with a one-time warning, and keeping the ranks' students in
 step becomes your responsibility.
 
@@ -804,3 +883,411 @@ schedule on one term from rescaling the others as it ramps.
    :nosignatures:
 
    AtomicEnergyMatchingLoss
+
+
+.. _distillation-advanced-objectives:
+
+Embedding, Hessian, and Boltzmann objectives
+--------------------------------------------
+
+Three further terms distill quantities that a reference dataset has no column
+for. Each needs more from the run than a target field. Each is checked at
+construction, in the training loss and in a ``validation_config`` loss alike.
+
+:class:`~nvalchemi.training.distillation.EmbeddingMatchingLoss` is the
+*embedding term*: it matches the student's per-atom representation (its node
+embeddings) to the teacher's, component by component. Both sides come from
+``compute_embeddings`` rather than from a forward pass, so the term needs
+:func:`~nvalchemi.training.distillation.embedding_distillation_fn`, and the
+student runs twice per batch. Across architectures the two embedding widths
+differ, and the learnable
+:class:`~nvalchemi.training.distillation.EmbeddingProjector` reconciles them.
+Construct it with the student's width and the teacher's width, and register it
+as a ``"projector"`` model with an ``optimizer_configs`` entry of its own. The
+training function then routes the student's embeddings through it. The
+projection is applied to the student and never to the teacher, whose
+embeddings stay fixed targets. A learnable map on the target side would
+minimize the objective by collapsing the teacher's representation. The
+projector is a training-time artifact: the distilled model is the student
+alone.
+
+The training function refuses student embeddings that are detached from the
+student's trainable parameters, treating them as an accident. A wrapper that
+computes them under ``torch.no_grad`` produces such embeddings, and training on
+them would leave the projector absorbing the term. A student representation
+frozen on purpose, such as frozen trunk layers beside a trainable head, is
+declared by registering the projector with ``frozen_student=True``, so that the
+projector alone carries the term.
+
+.. code-block:: python
+
+   from nvalchemi.training.distillation import (
+       DistillationStrategy,
+       EmbeddingMatchingLoss,
+       EmbeddingProjector,
+       embedding_distillation_fn,
+   )
+
+   projector = EmbeddingProjector(student_width, teacher_width)
+   strategy = DistillationStrategy(
+       models={"student": student, "teacher": teacher, "projector": projector},
+       optimizer_configs={
+           "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)],
+           "projector": [OptimizerConfig(optimizer_cls=torch.optim.Adam)],
+       },
+       loss_fn=EnergyMSELoss(target_key="teacher_energy")
+       + 0.1 * EmbeddingMatchingLoss(),
+       training_fn=embedding_distillation_fn,
+       num_steps=10_000,
+   )
+
+Two representations agree only up to the symmetries of each architecture's
+embedding space, such as a channel permutation or a rotation of an equivariant
+block. Both are linear maps, so a linear projector absorbs them; without a
+projector they are matched component by component and leave a residual floor.
+Differences that no linear map closes, such as a feature one architecture
+builds and the other does not, leave a floor with or without a projector, which
+is why a residual floor on the embedding term is normal. Weight the term as a
+regularizer beside the terms that carry the physical targets.
+
+:class:`~nvalchemi.training.distillation.HessianMatchingLoss` matches the
+curvature of the teacher's energy surface. Curvature decides vibrational
+spectra and integrator stability, and energies and forces do not pin it down.
+Neither side forms a Hessian. Both sides compute a Hessian-vector product along
+one random probe direction, at a few backward passes each. The ``hessian`` signal
+materializes the teacher's product and its probe onto the batch, either offline
+through :func:`~nvalchemi.training.distillation.label_dataset` or on the fly
+through the strategy's labeling seam. The student's product comes from
+:func:`~nvalchemi.training.distillation.hessian_distillation_fn`, which takes it
+on a second student pass narrowed to the energy alone. The second pass is
+needed because a conservative student derives its forces from the very graph
+the second derivative needs, and frees that graph outside training mode, so
+the stock forward cannot be differentiated again. Every validation pass costs
+the same two passes.
+
+One probe constrains one direction, so coverage comes from redrawing the probe.
+An on-policy run gets a fresh probe every time it labels a frame, whereas a
+store labeled once freezes one direction per structure. Because each probe
+component is standard normal, the graph-balanced value is a Hutchinson estimate
+of ``||dH||_F^2 / 3V`` in (eV/A^2)^2. For a near-converged student, that value
+is one to two orders of magnitude above the force mean-squared error. Start the
+term a hundred to ten thousand times lighter than the force term, and treat a
+single batch's value as the noisy one-sample estimate it is. For a direct-force
+student, the strategy warns that the term supervises the energy head alone.
+
+:class:`~nvalchemi.training.distillation.BoltzmannMatchingLoss` implements
+*Boltzmann matching*: it matches the distribution of configurations rather than
+each configuration. The term is the relative entropy between the teacher's and
+student's Boltzmann distributions at a given temperature. It is blind to a
+constant energy offset and to any error that does not change relative
+populations. ``beta`` interpolates between the forward direction (``0``,
+mass-covering) and the reverse direction (``1``, mode-seeking).
+
+The estimator reads a batch as a sample of the *student's* own canonical
+ensemble, which is what makes the student-side weights uniform. The strategy
+therefore requires ``on_policy``. It refuses a relaxation propagator and any
+convergence criterion: the propagator's own hook, a
+:class:`~nvalchemi.dynamics.base.ConvergenceHook` registered on it that
+graduates graphs out, or one the segment loop installs from ``fmax`` or
+``convergence_hook``. It also warns when ``replay_ratio`` mixes reference
+frames that the student never visited into the batch. Reweighting an
+off-policy sample back onto the student's distribution is not offered, so an
+existing dataset reaches the term as ``reference_dataset``, mixed into
+generated frames by ``replay_ratio``.
+
+The batch also has to hold configurations of one system, because energies of
+different systems are not comparable. Seed the run with replicas of one
+structure, one walker per graph. The one-system check compares atom counts
+only: it refuses a batch whose graphs differ in size, and it cannot tell two
+systems of the same size apart. Under data parallelism, each rank holds a
+shard of one *world batch*, the union of every rank's batch. The check reads
+the gathered world batch, so a rank holding one system beside a rank holding
+another of a different size is refused too. ``check_one_system=False`` turns
+the check off for an ensemble whose composition is meant to vary. A graph
+whose teacher or student energy is not finite is dropped from the ensemble
+(``ignore_nonfinite``), since one such row would otherwise reach every rank's
+softmax through the gather. The temperature cannot be checked: set the term's
+temperature and the thermostat's from the same number.
+
+The two directions differ in scale. The forward direction is bounded above by
+``log B``, and its gradient vanishes once the softmax saturates, as it does for
+a student whose error spreads over more than a few ``k_B T``. ``beta=0`` can
+therefore read as converged while the student is far off. Hold ``beta`` at
+``0.5`` or above until the student is within a couple of ``k_B T``. Reducing
+energies by ``k_B T`` also puts the gradient of either direction at up to
+``1/k_B T`` per configuration, about 39 eV^-1 at 300 K, well above what a
+pointwise energy term produces. Under a
+:class:`~nvalchemi.training.hooks.DDPHook`, the term gathers the reduced
+energies across ranks with a differentiable all-gather and normalizes the
+softmax over the world batch. Each rank reports the world loss, the averaged
+gradient is the world loss's own, and the distribution the softmax sees is
+``world_size`` times ``batch_size`` wide.
+
+The recommended recipe is therefore ``replay_ratio=1`` *and* a bounded
+``replay_capacity``. The ratio keeps reference rows out of the batch. The
+capacity keeps stale generated rows out, because every segment's loader draws
+uniformly over the whole replay buffer and an unbounded buffer retires nothing.
+Size the capacity to the frames that one segment or a few segments yield.
+Validation is the other off-policy path, and the strategy refuses it outright.
+A Boltzmann term in the validation loss is refused at construction, and so is
+a ``ValidationConfig`` without a ``loss_fn`` of its own, which would reuse a
+training loss that holds the term. Give the validation config a pointwise loss
+instead.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   EmbeddingMatchingLoss
+   EmbeddingProjector
+   HessianMatchingLoss
+   BoltzmannMatchingLoss
+
+
+.. _distillation-evaluation:
+
+Evaluation and acceptance
+-------------------------
+
+``nvalchemi.training.distillation.evaluation`` answers whether a distilled
+student is good enough to ship. It is its own subpackage: its names are
+imported from ``nvalchemi.training.distillation.evaluation``, not from
+``nvalchemi.training.distillation``. A student is accepted when it clears every
+*acceptance bar* it is given. An acceptance bar is a limit on
+one number from the student's measurements, such as a maximum force MAE or a
+maximum energy drift rate.
+
+Accuracy is measured over a held-out set with
+:func:`~nvalchemi.training.distillation.evaluation.evaluate_accuracy`. It
+compares the student against either the dataset's own labels
+(``targets="reference"``) or the teacher's labels (``targets="teacher"``).
+Teacher labels are written offline by
+:func:`~nvalchemi.training.distillation.label_dataset` or scored on the fly by a
+``scorer``. The pass runs through :class:`~nvalchemi.training.ValidationLoop`,
+so eval mode, device placement, and the autograd policy an autograd-force
+student needs behave as they do in training validation. No autocast is
+applied, so the student predicts in its own dtype. A bare model passed as the
+scorer is wrapped in an in-process scorer whose labels are cast to
+``label_dtype``, by default the student's first floating-point parameter dtype
+floored at float32. A supplied scorer's labels are not cast. Every residual is
+accumulated in float64 as an exact global sum rather than read off the
+graph-balanced loss.
+
+The weights scored are exactly the ones passed in. To score a student trained
+under an ``EMAHook`` on its averaged weights, pass
+``strategy.inference_model``. ``StudentEvaluation.weights`` records which of
+the two weight sets was scored. A scorer's labels pass the same ``teacher_*``
+namespace guard that every other labeling route applies. A custom scorer that
+returns ``energy`` or ``positions`` is therefore refused before it can rewrite
+the inputs or reference targets of the batch the student is about to read.
+
+Whenever forces are compared, against either target family, two
+force-alignment numbers fill in. ``force_cosine_mean`` weights every atom
+equally, so atoms whose force is at or below the student's own error dominate
+it. The ``min_force_cosine`` bar therefore reads the
+magnitude-weighted ``force_cosine_aggregate`` instead. The compared quantities
+form an open table. The built-ins are
+:data:`~nvalchemi.training.distillation.evaluation.BUILTIN_ACCURACY_QUANTITIES`,
+one :class:`~nvalchemi.training.distillation.evaluation.AccuracyQuantitySpec`
+each. A spec names the prediction key, the reference field, the teacher signal,
+and the loss term that drives the pass. A spec passed in ``quantities`` scores
+a custom head, or a built-in quantity read from another field, and reports it
+under ``AccuracyMetrics.errors``.
+
+.. currentmodule:: nvalchemi.training.distillation.evaluation
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   evaluate_accuracy
+   AccuracyMetrics
+   AccuracyQuantity
+   AccuracyQuantitySpec
+
+.. data:: BUILTIN_ACCURACY_QUANTITIES
+   :type: Mapping[str, AccuracyQuantitySpec]
+
+   Specs of the built-in quantities, keyed by the name a caller requests them
+   under.
+
+The *non-conservative residual* is the part of a teacher's force field that no
+conservative student can fit.
+:func:`~nvalchemi.training.distillation.evaluation.non_conservative_residual`
+measures it. A student that differentiates an energy produces a curl-free
+field, so it fits only the conservative part of a direct-force teacher. The
+probe integrates the teacher's work around closed loops in configuration space.
+That work is zero for a conservative field. The probe converts the leftover
+work into ``force_floor``: a lower bound on the root-mean-square per-atom force
+error that a conservative student must make somewhere on the loop.
+
+The bound holds at the displacement scale that ``amplitude`` probes, so choose
+an amplitude on the order of a thermal vibration. The bound loosens as
+``1 / sqrt(N)`` with system size, because one randomly oriented loop spans a
+``1 / sqrt(3N)`` fraction of the field's curl. Compare floors only between
+probes of similar system size. A conservative teacher reports the midpoint
+rule's quadrature error, which falls as ``segments`` rises. Below that, it
+reports the round-off of the batch's own dtype. In float32 that round-off is
+near ``1e-9`` eV/A for an argon-like Lennard-Jones solid, and a hundred times
+more for a lattice a hundred times stiffer. A floor below that level needs a
+float64 batch and teacher.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   non_conservative_residual
+   NonConservativeResidual
+
+Stability is what small students actually fail at, so it is measured on a
+trajectory the student drives itself. The *stability monitor*,
+:class:`~nvalchemi.dynamics.hooks.StabilityMonitor`, is a dynamics hook that
+records the total energy and momentum of that trajectory. It reports energy
+drift and momentum conservation once the run is over. It is the offline
+counterpart of :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook`: it
+keeps the whole series instead of comparing one live value against a
+threshold. The monitor, its :class:`~nvalchemi.dynamics.hooks.StabilityMetrics`
+record, and :func:`~nvalchemi.dynamics.hooks.total_momentum` live in
+:mod:`nvalchemi.dynamics.hooks`, because nothing about them is specific to
+distillation; the evaluation suite re-exports them.
+
+The endpoint drift and the fitted per-nanosecond rate both include whatever
+transient the series starts with. A student seeded from frames that are not
+equilibria of its own potential therefore needs a ``warmup_steps`` window that
+covers the relaxation. Without one, the transient is reported as drift and can
+cancel a genuine drift. Read ``energy_fluctuation_per_atom`` beside the rate: a
+drift no larger than the fluctuation is a line through an oscillation rather
+than a trend. Momentum is conserved only by an integrator that conserves it, so
+set no ``max_momentum_drift`` bar under a stochastic thermostat.
+
+The monitor's ``divergence`` predicate defaults to
+:func:`~nvalchemi.dynamics.hooks.nonfinite_graph_mask`, the same predicate the
+on-policy loop uses. The first firing that flags a graph ends the
+series, and its step is recorded as ``first_divergence_step``. A trajectory
+that blew up is therefore scored on the segment before it did, not on
+non-finite samples; set the ``no_divergence`` bar so the report fails it
+rather than reading that segment's drift. ``aggregate="mean"`` reports the
+figures as the mean over
+graphs instead of the worst graph. Recording stops with a warning when the
+batch composition changes, so a propagator that graduates systems mid-run is
+scored on the segment before the first graduation.
+``stop_on_composition_change=False`` keeps recording through an inflight refill
+that preserves every graph's size.
+
+*Extensivity* is the property that a structure's energy grows in proportion to
+its size: a ``k``-fold supercell has ``k`` times the energy of the cell it
+replicates.
+:func:`~nvalchemi.training.distillation.evaluation.extensivity_error` checks
+that the student's energy scales this way across replicated cells. The
+*radial distribution* ``g(r)`` is the pair correlation function: how often
+pairs of atoms sit at separation ``r``, normalized so an ideal gas gives ``1``.
+:func:`~nvalchemi.training.distillation.evaluation.radial_distribution`
+accumulates it over a trajectory, reading frames straight out of a
+:class:`~nvalchemi.dynamics.sinks.DataSink` filled by
+:class:`~nvalchemi.dynamics.hooks.SnapshotHook`.
+:func:`~nvalchemi.training.distillation.evaluation.compare_radial_distributions`
+scores the structure a trajectory samples against a reference trajectory's
+structure with a bounded Jensen-Shannon divergence. By default the comparison
+pools every species into one histogram. That histogram cannot see a student
+that puts the right distances between the wrong kinds of atom. Pass ``pair``
+to resolve one species pair and gate a chemically ordered system on its
+partial curves. The extensivity and radial distribution checks read
+periodicity from ``pbc`` when a batch carries it. Both therefore refuse a
+cluster stored with a box but no periodic axis, like one without a cell.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   extensivity_error
+   ExtensivityMetrics
+   radial_distribution
+   RadialDistribution
+   compare_radial_distributions
+   RDFComparison
+
+The monitor, its record, and ``total_momentum`` are documented on the
+:doc:`dynamics hooks </modules/dynamics/hooks>` page.
+
+The verdict is assembled from those measurements. A caller collects one
+:class:`~nvalchemi.training.distillation.evaluation.StudentEvaluation` per
+candidate student and sets the acceptance bars on an
+:class:`~nvalchemi.training.distillation.evaluation.AcceptanceThresholds`.
+:func:`~nvalchemi.training.distillation.evaluation.build_acceptance_report`
+then returns a report that renders as Rich tables and exports as a plain
+dictionary or a flat scalar map. A bar with no measurement behind it fails the
+student rather than being skipped. A check whose family was measured but whose
+own number was not says which quantity or timestep was missing. A measurement
+that is not finite fails its bar with a ``not finite`` detail, because a NaN
+would fail every comparison and read as an ordinary miss, ``-inf`` would clear
+every maximum, and ``+inf`` every minimum.
+
+The divergence bar, ``no_divergence``, is a flag rather than a limit. Set it
+to ``True`` and a student whose stability series stopped on a divergence fails
+its ``divergence`` row, which reports ``1.0`` against a limit of ``0.0`` and
+names the step the monitor's predicate fired at. The drift bars alone cannot
+catch a divergence, because the series ends at that step and they describe the
+segment before it, which can look perfectly conserved. Like every bar, it
+defaults to not testing, and it fails a student with no stability record.
+
+The from-scratch bar, ``max_from_scratch_ratio``, compares the distilled
+student against an equal-size student trained from scratch. It takes the ratio
+of the distilled error to the from-scratch error on ``energy_per_atom_mae``,
+``forces_mae``, and ``stress_mae``, whichever both carry, and keeps the worst
+ratio. That ratio has to be at most the bar.
+Both students must be scored on the same held-out set, which the bar checks. A
+family scored on different held-out sets is rejected outright.
+
+Each measurement a ``StudentEvaluation`` holds, and the evaluation itself, is a
+*measurement record*: a frozen result, built on
+:class:`~nvalchemi.training.distillation.evaluation.MeasurementRecord`, that
+exports with ``to_dict`` and rebuilds from its own export with ``from_dict``. A
+sweep that evaluates each student in its own job can therefore persist the
+results and assemble one report at the end. A student entry taken out of a
+report export also rebuilds, with its verdict dropped. A caller that runs only
+part of the suite asks
+:func:`~nvalchemi.training.distillation.evaluation.measured_bars` which bars
+its measurements can decide. The answer depends on the families the caller
+filled and, for accuracy, on the quantities the pass compared.
+
+The bars themselves are a public table.
+:data:`~nvalchemi.training.distillation.evaluation.DEFAULT_BARS` is the tuple of
+:class:`~nvalchemi.training.distillation.evaluation.AcceptanceBar` entries the
+report applies by default. Each entry names the threshold it is set under, the
+families it reads, and the field it gates.
+:data:`~nvalchemi.training.distillation.evaluation.BAR_FAMILIES` is derived from
+it. A measurement outside the typed slots is filed under
+``StudentEvaluation.extra`` as a flat map of numbers per family. A bar whose
+family is ``"extra:<family>"`` gates it, and the bar's limit is set under the
+bar's name in ``AcceptanceThresholds.extra``. Pass the extended table as
+``build_acceptance_report(..., bars=...)`` and ``measured_bars(..., bars=...)``.
+A limit set for a bar that the table does not carry is refused rather than
+skipped.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   build_acceptance_report
+   AcceptanceReport
+   AcceptanceThresholds
+   AcceptanceCheck
+   StudentEvaluation
+   StudentVerdict
+   MeasurementRecord
+   measured_bars
+   MetricFamily
+   AcceptanceBar
+
+.. data:: DEFAULT_BARS
+   :type: tuple[AcceptanceBar, ...]
+
+   Built-in bars of :class:`AcceptanceThresholds`, in the order they are
+   applied.
+
+.. data:: BAR_FAMILIES
+   :type: Mapping[str, frozenset[str]]
+
+   Measurement families each built-in bar reads, keyed by threshold field.
+
+.. currentmodule:: nvalchemi.training.distillation

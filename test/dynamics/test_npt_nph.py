@@ -611,7 +611,7 @@ class TestNPTIntegrator:
             compute_kinetic_energy,
         )
 
-        from nvalchemi.dynamics.hooks._utils import KB_EV
+        from nvalchemi.dynamics._units import KB_EV
 
         steps = 100
         num_systems = 2

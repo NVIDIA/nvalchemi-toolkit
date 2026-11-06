@@ -96,6 +96,7 @@ from nvalchemi.training._spec import (
     create_model_spec,
     create_model_spec_from_json,
 )
+from nvalchemi.training._strategy_validation import ModelInput, _normalize_models
 from nvalchemi.training.distributed import get_world_size
 
 CheckpointValidator = Callable[[str, Mapping[str, Any], Mapping[str, Any]], None]
@@ -1735,6 +1736,35 @@ def save_checkpoint(
     return checkpoint_index
 
 
+def _caller_models(
+    models: ModelInput, saved: Sequence[str], single_model_input: bool | None
+) -> ModelInput:
+    """Return *models* once their names are exactly the checkpoint's *saved* ones.
+
+    A single model stands for a checkpoint whose one model is ``"main"``. The
+    weights are loaded by name, so a name the checkpoint lacks would stay
+    unweighted and a saved name with no caller object would be rebuilt from
+    its spec beside the caller's, neither of which a caller supplying models
+    means. The result takes the shape the checkpoint recorded in
+    *single_model_input*, so a bare model and ``{"main": model}`` restore the
+    same call mode the strategy was saved with; a legacy checkpoint that
+    recorded none leaves the caller's shape as given.
+    """
+    named = _normalize_models(models)
+    names = set(named)
+    if names != set(saved):
+        raise ValueError(
+            "load_checkpoint: models must name exactly the checkpoint's models "
+            f"{sorted(saved)!r}; got {sorted(names)!r}. Pass one live model per "
+            "saved name, or leave models unset to rebuild them from the saved specs."
+        )
+    if single_model_input is True:
+        return named["main"]
+    if single_model_input is False:
+        return named
+    return models
+
+
 def load_checkpoint(
     root_folder: Path | str,
     checkpoint_index: int = -1,
@@ -1747,6 +1777,8 @@ def load_checkpoint(
     hooks: Sequence[Any] | None = None,
     training_fn: Any = None,
     strategy: Any | None = None,
+    models: ModelInput | None = None,
+    **runtime_overrides: Any,
 ) -> CheckpointManifest | dict[str, Any]:
     """Load a multi-component checkpoint written by :func:`save_checkpoint`.
 
@@ -1800,6 +1832,21 @@ def load_checkpoint(
         This mode restores model, optimizer, scheduler, runtime-counter, and
         checkpointable hook state into the live objects instead of rebuilding
         models from saved specs.
+    models
+        Live models to restore the checkpoint's weights into, in place of the
+        ones the loader builds from the saved specs: a single model for a
+        checkpoint whose one model is ``"main"``, or a mapping whose names
+        are exactly ``manifest.models``. Like ``runtime_overrides``, accepted
+        only when the saved strategy is rebuilt from its metadata. A caller
+        whose other objects already hold the models, such as a propagator
+        built around the student it trains, passes them here so the weights
+        land in those very objects.
+    **runtime_overrides
+        Runtime overrides: live objects that a saved spec cannot carry, passed
+        as extra keyword arguments. They are forwarded to the strategy class's
+        ``from_spec_dict`` when a saved strategy is rebuilt from its metadata,
+        and a subclass documents the ones it accepts. They are refused in the
+        modes that rebuild no strategy.
 
     Returns
     -------
@@ -1819,8 +1866,14 @@ def load_checkpoint(
     KeyError
         If any name in ``model_names`` does not appear in
         ``manifest.models``.
+    ValueError
+        If ``models`` does not name exactly the models in ``manifest.models``.
     RuntimeError
         If a model spec does not build an :class:`~torch.nn.Module`.
+    TypeError
+        If ``runtime_overrides`` or ``models`` are given but no strategy is
+        rebuilt from metadata, or if a runtime override reaches a
+        ``from_spec_dict`` that does not accept it.
 
     Examples
     --------
@@ -1843,6 +1896,18 @@ def load_checkpoint(
         result = load_checkpoint("runs/kd", model_names={"teacher", "student"})
     """
     root = Path(root_folder)
+    supplied = sorted(runtime_overrides) + (["models"] if models is not None else [])
+    if supplied and (
+        adapter is not None or strategy is not None or model_names is not None
+    ):
+        raise TypeError(
+            f"load_checkpoint: got runtime overrides {supplied!r}, "
+            "but this load rebuilds no strategy, so nothing receives them. An "
+            "adapter load, a live strategy restore, and a partial model_names "
+            "load all leave the strategy class's from_spec_dict uncalled. Drop "
+            "the overrides, or load without adapter, strategy, and model_names "
+            "so the saved strategy is rebuilt from its metadata."
+        )
     if adapter is not None:
         if strategy is not None:
             raise ValueError("load_checkpoint does not support strategy with adapter.")
@@ -1903,20 +1968,27 @@ def load_checkpoint(
     if strategy_metadata is not None and model_names is None:
         from nvalchemi.training.strategy import TrainingStrategy
 
-        # Build models from specs without loading weights.
-        unweighted_models = {
-            name: _build_model_from_checkpoint_spec(
-                root,
-                name,
-                load_location=load_location,
-            )[0]
-            for name in manifest.models
-        }
-        loaded_strategy_models: Any = unweighted_models
-        if strategy_metadata.get("single_model_input") is True and set(
-            unweighted_models
-        ) == {"main"}:
-            loaded_strategy_models = unweighted_models["main"]
+        # Build models from specs without loading weights, unless the caller
+        # supplied the objects the weights are to land in.
+        loaded_strategy_models: Any
+        if models is not None:
+            loaded_strategy_models = _caller_models(
+                models, manifest.models, strategy_metadata.get("single_model_input")
+            )
+        else:
+            unweighted_models = {
+                name: _build_model_from_checkpoint_spec(
+                    root,
+                    name,
+                    load_location=load_location,
+                )[0]
+                for name in manifest.models
+            }
+            loaded_strategy_models = unweighted_models
+            if strategy_metadata.get("single_model_input") is True and set(
+                unweighted_models
+            ) == {"main"}:
+                loaded_strategy_models = unweighted_models["main"]
 
         # Reconstruct the strategy and run registration-time hooks.
         runtime_strategy_metadata = _with_strategy_device_override(
@@ -1927,6 +1999,7 @@ def load_checkpoint(
             models=loaded_strategy_models,
             hooks=hooks,  # extra user-supplied runtime hooks
             training_fn=training_fn,
+            **runtime_overrides,
         )
 
         # Load model weights and optimizer/scheduler/runtime state.
@@ -1945,6 +2018,14 @@ def load_checkpoint(
     # Path 3: component-level loads: either the checkpoint has no strategy
     # metadata, or ``model_names`` requested a partial load from a strategy
     # checkpoint. Partial loads do not reconstruct strategy hooks.
+    if supplied:
+        raise TypeError(
+            f"load_checkpoint: got runtime overrides {supplied!r}, "
+            "but this checkpoint carries no strategy metadata, so no strategy is "
+            "rebuilt and nothing receives them. Drop the overrides, or load a "
+            "checkpoint saved with a strategy so its class's from_spec_dict is "
+            "called."
+        )
     # Determine what models to load.
     selected_models = set(manifest.models) if model_names is None else set(model_names)
     unknown = selected_models - set(manifest.models)

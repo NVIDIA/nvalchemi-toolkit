@@ -88,6 +88,9 @@ cu13 = [
 pymatgen = [
     "pymatgen>=2025.10.7",
 ]
+rdkit = [
+    "rdkit>=2025.3.3",
+]
 mace = [
     "cuequivariance-torch>=0.8.0",
     "mace-torch==0.3.15",
@@ -210,14 +213,20 @@ override-dependencies = [
   "lmdb>=1.6.2,<=1.7.3; python_version < '3.14'",
   "lmdb>=2.0.0; python_version >= '3.14'",
 ]
+# Match the pinned 0.5.0-rc Git revision's package metadata. uv 0.12 reports
+# conflicting Torch CUDA indexes for this Git source during universal locking
+# without the declaration. Remove this with the Git source pin after release.
 dependency-metadata = [
   { name = "nvalchemi-toolkit-ops", version = "0.5.0", requires-dist = [
-    "warp-lang >= 1.13.0",
+    "warp-lang>=1.16.0",
     "numpy",
-    "torch>=2.8.0 ; extra == 'torch'",
-    "torch>=2.8.0 ; extra == 'torch-cu12'",
-    "torch>=2.8.0 ; extra == 'torch-cu13'",
-  ], provides-extras = ["torch", "torch-cu12", "torch-cu13"] },
+    "torch>=2.10.0 ; extra == 'torch'",
+    "torch>=2.10.0 ; extra == 'torch-cu12'",
+    "torch>=2.10.0 ; extra == 'torch-cu13'",
+    "jax[cuda13] ; extra == 'jax'",
+    "jax[cuda12] ; extra == 'jax-cu12'",
+    "jax[cuda13] ; extra == 'jax-cu13'",
+  ], provides-extras = ["torch", "torch-cu12", "torch-cu13", "jax", "jax-cu12", "jax-cu13"] },
 ]
 
 [tool.uv.sources]

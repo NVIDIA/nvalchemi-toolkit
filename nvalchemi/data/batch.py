@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from typing import Any, TypeAlias
 
 import numpy as np
@@ -3334,6 +3335,69 @@ class Batch(DataMixin):
     # ------------------------------------------------------------------
     # DataMixin overrides (performance-critical)
     # ------------------------------------------------------------------
+
+    @contextmanager
+    def without_keys(self, *keys: str) -> Iterator[None]:
+        """Hide *keys* from the batch for the duration of a block.
+
+        Each of *keys* the batch carries is removed on entry and put back on
+        exit, at the level it came from and as the same tensor. Every one of
+        *keys* the batch carries when the block ends, whether written inside
+        it or not, is removed first, so a model that writes
+        ``node_embeddings`` onto the batch leaves no trace of the write, and a
+        tensor read inside the block outlives it, autograd graph included. A
+        key the batch does not carry is ignored on entry. The tracked key
+        sets in :attr:`keys` are hidden and restored alongside.
+
+        Parameters
+        ----------
+        *keys : str
+            Field names to hide.
+
+        Yields
+        ------
+        None
+            Control while the batch carries none of *keys*.
+
+        Examples
+        --------
+        >>> with batch.without_keys("node_embeddings", "graph_embeddings"):  # doctest: +SKIP
+        ...     model.compute_embeddings(batch)
+        ...     embeddings = batch["node_embeddings"]
+        >>> "node_embeddings" in batch  # doctest: +SKIP
+        False
+
+        Notes
+        -----
+        A hidden key is written back into the level group it was read from
+        rather than through :meth:`__setitem__`, because ``del`` drops a key
+        from every level, after which ``__setitem__`` would route it by the
+        attribute registry rather than by where the tensor was stored.
+        """
+        hidden = frozenset(keys)
+        saved_levels = {
+            key: level
+            for level, fields in self.level_keys.items()
+            for key in hidden & fields
+        }
+        saved_values = {key: self[key] for key in saved_levels}
+        for key in saved_levels:
+            del self[key]
+        saved_tracked = {
+            level: names & hidden for level, names in (self.keys or {}).items()
+        }
+        for level in saved_tracked:
+            self.keys[level] -= hidden
+        try:
+            yield
+        finally:
+            for key in hidden:
+                if key in self:
+                    del self[key]
+            for key, value in saved_values.items():
+                self._storage.groups[saved_levels[key]][key] = value
+            for level, names in saved_tracked.items():
+                self.keys[level] = (self.keys[level] - hidden) | names
 
     def to(
         self,
