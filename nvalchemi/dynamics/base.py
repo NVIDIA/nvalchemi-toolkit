@@ -1206,14 +1206,19 @@ class _CommunicationMixin:
         """Normalize freshly received samples before they join the active batch.
 
         Called on every non-empty batch received from the prior rank. The
-        default is a no-op; subclasses that carry per-sample bookkeeping
-        (e.g. :class:`FusedStage` status codes) override it.
+        sender's ``status`` is its own ``exit_status``, which would read as
+        already graduated here, so it is reset to ``0``. Subclasses with their
+        own entry status or per-sample bookkeeping (e.g. :class:`FusedStage`)
+        override it.
 
         Parameters
         ----------
         incoming : Batch
             Batch received from the prior stage. May be modified in place.
         """
+        status = getattr(incoming, "status", None)
+        if status is not None:
+            status.zero_()
 
     def _prime_arrivals(self, n_existing: int) -> None:
         """Initialize forces for graphs admitted after the first *n_existing*.
@@ -2477,7 +2482,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         n : int
             Number of new systems to create state for.
         template_batch : Batch
-            The updated active batch; provides device and dtype.
+            The updated active batch, ending with the *n* arrivals; provides
+            device and dtype.
 
         Returns
         -------
