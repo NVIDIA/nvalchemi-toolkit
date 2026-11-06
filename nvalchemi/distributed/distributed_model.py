@@ -1478,6 +1478,7 @@ class DistributedModel:
 
         from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
             clear_compile_routing,
+            set_compile_halo_config,
             set_compile_routing,
         )
 
@@ -1495,6 +1496,7 @@ class DistributedModel:
                     batch._halo_no,
                     int(getattr(batch, "_halo_ws", 1)),
                 )
+                set_compile_halo_config(self._halo_config)
             return wrapper.forward(batch)
 
         if eager:

@@ -85,6 +85,16 @@ __all__ = [
 ]
 
 
+def _merge_edge_filters(a: bool, b: bool) -> bool:
+    """Combine two specs' edge-filter settings; they share one padded graph."""
+    if a != b:
+        raise ValueError(
+            "Cannot merge specs that disagree on halo_receiver_edge_filter: the "
+            "models would need differently prepared edge lists."
+        )
+    return a
+
+
 def _merge_policies(a: StoragePolicy | None, b: StoragePolicy | None) -> Any:
     """Combine two storage policies into one that subsumes both.
 
@@ -421,6 +431,12 @@ class MLIPSpec:
     # volume, overriding the wrapper's all-local ``"stress"``. ``None`` (default)
     # means the wrapper owns its own per-system stress.
     node_virial_key: str | None = None
+    # Whether to mark COO edges whose receiver is a ghost as padding before the
+    # forward, so a per-receiver scatter counts each edge once, on the rank that
+    # owns its receiver. A model whose kernels need the full local edge list
+    # (e.g. a backward that assumes both directions of every pair) turns this off
+    # and relies on an owned-aware energy reduction instead.
+    halo_receiver_edge_filter: bool = True
     # Graph-parallel only: the model's neighbour kernel indexes the position array
     # (dense ``neighbor_matrix`` receivers = rows of ``positions``, e.g. PME's
     # fused real-space+reciprocal kernel), so it needs the FULL replicated node set
@@ -505,6 +521,9 @@ class MLIPSpec:
             system_reductions=self.system_reductions or other.system_reductions,
             node_energy_key=self.node_energy_key or other.node_energy_key,
             node_virial_key=self.node_virial_key or other.node_virial_key,
+            halo_receiver_edge_filter=_merge_edge_filters(
+                self.halo_receiver_edge_filter, other.halo_receiver_edge_filter
+            ),
             compile=_merge_compile_policies(self.compile, other.compile),
         )
 
@@ -555,6 +574,7 @@ class MLIPSpec:
             system_reductions=self.system_reductions,
             node_energy_key=self.node_energy_key,
             node_virial_key=self.node_virial_key,
+            halo_receiver_edge_filter=self.halo_receiver_edge_filter,
             compile=self.compile,
         )
 
@@ -569,6 +589,7 @@ class MLIPSpec:
             system_reductions=self.system_reductions,
             node_energy_key=self.node_energy_key,
             node_virial_key=self.node_virial_key,
+            halo_receiver_edge_filter=self.halo_receiver_edge_filter,
             compile=policy,
         )
 
@@ -599,6 +620,7 @@ class MLIPSpec:
             "system_reductions": self.system_reductions,
             "node_energy_key": self.node_energy_key,
             "node_virial_key": self.node_virial_key,
+            "halo_receiver_edge_filter": self.halo_receiver_edge_filter,
             "gp_replicate_geometry": self.gp_replicate_geometry,
             "owned_only_outputs": sorted(self.owned_only_outputs),
             "all_reduce_outputs": sorted(self.all_reduce_outputs),
@@ -628,6 +650,7 @@ class MLIPSpec:
                 system_reductions=d.get("system_reductions", True),
                 node_energy_key=d.get("node_energy_key"),
                 node_virial_key=d.get("node_virial_key"),
+                halo_receiver_edge_filter=d.get("halo_receiver_edge_filter", True),
                 gp_replicate_geometry=d.get("gp_replicate_geometry", False),
                 owned_only_outputs=frozenset(d.get("owned_only_outputs", [])),
                 all_reduce_outputs=frozenset(d.get("all_reduce_outputs", [])),

@@ -4,6 +4,26 @@
 
 ### Added
 
+- `MultipoleEwaldModelWrapper` and `MultipolePMEModelWrapper` — multipole
+  (charge, dipole, quadrupole) GTO-Ewald electrostatics from
+  `nvalchemi-toolkit-ops`. Moments come from the per-atom `charges`, `dipoles`
+  and `quadrupoles` batch fields (any subset); the Ewald split is derived from
+  `cutoff`, `sigma` and `accuracy`;
+  forces and stress come from autograd; `neighbor_format` accepts `MATRIX` or
+  `COO`. Both wrappers run under halo domain decomposition (`DomainParallel`),
+  eager or compiled, with `MATRIX` or `COO` neighbors and orthorhombic or
+  triclinic cells; this needs an `nvalchemiops` whose multipole entry points
+  accept `total_charge`, `source_weights` and `reduce_partial`.
+  `compile_model=True` compiles the energy with
+  `torch.compile` while forces and stress stay on eager autograd; Ewald needs an
+  `nvalchemiops` that accepts `miller_indices`. Compiled evaluation supports
+  dynamic shapes (inflight batching); the PME mesh only grows while compiled so
+  a changing cell settles on a bounded set of recompiles. PME needs an
+  `nvalchemiops` with the triclinic k-grid fix to be correct on non-orthogonal
+  cells.
+- `AtomicData` / `Batch` gain per-atom `dipoles` `[N, 3]` and `quadrupoles`
+  `[N, 3, 3]` fields. `PipelineModelWrapper` now wires upstream outputs into a
+  consumer's `optional_inputs` as well as its `required_inputs`.
 - Add `nvalchemi.csp` modules for molecular crystal-structure prediction
   applications, including random rigid-molecule packing, atom-bounded radial
   matching, and greedy de-duplication for `Batch` and loader-backed pools,
