@@ -204,7 +204,7 @@ def build_vanilla_mace_model(
         cueq_config=cueq_config,
     )
     mace_model = mace_model.to(device=device, dtype=dtype)
-    model = MACEWrapper(mace_model)
+    model = MACEWrapper(mace_model, train=True)
     model.model_config.active_outputs = {"energy", "forces", "stress"}
     model.train()
     return model

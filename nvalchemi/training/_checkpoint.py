@@ -1443,7 +1443,14 @@ def _load_mace_checkpoint(
 ) -> dict[str, Any]:
     """Load a local MACE checkpoint through :class:`MACEWrapper`."""
     kwargs = dict(adapter_kwargs or {})
-    allowed = {"model_name", "dtype", "enable_cueq", "compile_model", "compile_kwargs"}
+    allowed = {
+        "model_name",
+        "dtype",
+        "enable_cueq",
+        "compile_model",
+        "compile_kwargs",
+        "train",
+    }
     unknown = sorted(set(kwargs) - allowed)
     if unknown:
         raise ValueError(f"Unknown MACE adapter option(s): {unknown}.")
@@ -1458,6 +1465,7 @@ def _load_mace_checkpoint(
     dtype = kwargs.pop("dtype", None)
     enable_cueq = kwargs.pop("enable_cueq", False)
     compile_model = kwargs.pop("compile_model", False)
+    train = kwargs.pop("train", True)
     compile_kwargs = kwargs.pop("compile_kwargs", {})
     if not isinstance(compile_kwargs, Mapping):
         raise TypeError("MACE adapter option 'compile_kwargs' must be a mapping.")
@@ -1478,6 +1486,7 @@ def _load_mace_checkpoint(
         dtype=dtype,
         enable_cueq=enable_cueq,
         compile_model=compile_model,
+        train=train,
         **dict(compile_kwargs),
     )
     return {

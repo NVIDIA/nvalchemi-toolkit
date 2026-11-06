@@ -425,8 +425,15 @@ def _check_reusable_neighbors(batch: Batch, config: NeighborConfig) -> None:
 
 
 def _snapshot_grad_flags(batch: Batch, config: ModelConfig) -> dict[str, bool]:
-    """Return the ``requires_grad`` flag of every input the teacher may enable."""
+    """Return the ``requires_grad`` flag of every tensor field of *batch*.
+
+    Every stored field is recorded, not only the inputs *config* declares: a
+    model may enable gradients on a field it never names, as a stress head
+    does on ``cell``, and a flag left on would let a later copy of the batch
+    carry an autograd graph.
+    """
     keys = {"positions"} | set(config.gradient_keys) | set(config.autograd_inputs)
+    keys.update(field for fields in batch.level_keys.values() for field in fields)
     flags: dict[str, bool] = {}
     for key in keys:
         value = getattr(batch, key, None)
@@ -439,7 +446,11 @@ def _restore_grad_flags(batch: Batch, flags: dict[str, bool]) -> None:
     """Restore the ``requires_grad`` flags captured by :func:`_snapshot_grad_flags`."""
     for key, flag in flags.items():
         value = getattr(batch, key, None)
-        if isinstance(value, torch.Tensor) and value.requires_grad != flag:
+        if (
+            isinstance(value, torch.Tensor)
+            and value.is_leaf
+            and value.requires_grad != flag
+        ):
             value.requires_grad_(flag)
 
 

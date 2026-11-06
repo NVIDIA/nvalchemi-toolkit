@@ -39,7 +39,7 @@ non-PBC systems it keeps the legacy size threshold between naive and cell-list
 methods. The selected paths normally allocate auxiliary tensors on demand with
 CPU-GPU syncs (e.g. ``.item()`` calls), so
 :meth:`NeighborListHook._alloc_nl_kwargs` computes these **once** when the batch
-shape is first seen (or changes) and caches them in
+shape is first seen (or changes, or new systems are admitted) and caches them in
 ``NeighborListHook._buf_nl_kwargs``:
 
 * *Naive, no PBC*: no extra kwargs needed.
@@ -49,10 +49,11 @@ shape is first seen (or changes) and caches them in
 * *Cluster tile*: batch cluster-tile sort/group/tile scratch tensors.
 
 **NPT note**: geometry-dependent kwargs (shift ranges, cell-list sizes) are
-fixed when the staging buffers are first allocated for a given ``(N, B)``
-shape.  For NPT (variable-cell) simulations the pre-computed values may
-become stale as the cell changes; accuracy is maintained by keeping the
-cutoff + skin well below the shortest cell dimension throughout the run.
+fixed when the staging buffers are allocated, on the first build for a given
+``(N, B)`` shape or after new systems are admitted.  For NPT (variable-cell)
+simulations the pre-computed values may become stale as the cell changes;
+accuracy is maintained by keeping the cutoff + skin well below the shortest
+cell dimension throughout the run.
 """
 
 from __future__ import annotations
@@ -60,7 +61,11 @@ from __future__ import annotations
 from enum import Enum
 
 import torch
-from nvalchemiops.neighbors.base_dispatch import neighbor_list_strategy_run_args
+from nvalchemiops.neighbors.base_dispatch import (
+    DEFAULT_BATCH_MAX_NBINS,
+    DEFAULT_SINGLE_MAX_NBINS,
+    neighbor_list_strategy_run_args,
+)
 from nvalchemiops.neighbors.neighbor_utils import estimate_max_neighbors
 from nvalchemiops.torch.neighbors import neighbor_list, suggest_neighbor_list_method
 from nvalchemiops.torch.neighbors.rebuild_detection import (
@@ -77,10 +82,12 @@ except ImportError:
 try:
     from nvalchemiops.torch.neighbors.batch_cluster_tile import (
         allocate_batch_cluster_tile_list,
+        estimate_batch_cluster_tile_segments,
         estimate_batch_max_tiles_per_group,
     )
 except ImportError:
     allocate_batch_cluster_tile_list = None
+    estimate_batch_cluster_tile_segments = None
     estimate_batch_max_tiles_per_group = None
 
 try:
@@ -98,6 +105,17 @@ from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 from nvalchemi.neighbors import _write_neighbor_data_to_batch
 
 
+def _admission_stage() -> Enum:
+    """Return ``DynamicsStage.ON_ADMISSION``.
+
+    Imported on first use because :mod:`nvalchemi.dynamics` imports this
+    package.
+    """
+    from nvalchemi.dynamics.base import DynamicsStage
+
+    return DynamicsStage.ON_ADMISSION
+
+
 class NeighborListHook:
     """Compute and cache neighbor lists before each model evaluation.
 
@@ -105,8 +123,12 @@ class NeighborListHook:
     neighbor data into the batch so that the model's ``adapt_input`` can
     read it.  An optional Verlet skin buffer avoids rebuilding the list
     every step: the list is only recomputed when the maximum raw Cartesian
-    displacement since the last build exceeds ``config.skin / 2``, or when
-    the set of active systems changes (detected via ``system_id``).
+    displacement since the last build exceeds ``config.skin / 2``.
+
+    The hook also runs at :attr:`~DynamicsStage.ON_ADMISSION`, which dynamics
+    engines dispatch whenever the systems in the batch change.  There it
+    drops the neighbor width, buffers, and skin reference sized for the
+    previous systems, so the next build derives them for the new ones.
 
     For ``MATRIX`` format the following tensors are written to the atoms
     group of the batch (and thus accessible as ``batch.neighbor_matrix``
@@ -150,6 +172,10 @@ class NeighborListHook:
         (default), the hook selects an appropriate method from the batch shape
         and periodic-cell metadata.
     """
+
+    # ``_runs_on_stage`` adds ON_ADMISSION to ``stage``; the hook registry
+    # still validates ``stage`` as for a single-stage hook.
+    _extends_stage = True
 
     def __init__(
         self,
@@ -201,7 +227,6 @@ class NeighborListHook:
     # ------------------------------------------------------------------
     # Main hook entry point
     # ------------------------------------------------------------------
-    @torch.compile(fullgraph=False, mode="max-autotune-no-cudagraphs")
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Recompute the neighbor list if needed and write it to the batch.
 
@@ -210,12 +235,53 @@ class NeighborListHook:
         the list is only rebuilt when at least one atom's raw Cartesian position
         has moved more than ``skin / 2`` since the previous build.  The reference
         positions are updated in-place on the GPU whenever a rebuild occurs.
+
+        At ``DynamicsStage.ON_ADMISSION`` the hook drops the caches sized for
+        the previous systems, and builds only if it is registered at that
+        stage.
         """
+        if stage is _admission_stage():
+            self._reset_for_new_membership()
+            if stage is not self.stage:
+                return
+        self._build(ctx)
+
+    @torch.compile(fullgraph=False, mode="max-autotune-no-cudagraphs")
+    def _build(self, ctx: HookContext) -> None:
+        """Rebuild the neighbor list and write it to the batch."""
         self._rebuild(ctx.batch)
 
         # First build: initialise the skin-buffer reference (one-time clone).
         if self.skin > 0.0 and self._ref_positions is None:
             self._init_ref_positions(ctx.batch.positions)
+
+    def _runs_on_stage(self, stage: Enum) -> bool:
+        """Return whether the hook runs at *stage*.
+
+        Parameters
+        ----------
+        stage : Enum
+            The stage being dispatched.
+
+        Returns
+        -------
+        bool
+            ``True`` at :attr:`stage`, where the hook builds, and at
+            ``DynamicsStage.ON_ADMISSION``, where it resets.
+        """
+        return stage == self.stage or stage is _admission_stage()
+
+    def _reset_for_new_membership(self) -> None:
+        """Make the next build re-derive everything sized for the old systems.
+
+        The neighbor width K, the output and staging buffers, the skin
+        reference, and the algorithm kwargs depend on which systems the batch
+        holds, not only on its ``(N, B)`` shape.  Forgetting the allocated
+        shape sends the next build down the shape-change path, which
+        re-allocates all of them and syncs once on the actual max K.
+        """
+        self._alloc_N = None
+        self._alloc_B = None
 
     @torch.compiler.disable
     def _init_ref_positions(self, positions: torch.Tensor) -> None:
@@ -243,20 +309,14 @@ class NeighborListHook:
         cell = getattr(batch, "cell", None)  # (B, 3, 3) float or None
 
         # ------------------------------------------------------------------
-        # Allocate (or reallocate) the output tensors when shape changes.
-        # Reallocation also resets the skin-buffer state so that the first
-        # subsequent step forces a full rebuild and re-initialises
-        # _ref_positions for the new atom count.
-        # ------------------------------------------------------------------
-        if self._neighbor_matrix is None or self._neighbor_matrix.shape[0] != N:
-            self._alloc_output_tensors(N, batch, pbc)
-
-        # ------------------------------------------------------------------
-        # (Re)allocate staging buffers and algorithm kwargs on shape change.
+        # (Re)allocate the output tensors, staging buffers and algorithm
+        # kwargs when the shape changes or new systems were admitted (see
+        # _reset_for_new_membership).  Reallocation re-estimates K and resets
+        # the skin-buffer state, so the first subsequent build is a full
+        # rebuild that re-derives K for the systems now in the batch.
         # ------------------------------------------------------------------
         if self._alloc_N != N or self._alloc_B != B:
-            # Composition changed — check K before staging realloc.
-            self._check_and_resize_k(N, batch.device, pbc)
+            self._alloc_output_tensors(N, batch, pbc)
             self._alloc_staging_buffers(
                 N,
                 B,
@@ -312,10 +372,10 @@ class NeighborListHook:
         )
 
         # ------------------------------------------------------------------
-        # Adaptive K: first-build check (runs once, then never again).
+        # Adaptive K: first-build check (runs once per reallocation).
         # This is the only per-step adaptive K code.  After the first
-        # build, all checks are gated on structural events (N/B change)
-        # inside _alloc_output_tensors / _alloc_staging_buffers.
+        # build, all checks are gated on structural events (N/B change or
+        # admission) that reallocate in _alloc_output_tensors.
         # ------------------------------------------------------------------
         if self._first_build:
             self._first_build = False
@@ -378,7 +438,7 @@ class NeighborListHook:
         Marked ``@torch.compiler.disable`` because it calls
         ``estimate_max_neighbors`` (CPU work), allocates tensors with
         dynamic shapes, and mutates Python attributes — all graph breaks.
-        Called only when the atom count changes.
+        Called only when the batch shape changes or new systems are admitted.
         """
         device = batch.device
         max_nbrs = self._max_neighbors_override
@@ -404,7 +464,9 @@ class NeighborListHook:
             self._neighbor_matrix_shifts = torch.zeros(
                 N, max_nbrs, 3, dtype=torch.int32, device=device
             )
-        # Reset skin-buffer state so __call__ re-initialises _ref_positions.
+        else:
+            self._neighbor_matrix_shifts = None
+        # Reset skin-buffer state so _build re-initialises _ref_positions.
         self._ref_positions = None
         self._rebuild_flags = None
         # Reset adaptive K state so first build triggers a sync check.
@@ -420,9 +482,10 @@ class NeighborListHook:
     ) -> bool:
         """Sync on actual max K and grow/shrink the neighbor matrix if needed.
 
-        Called on structural events (first build, N/B change, cell volume
-        change).  The sync cost is acceptable because these events are
-        infrequent and the calling code path is already off the compile graph.
+        Called after the first build following a structural event (N/B
+        change or admission).  The sync cost is acceptable because these
+        events are infrequent and the calling code path is already off the
+        compile graph.
 
         Returns ``True`` if K was grown (caller must re-run the kernel).
         Shrinking trims the existing buffers in-place — no re-run needed.
@@ -574,6 +637,7 @@ class NeighborListHook:
         if base_method.endswith("cluster_tile"):
             if (
                 allocate_batch_cluster_tile_list is None
+                or estimate_batch_cluster_tile_segments is None
                 or estimate_batch_max_tiles_per_group is None
                 or cell is None
             ):
@@ -608,8 +672,14 @@ class NeighborListHook:
                 dtype=dtype,
                 max_tiles_per_group=max_tiles_per_group,
             )
+            _, tile_offsets, _, _ = estimate_batch_cluster_tile_segments(
+                batch_ptr, 0, max_tiles_per_group=max_tiles_per_group
+            )
+            tile_counts = torch.zeros(B, dtype=torch.int32, device=device)
             self._buf_nl_kwargs = {
                 "max_tiles_per_group": max_tiles_per_group,
+                "tile_offsets": tile_offsets,
+                "tile_counts": tile_counts,
                 "sorted_atom_index": sorted_atom_index,
                 "sort_inv": sort_inv,
                 "sorted_pos_x": sorted_pos_x,
@@ -650,8 +720,14 @@ class NeighborListHook:
                 alloc_cell = torch.diag_embed(cell_lengths)
                 alloc_pbc = torch.zeros(B, 3, dtype=torch.bool, device=device)
 
+            # Use the same per-system cell cap as the method selector, which
+            # assumes the single-system cap for B == 1.
+            max_nbins = DEFAULT_SINGLE_MAX_NBINS if B == 1 else DEFAULT_BATCH_MAX_NBINS
             max_total_cells, neighbor_search_radius = estimate_batch_cell_list_sizes(
-                alloc_cell, alloc_pbc, self.config.cutoff + self.skin
+                alloc_cell,
+                alloc_pbc,
+                self.config.cutoff + self.skin,
+                max_nbins=max_nbins,
             )
             (
                 cells_per_dimension,

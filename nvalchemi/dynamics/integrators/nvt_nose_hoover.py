@@ -44,7 +44,11 @@ from typing import TYPE_CHECKING, Any, Literal
 import torch
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
+from nvalchemi.dynamics._ops._bridge import (
+    _arrival_atom_counts,
+    _make_state_batch,
+    _to_per_system,
+)
 from nvalchemi.dynamics._ops.nose_hoover import (
     nhc_chain_update,
     nhc_compute_masses,
@@ -229,21 +233,16 @@ class NVTNoseHoover(BaseDynamics):
         dtype = template_batch.positions.dtype
         kT = _to_per_system(self._temperature_init * KB_EV, n, dev, dtype)
         tau = _to_per_system(self._thermostat_time_init, n, dev, dtype)
-        # Approximate Q with a reasonable default using a dummy batch.
-        dummy_masses = (
-            template_batch.atomic_masses[:n].contiguous()
-            if template_batch.atomic_masses.shape[0] >= n
-            else template_batch.atomic_masses
+        # Size each arrival's chain from its own atoms, as _init_state does;
+        # the arrivals are the last n graphs of the template.
+        counts = _arrival_atom_counts(template_batch, n)
+        batch_idx = torch.repeat_interleave(
+            torch.arange(n, dtype=torch.int32, device=dev), counts
         )
-        dummy_batch_idx = torch.zeros(
-            dummy_masses.shape[0], dtype=torch.int32, device=dev
-        )
-        Q = nhc_compute_masses(
-            kT[:1], tau[:1], dummy_masses, dummy_batch_idx, self.chain_length
-        )
-        Q = Q.expand(n, -1).contiguous()
-        approx_n_atoms = template_batch.num_nodes // template_batch.num_graphs
-        nhc_ndof = torch.full((n,), approx_n_atoms * 3, dtype=dtype, device=dev)
+        first_atom = template_batch.num_nodes - batch_idx.numel()
+        masses = template_batch.atomic_masses[first_atom:]
+        Q = nhc_compute_masses(kT, tau, masses, batch_idx, self.chain_length)
+        nhc_ndof = (counts * 3).to(dtype=dtype, device=dev)
         return _make_state_batch(
             {
                 "dt": _to_per_system(self._dt_init, n, dev, dtype),
