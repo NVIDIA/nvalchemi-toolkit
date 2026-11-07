@@ -41,7 +41,8 @@ from nvalchemi.dynamics.base import (
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.hooks import DynamicsContext
+from nvalchemi.hooks import DynamicsContext, NeighborListHook
+from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 from ..distributed._gloo_harness import run_gloo
@@ -246,6 +247,152 @@ def _pipeline_entry_worker(
     )
 
 
+class _TaggedDataset(MockDataset):
+    """One-atom samples whose positions encode the sample index."""
+
+    def __getitem__(self, index: int) -> tuple[AtomicData, dict]:
+        """Return a sample at ``100 * index`` so its identity survives steps."""
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6], dtype=torch.long),
+            positions=torch.full((1, 3), 100.0 * index),
+        )
+        return data, {}
+
+
+class _ConvergeAllDynamics(_IncrementDynamics):
+    """Graduate every graph after each step and record which ones converged."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.converged_ids: list[int] = []
+
+    def _check_convergence(self, batch: Batch) -> torch.Tensor:
+        """Mark all graphs converged."""
+        # Samples have one atom each, so atoms and graphs align.
+        ids = torch.div(batch.positions[:, 0], 100, rounding_mode="floor")
+        self.converged_ids.extend(ids.long().tolist())
+        return torch.arange(batch.num_graphs, device=batch.device)
+
+
+def _overflow_pipeline_worker(
+    rank: int, world_size: int, queue: Any, comm_mode: str, n_samples: int
+) -> None:
+    """Stream tagged graphs into a final stage that overflows every step."""
+    model = DemoModelWrapper(DemoModel())
+    config = BufferConfig(num_systems=2, num_nodes=2, num_edges=0)
+    sampler = SizeAwareSampler(
+        _TaggedDataset([(1, 0)] * n_samples),
+        max_atoms=2,
+        max_edges=0,
+        max_batch_size=2,
+    )
+    results = HostMemory(capacity=100)
+    stages = {
+        0: _ConvergeAllDynamics(
+            model=model,
+            buffer_config=config,
+            device_type="cpu",
+            sampler=sampler,
+            comm_mode=comm_mode,
+        ),
+        1: _ConvergeAllDynamics(
+            model=model,
+            buffer_config=config,
+            device_type="cpu",
+            max_batch_size=1,
+            sinks=[results],
+            comm_mode=comm_mode,
+        ),
+    }
+    DistributedPipeline(stages=stages, backend="gloo").run()
+    if rank == 1:
+        stored = results.read()
+        stored_ids = torch.div(stored.positions[:, 0], 100, rounding_mode="floor")
+        queue.put((sorted(stored_ids.long().tolist()), stages[1].converged_ids))
+
+
+def _burst_fused_stage(
+    model: DemoModelWrapper, every: int, **kwargs: Any
+) -> FusedStage:
+    """Build a FusedStage that graduates every graph on each ``every``-th check."""
+    calls = 0
+
+    def graduate_in_bursts(forces: torch.Tensor) -> torch.Tensor:
+        nonlocal calls
+        calls += 1
+        # Samples have one atom each, so atoms and graphs align.
+        return torch.full((forces.shape[0],), calls % every == 0, device=forces.device)
+
+    hook = ConvergenceHook(
+        criteria={"key": "forces", "threshold": 0.0, "custom_op": graduate_in_bursts},
+        source_status=0,
+        target_status=1,
+    )
+    sub_stage = _IncrementDynamics(
+        model=model, device_type="cpu", convergence_hook=hook
+    )
+    return FusedStage(sub_stages=[(0, sub_stage)], device_type="cpu", **kwargs)
+
+
+def _unsent_graduates_pipeline_worker(
+    rank: int, world_size: int, queue: Any, comm_mode: str, n_samples: int
+) -> None:
+    """Graduate more graphs per step than a FusedStage can send.
+
+    With two ranks the FusedStage is the first stage. With three ranks it
+    is the middle stage.
+    """
+    model = DemoModelWrapper(DemoModel())
+    config = BufferConfig(num_systems=2, num_nodes=2, num_edges=0)
+    results = HostMemory(capacity=100)
+    final = _ConvergeAllDynamics(
+        model=model,
+        buffer_config=config,
+        device_type="cpu",
+        max_batch_size=n_samples,
+        sinks=[results],
+        comm_mode=comm_mode,
+    )
+    if world_size == 2:
+        sampler = SizeAwareSampler(
+            _TaggedDataset([(1, 0)] * n_samples),
+            max_atoms=4,
+            max_edges=0,
+            max_batch_size=4,
+        )
+        first = _burst_fused_stage(
+            model,
+            every=1,
+            buffer_config=config,
+            sampler=sampler,
+            comm_mode=comm_mode,
+        )
+        stages = {0: first, 1: final}
+    else:
+        sampler = SizeAwareSampler(
+            _TaggedDataset([(1, 0)] * n_samples),
+            max_atoms=2,
+            max_edges=0,
+            max_batch_size=2,
+        )
+        first = _ConvergeAllDynamics(
+            model=model,
+            buffer_config=config,
+            device_type="cpu",
+            sampler=sampler,
+            comm_mode=comm_mode,
+        )
+        middle = _burst_fused_stage(
+            model, every=3, buffer_config=config, comm_mode=comm_mode
+        )
+        stages = {0: first, 1: middle, 2: final}
+    DistributedPipeline(stages=stages, backend="gloo").run()
+    if rank == world_size - 1:
+        stored = results.read()
+        stored_ids = torch.div(stored.positions[:, 0], 100, rounding_mode="floor")
+        queue.put(sorted(stored_ids.long().tolist()))
+
+
 class _MaskRecordingHook:
     """Record active masks at the post-compute boundary."""
 
@@ -372,6 +519,12 @@ class TestFusedStageInflight:
             refill_frequency=1,
         )
 
+        admission_hook = Mock(
+            spec=["stage", "frequency"],
+            stage=DynamicsStage.ON_ADMISSION,
+            frequency=1,
+        )
+        fused.register_hook(admission_hook)
         with (
             patch.object(fused, "_prime_forces", wraps=fused._prime_forces) as prime,
             patch.object(fused, "compute", wraps=fused.compute) as compute,
@@ -379,6 +532,10 @@ class TestFusedStageInflight:
             result = fused.run(batch=None)
 
         assert result is None
+        assert admission_hook.call_count == 2
+        for call in admission_hook.call_args_list:
+            assert call.args[0].previous_graph_indices.tolist() == [-1] * 3
+        assert fused._pending_graph_indices is None
         assert prime.call_count == 2  # Initial batch and fully replaced batch.
         assert compute.call_count == 4  # Two primes and two steps.
         replacement_batch = compute.call_args_list[-1].args[0]
@@ -448,6 +605,7 @@ class TestFusedStageInflight:
         result = engine.refill_check(batch, engine.exit_status)
 
         assert result is not None
+        assert engine._pending_graph_indices.tolist() == [0] + [-1] * n_replacements
         assert engine._forces_primed
         assert (
             result.reprime_pending.view(-1).tolist()
@@ -619,6 +777,7 @@ class TestFusedStageInflight:
         batch.status[1] = engine.exit_status
         batch = engine.refill_check(batch, engine.exit_status)
         assert batch.reprime_pending.all()
+        assert engine._pending_graph_indices.tolist() == [1, -1, -1]
         positions_before = batch.positions.clone()
         engine.step(batch)
         torch.testing.assert_close(batch.positions, positions_before)
@@ -668,6 +827,64 @@ class TestFusedStageInflight:
         assert masked_post.call_count == 1
         assert "reprime_pending" in batch
         assert not dynamics._refill_pending
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    def test_pipeline_refills_before_batch_empties_without_dropping_graduates(
+        self, fused_stage: bool
+    ) -> None:
+        """Sent graphs free sampler capacity while unsent graduates stay put."""
+        sampler = SizeAwareSampler(
+            _TaggedDataset([(1, 0)] * 6),
+            max_atoms=4,
+            max_edges=0,
+            max_batch_size=4,
+        )
+        dynamics = _IncrementDynamics(model=self.model, device_type="cpu")
+        stage = (
+            FusedStage(sub_stages=[(0, dynamics)], device_type="cpu")
+            if fused_stage
+            else dynamics
+        )
+        stage.sampler = sampler
+        stage.prior_rank = None
+        stage.next_rank = 1
+        stage.buffer_config = BufferConfig(num_systems=1, num_nodes=1, num_edges=0)
+        sink = HostMemory(capacity=6)
+        stage.sinks = [sink]
+        batch, _ = stage.step(sampler.build_initial_batch())
+        batch.status[:2] = stage.exit_status
+        stage.active_batch = batch
+        pipeline = DistributedPipeline(stages={0: stage, 1: stage})
+
+        with (
+            patch("nvalchemi.dynamics.base.dist.is_initialized", return_value=True),
+            patch("nvalchemi.dynamics.base.dist.get_rank", return_value=0),
+            patch.object(Batch, "isend", return_value=Mock()),
+        ):
+            for expected_sent, convergence in ((0, torch.tensor([0, 1])), (1, None)):
+                batch = stage.active_batch
+                with patch.object(stage, "step", return_value=(batch, convergence)):
+                    pipeline.step()
+
+                sent_id = int(stage.send_buffer.positions[0, 0] // 100)
+                assert sent_id == expected_sent
+                batch = stage.active_batch
+                ids = (batch.positions[:, 0] // 100).long().tolist()
+                assert ids == list(range(expected_sent + 1, expected_sent + 5))
+                assert batch.num_graphs == batch.num_nodes == 4
+                assert batch.status[0].item() == (
+                    stage.exit_status if expected_sent == 0 else 0
+                )
+                assert batch.status[-1].item() == 0
+                assert batch.reprime_pending[-1].item()
+                assert len(sink) == 0
+                assert not stage.done
+
+        assert sampler.exhausted
+        positions = batch.positions.clone()
+        stage.step(batch)
+        torch.testing.assert_close(batch.positions[:2], positions[:2] + 2)
+        torch.testing.assert_close(batch.positions[2:], positions[2:])
 
     def test_fused_pipeline_full_drain_resets_batch_initialization(self) -> None:
         """A rebuilt FusedStage pipeline batch is admitted and fully primed."""
@@ -937,6 +1154,47 @@ class TestFusedStageInflight:
         # All samples should have migrated to exit_status=1
         expected_status = torch.tensor([[1]] * 5)
         assert torch.equal(result.status, expected_status)
+
+    def test_inflight_results_with_changing_neighbor_width(self, device: str) -> None:
+        """MATRIX neighbors from differently sized refills do not enter results."""
+        dataset = MockDataset([(27, 0)] * 3 + [(2, 0)] * 6)
+        sampler = SizeAwareSampler(dataset, max_atoms=60, max_batch_size=3)
+        sink = HostMemory(capacity=len(dataset))
+        dynamics = BaseDynamics(
+            model=self.model,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+            device_type=device,
+        )
+        fused = FusedStage(
+            sub_stages=[(0, dynamics)],
+            sampler=sampler,
+            sinks=[sink],
+            refill_frequency=1,
+            hooks=[
+                NeighborListHook(
+                    NeighborConfig(cutoff=2.5, format=NeighborListFormat.MATRIX),
+                    stage=DynamicsStage.BEFORE_COMPUTE,
+                )
+            ],
+            device_type=device,
+        )
+        widths = []
+        write = fused._write_to_sinks
+
+        def record_width(batch, mask=None):
+            widths.append(batch.neighbor_matrix.shape[1])
+            write(batch, mask=mask)
+
+        with patch.object(fused, "_write_to_sinks", side_effect=record_width):
+            fused.run(n_steps=20)
+
+        assert len(set(widths)) > 1
+        results = sink.drain()
+        assert results.num_graphs == len(dataset)
+        assert "neighbor_matrix" not in results
+        assert "num_neighbors" not in results
+        assert "energy" in results
+        assert "forces" in results
 
     def test_graduated_samples_written_to_sinks(self) -> None:
         """Graduated samples should be written to configured sinks.
@@ -1235,6 +1493,43 @@ class TestPipelinePerGraphPriming:
         assert "energy" in result
 
     @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("via_overflow", [False, True])
+    def test_recv_buffer_placeholder_output_does_not_count_as_received(
+        self, fused_stage: bool, via_overflow: bool
+    ) -> None:
+        """A recv-buffer field the prior stage never sent does not skip priming."""
+        sink = HostMemory(capacity=10)
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage,
+            sampler_batch_size=2,
+            prior_rank=0,
+            max_batch_size=2,
+            overflow_sinks=[sink],
+        )
+        stage.__needs_keys__ = {"forces", "energy"}
+        template = initialize_batch_for_dynamics(sampler.build_initial_batch())
+        stage._ensure_buffers(template)
+        assert "energy" in stage.recv_buffer
+        if via_overflow:
+            # A full stage sends arrivals to the sink until room opens up.
+            stage.active_batch = template
+        incoming = sampler.build_initial_batch()
+        incoming["forces"] = torch.full((incoming.num_nodes, 3), 99.0)
+        if "energy" in incoming:
+            del incoming["energy"]
+
+        stage._recv_to_batch(incoming)
+        if via_overflow:
+            assert stage.active_batch is template
+            assert len(sink) == 2
+            stage.active_batch = None
+            stage._drain_sinks_to_batch()
+
+        result = stage.active_batch
+        assert self._step_counting_calls(stage, result) == (1, 2)
+        assert not (result.forces == 99.0).any()
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
     @pytest.mark.parametrize("reprime_on_entry", [False, True])
     @pytest.mark.parametrize("final_stage", [False, True])
     def test_removal_does_not_reprime_residents(
@@ -1475,6 +1770,8 @@ class TestRefillCheck:
         batch = sampler.build_initial_batch()
         assert sampler.exhausted  # All 3 consumed
 
+        dynamics._ensure_admission_initialized(batch)
+        dynamics._record_batch_change(batch, torch.arange(3))
         # Mark all as graduated
         batch["status"] = torch.tensor([[1], [1], [1]])
 
@@ -1483,6 +1780,25 @@ class TestRefillCheck:
         # No replacements available, no remaining
         assert result is None
         assert dynamics.done is True
+        assert dynamics._pending_graph_indices is None
+
+    def test_refill_raises_when_pending_samples_cannot_fit_empty_batch(
+        self,
+    ) -> None:
+        """An unfillable empty batch raises instead of reporting completion."""
+        dataset = MockDataset([(2, 0)] * 3)
+        sampler = SizeAwareSampler(
+            dataset, max_atoms=20, max_edges=10, max_batch_size=1
+        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+        batch = sampler.build_initial_batch()
+        batch["status"] = torch.tensor([[1]])
+        with (
+            patch.object(sampler, "request_replacements_budget", return_value=[]),
+            pytest.raises(ValueError, match="empty active batch"),
+        ):
+            dynamics.refill_check(batch, exit_status=1)
+        assert not dynamics.done
 
     def test_refill_raises_without_sampler(self) -> None:
         """Should raise RuntimeError when sampler is None.
@@ -1513,10 +1829,13 @@ class TestRefillCheck:
         # All samples at status=0 (not graduated)
         batch["status"] = torch.tensor([[0], [0], [0], [0], [0]])
 
+        dynamics._ensure_admission_initialized(batch)
         result = dynamics.refill_check(batch, exit_status=1)
 
         # Should return same batch unchanged
         assert result is batch
+        assert dynamics._admission_initialized
+        assert dynamics._pending_graph_indices is None
 
     def test_compute_detaches_live_inputs_before_refill(self) -> None:
         """Autograd inputs must be detached after compute() so refill is clean.
@@ -1912,3 +2231,37 @@ class TestStepConvergenceReturn:
         batch, converged = dynamics.step(batch)
 
         assert converged is None
+
+
+class TestPipelineOverflowThroughGloo:
+    """Overflow and results stay separate across a real two-rank pipeline."""
+
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_each_graph_finishes_once_with_overflow(self, comm_mode: str) -> None:
+        """Every graph converges once on the final stage and is stored once."""
+        n_samples = 6
+        results = run_gloo(
+            world_size=2,
+            fn=_overflow_pipeline_worker,
+            args=(comm_mode, n_samples),
+        )
+        assert len(results) == 1
+        stored_ids, converged_ids = results[0]
+        assert stored_ids == list(range(n_samples))
+        assert sorted(converged_ids) == list(range(n_samples))
+
+
+class TestFusedStageUnsentGraduatesThroughGloo:
+    """Graduated graphs that miss the send buffer are sent on a later step."""
+
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    @pytest.mark.parametrize("world_size", [2, 3], ids=["first_stage", "middle_stage"])
+    def test_each_graph_is_stored_once(self, comm_mode: str, world_size: int) -> None:
+        """A FusedStage that graduates 4 graphs into a 2-graph buffer loses none."""
+        n_samples = 8
+        results = run_gloo(
+            world_size=world_size,
+            fn=_unsent_graduates_pipeline_worker,
+            args=(comm_mode, n_samples),
+        )
+        assert results == [list(range(n_samples))]

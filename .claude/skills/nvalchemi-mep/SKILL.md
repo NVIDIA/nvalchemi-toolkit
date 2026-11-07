@@ -4,9 +4,9 @@ description: >-
   How to compute minimum-energy paths (MEPs) and transition-state estimates
   with nvalchemi.dynamics.mep: building initial paths (interpolation,
   alignment, IDPP) and running batched nudged elastic band (NEB) with the NEB
-  strategy or by building it manually with hooks. Use when setting up reaction paths between
-  reactant and product structures, running regular or climbing-image NEB,
-  reading NEB diagnostics, or writing a custom NEB force method or spring
+  strategy or by building it manually with hooks. Use when setting up reaction
+  paths between reactant and product structures, running regular or climbing-image
+  NEB, reading NEB diagnostics, or writing a custom NEB force method or spring
   policy.
 ---
 
@@ -22,7 +22,7 @@ group. NEB is currently the only path-optimization method.
 
 Details (force equations, method signatures, a full manual-hooks example)
 live in `docs/userguide/dynamics_mep.md`. The end-to-end workflow (IDPP,
-climbing-image NEB with AIMNet2-rxn, diagnostics CSV) is
+climbing-image NEB with AIMNet2-rxn, diagnostics CSV, and in-flight batching) is
 `examples/advanced/11_batched_neb.py`. Upstream skills:
 `nvalchemi-data-structures` (`Batch`, `group_layout`),
 `nvalchemi-dynamics-api` (`FIRE2`, `FusedStage`), and
@@ -124,6 +124,12 @@ Other fields: `endpoint_mode` (`"fixed"` default, or `"relaxed"`),
 `diagnostics_frequency`, `optimizer_kwargs`, `convergence_hook`,
 `regular_convergence_hook`, `neighbor_hooks`, `compile`, `compile_kwargs`.
 
+Fix atoms with `batch.neb_fixed_node_mask`, a Boolean node field of shape
+`(batch.num_nodes,)` on the batch device; include it with incoming paths. NEB
+creates the mask if absent and adds fixed endpoints in place. `FreezeAtomsHook`
+enforces it even with relaxed endpoints. `fixed_atom_indices` adds constraints
+to this mask but is rejected in sampler/pipeline workflows.
+
 - `optimizer` defaults to `FIRE2` and accepts `BaseDynamics` subclasses
   supporting fixed-cell, group-aware `FusedStage` updates. FIRE2's NEB defaults
   are filled in `optimizer_kwargs` during validation, preserving explicit
@@ -145,6 +151,33 @@ Other fields: `endpoint_mode` (`"fixed"` default, or `"relaxed"`),
 - `max_regular_steps` / `max_climbing_steps`: per-path stage budgets. A path
   advances when its budget runs out even if not converged.
   `max_regular_steps` requires `mode="after_regular"`.
+
+### Stream prepared paths on one device
+
+Prepare interpolation, IDPP, and constraints first. Each dataset item returns
+`(path_batch, metadata)` with one complete group and optimizer inputs;
+`get_metadata(index)` returns total atoms and edges across the path.
+
+```python
+from nvalchemi.dynamics import HostMemory, SizeAwareSampler
+
+sampler = SizeAwareSampler(
+    prepared_dataset, by_group=True, max_atoms=10_000, max_batch_size=8
+)
+results = HostMemory(capacity=10_000)
+remaining = NEB(model=model, n_steps=None).run(sampler=sampler, sinks=[results])
+paths = results.read()
+```
+
+`max_batch_size` counts paths. Atom/edge limits include every image.
+`NEB.refill_frequency` defaults to 10 steps. Refills preserve resident optimizer
+history and fixed climbing choices. Clear incoming `status` and stage counters
+before reusing paths, since their bookkeeping is retained.
+
+`run()` accepts either a batch or a sampler. Streaming creates a fresh engine
+and returns `None` on completion, or the active batch at the global `n_steps`
+limit. Use `build_engine(sampler=..., sinks=...)` for manual stepping. Sink
+output is in finish order; per-image `group_id` identifies the dataset path.
 
 ### Read the results
 
@@ -209,6 +242,11 @@ Rules:
 - Every workflow must use `by_group=True`; the hooks raise `ValueError`
   otherwise. Convergence is a standard
   `ConvergenceHook.from_fmax(threshold=..., by_group=True)`.
+- At admission, `ctx.previous_graph_indices` preserves residents' fixed climbing
+  choices, admission-time springs, and constraints. Arrivals initialize fresh;
+  a missing mapping reinitializes all paths.
+- Diagnostics reset at admission and update at `AFTER_COMPUTE`;
+  `get_diagnostics()` reads the cache.
 - In a `FusedStage`, register the path hooks on the fused stage and scope
   stage-specific ones with `status_code`. At `AFTER_COMPUTE`, sub-stage hooks
   run before fused-stage hooks, so a sub-stage hook would read stale

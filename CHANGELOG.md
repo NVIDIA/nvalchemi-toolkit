@@ -1,5 +1,34 @@
 # Changelog
 
+## Added
+
+- Single-device in-flight NEB batching via `NEB.run(sampler=..., sinks=...)`
+  with `SizeAwareSampler(by_group=True)`. The updated
+  `examples/advanced/11_batched_neb.py` demonstrates path refilling and
+  compares energy barriers with the static run.
+- `SizeAwareSampler(field_defaults=...)` fills missing node, edge, or system
+  fields on loaded samples so optional fields survive packing. Samples are
+  now modified in place when loaded, including grouped samples, which are no
+  longer cloned.
+
+## Fixed
+
+- `HostMemory`, `GPUBuffer`, and `ZarrData` omit temporary neighbor data so
+  samples with different neighbor widths can be stored together. This covers
+  stage sinks, direct writes, and DomainParallel snapshot hooks. Live batches
+  keep their neighbor tensors.
+- Received pipeline samples bypass template-buffer copies so missing outputs
+  trigger force priming.
+- Distributed pipelines retain and retry graduates that do not fit the send
+  buffer, without dropping them during in-flight sampler refills.
+- Pipeline receive templates retain their field layout when stages add
+  bookkeeping fields to incoming batches.
+- `DistributedPipeline` no longer drains finished results back into
+  computation. Received samples that do not fit wait in a new
+  `overflow_sinks` list, a private `HostMemory` by default.
+- `Batch.append()` and `concatenate()` discard unused buffer rows unless
+  `strip_padding=False`. `HostMemory.write()` trims padding before copying to CPU.
+
 ## 0.3.0
 
 ### Added
