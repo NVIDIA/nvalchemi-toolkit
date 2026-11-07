@@ -889,7 +889,11 @@ class ZarrData(DataSink):
             data_list = [AtomicData(**reader[i][0]) for i in range(len(reader))]
             # field_levels places stored fields outside AtomicData's defaults,
             # such as group_idx, at their level.
-            return Batch.from_data_list(data_list, field_levels=reader.field_levels)
+            return Batch.from_data_list(
+                data_list,
+                attr_map=reader.level_schema,
+                field_levels=reader.field_levels,
+            )
 
     def zero(self) -> None:
         """Clear all stored data and reset the store."""
