@@ -569,6 +569,10 @@
 
 ### Fixed
 
+- `MLIPSpec.with_adapters`, `with_compile` and `merge` no longer reset
+  `gp_replicate_geometry` to its default, so a spec that runs the wrapper on the
+  replicated geometry keeps doing so. `merge` raises `ValueError` when the two
+  specs disagree on it.
 - AIMNet2's domain-decomposition adapters (`mol_sum` and the Coulomb heads) no
   longer break a plain forward made while a decomposed AIMNet2 model is open.
   Outside a decomposed forward they now give the stock result.
