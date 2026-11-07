@@ -1106,13 +1106,18 @@ class TestRelaxationLifecycleOwnership:
                 },
             )
 
-    def test_a_multi_sub_stage_fused_propagator_is_rejected(self) -> None:
-        """Sub-stage shape is fixed at construction, so it is refused there."""
+    @pytest.mark.parametrize("n_steps", [None, 3])
+    def test_a_multi_sub_stage_fused_propagator_is_rejected(
+        self, n_steps: int | None
+    ) -> None:
+        """Sub-stage shape is fixed at construction, so it is refused there.
+
+        The criterion would graduate systems before they reach the later
+        sub-stages, also when the sub-stages are ended by step budgets alone.
+        """
         student = _build_demo_model()
 
-        with pytest.raises(
-            ValidationError, match="no other status-migrating ConvergenceHook"
-        ):
+        with pytest.raises(ValidationError, match="more than one sub-stage"):
             _make_relaxation_strategy(
                 fmax=1e-6,
                 student=student,
@@ -1120,8 +1125,8 @@ class TestRelaxationLifecycleOwnership:
                 config_overrides={
                     "dynamics": FusedStage(
                         sub_stages=[
-                            (0, FIRE(student, dt=0.1)),
-                            (1, NVE(student, dt=0.1)),
+                            (0, FIRE(student, dt=0.1, n_steps=n_steps)),
+                            (1, NVE(student, dt=0.1, n_steps=n_steps)),
                         ]
                     )
                 },
