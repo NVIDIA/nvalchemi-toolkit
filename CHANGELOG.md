@@ -584,6 +584,11 @@
 
 ### Fixed
 
+- `DomainParallel.partition` now closes the model from a previous `partition`
+  before building the new one. The old model's adapter restore could otherwise
+  run after the new model had installed its own and put the stock functions back
+  over them, so a compiled run on a second system silently lost its decomposition
+  adapters.
 - AIMNet2's domain-decomposition adapters (`mol_sum` and the Coulomb heads) no
   longer break a plain forward made while a decomposed AIMNet2 model is open.
   Outside a decomposed forward they now give the stock result.
