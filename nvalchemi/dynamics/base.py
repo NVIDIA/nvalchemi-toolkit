@@ -3360,6 +3360,15 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         converged = self._check_convergence(batch)
         self._last_converged = converged
         if converged is not None:
+            status = getattr(batch, "status", None)
+            if status is not None and self.next_rank not in (None, -1):
+                # Default convergence reports indices without migrating status.
+                # Marking them keeps graduates frozen while they wait to send
+                # to the next pipeline stage. Hand-built batches need ``status``.
+                flat_status = status.view(-1)
+                flat_status[converged] = flat_status[converged].clamp_min(
+                    self.exit_status
+                )
             self._call_hooks(DynamicsStage.ON_CONVERGE, batch, active_graph_mask)
 
         # Dispatched whenever a hook listens: gating on the mask would host-sync.
