@@ -1,5 +1,21 @@
 # Changelog
 
+## Added
+
+- Single-device in-flight NEB batching via `NEB.run(sampler=..., sinks=...)`
+  with `SizeAwareSampler(by_group=True)`. The updated
+  `examples/advanced/11_batched_neb.py` demonstrates path refilling and
+  compares energy barriers with the static run.
+- `SizeAwareSampler(field_defaults=...)` fills missing node, edge, or system
+  fields on loaded samples so optional fields survive packing. Samples are
+  now modified in place when loaded, including grouped samples, which are no
+  longer cloned.
+
+## Fixed
+
+- `Batch.append()` and `concatenate()` discard unused buffer rows unless
+  `strip_padding=False`. `HostMemory.write()` trims padding before copying to CPU.
+
 ## 0.3.0
 
 ### Added

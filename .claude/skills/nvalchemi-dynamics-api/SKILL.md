@@ -386,19 +386,26 @@ replacement = sampler.request_replacement(num_atoms=50, num_edges=200)
 sampler.exhausted  # bool
 ```
 
-### How inflight replacement works (`_refill_check`)
+### How inflight replacement works (`refill_check`)
 
-When `refill_frequency` triggers (every N steps), `_refill_check()`:
+When `refill_frequency` triggers (every N steps), `refill_check()`:
 
 1. Identifies graduated graphs (`status >= exit_status`)
 2. Writes graduated graphs to sinks
 3. Extracts remaining graphs via `Batch.index_select`
-4. Requests replacements from sampler (one per graduated slot, matching atom/edge budget)
+4. Requests replacements that fit the remaining count, atom, and edge budgets
 5. Appends replacements via `Batch.append`
-6. Rebuilds `status` (replacements get `0`) and `fmax` (replacements get `inf`) tensors
+6. Preserves supplied bookkeeping values and fills missing fields with registered
+   defaults, such as `status=0` and, when registered, `fmax=inf`
 
-This produces a **new** `Batch` object, not an in-place mutation. It
-returns `None` when the sampler is exhausted and no active samples remain.
+With `by_group=True`, graduation and replacement operate on whole groups, and
+`max_batch_size` counts groups.
+
+Reset old `status` and other bookkeeping before reusing completed sampler inputs,
+or they may graduate again without being optimized.
+
+Returns a new `Batch` after graduation, the original batch if none graduate, or
+`None` when the sampler is exhausted and no active samples remain.
 
 ### With FusedStage
 

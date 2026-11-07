@@ -84,7 +84,7 @@ Hooks
    NEBForceHook
    ClimbingImageSelectionHook
 
-Fixing atoms during NEB (``endpoint_mode="fixed"`` or ``fixed_atom_indices``)
-is enforced by the general-purpose
+Fixing atoms during NEB (``endpoint_mode="fixed"``, ``fixed_atom_indices``,
+or a supplied ``batch.neb_fixed_node_mask``) is enforced by the general-purpose
 :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`, documented in
 :ref:`dynamics-hooks`.
