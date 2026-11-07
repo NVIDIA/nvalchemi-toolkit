@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import shutil
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -657,7 +658,7 @@ class HostMemory(DataSink):
             Maximum number of samples to store.
         """
         self._capacity = capacity
-        self._batches: list[Batch] = []
+        self._batches: deque[Batch] = deque()
         self._num_graphs = 0
         self._device = torch.device("cpu")
         # Number of graphs already drained from the first stored batch.
@@ -772,7 +773,7 @@ class HostMemory(DataSink):
             self._batches[0] = first.index_select(slice(self._offset, first.num_graphs))
             self._offset = 0
         # Cache the merged batch so repeated reads concatenate only once.
-        self._batches = [self._merge(self._batches)]
+        self._batches = deque([self._merge(list(self._batches))])
         return self._batches[0].clone()
 
     def drain(self, max_samples: int | None = None) -> Batch:
@@ -831,7 +832,8 @@ class HostMemory(DataSink):
                 break
         batch = self._merge(taken)
         # Remove fully drained batches and keep any partly drained batch.
-        del self._batches[: len(taken) - (offset > 0)]
+        for _ in range(len(taken) - (offset > 0)):
+            self._batches.popleft()
         self._offset = offset
         self._num_graphs -= batch.num_graphs
         return batch

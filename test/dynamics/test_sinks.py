@@ -913,6 +913,24 @@ class TestHostMemoryStorage:
             )
             torch.testing.assert_close(sink._batches[0].positions, first.positions)
 
+    def test_failed_partial_drain_keeps_remaining_samples(self) -> None:
+        """A failed merge loses neither a partly drained write nor later writes."""
+        sink = HostMemory(capacity=10)
+        first = create_test_batch(2)
+        first.energy = torch.ones(2, 1)
+        sink.write(first)
+        sink.write(create_test_batch(2))
+        sink.drain(max_samples=1)
+
+        for _ in range(2):
+            with pytest.raises(ValueError, match="energy.*missing"):
+                sink.drain(max_samples=2)
+            assert len(sink) == 3
+
+        remaining_first = sink.drain(max_samples=1)
+        torch.testing.assert_close(remaining_first.positions, first.positions[2:])
+        assert sink.drain().num_graphs == 2
+
     def test_zero_allows_a_different_mode(self) -> None:
         """After zero() the sink accepts ungrouped data and starts empty."""
         sink = HostMemory(capacity=10)
