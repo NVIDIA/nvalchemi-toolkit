@@ -221,8 +221,11 @@ When `send_buffer` has limited capacity (via `BufferConfig`):
 - Every selected graph must fit the graph, atom, and edge capacities;
   otherwise the transfer raises `ValueError` without removing graphs.
 - Graphs or groups beyond the selected graph-count limit remain in the
-  active batch as no-ops. Their positions and velocities are saved before
-  the integrator and restored after it runs.
+  active batch as **no-ops**.
+  Their positions and velocities are saved before the integrator and
+  restored after it runs.
+- Without `BufferConfig`, all converged samples are sent without
+  constraints (backward compatible).
 
 | Layer | Attribute | Purpose |
 | --- | --- | --- |
@@ -241,9 +244,19 @@ the active batch, and drains `overflow_sinks` (never `sinks`).
 | `_write_to_sinks(batch)` | Write finished samples to the first result sink with room for all of them |
 | `_drain_sinks_to_batch()` | Pull from `overflow_sinks` back into active batch when room available |
 
-`DataSink.drain(max_samples=None)` reads and clears the sink. With a limit,
-it removes the oldest `max_samples` samples (complete groups when grouped,
-otherwise graphs) and keeps the rest.
+```python
+class DataSink(ABC):
+    def write(self, batch: Batch, mask: Tensor | None = None) -> None: ...
+    def read(self) -> Batch: ...
+    def zero(self) -> None: ...           # clear contents
+    def drain(self, max_samples: int | None = None) -> Batch: ...
+    # None: read() + zero(). Otherwise remove the oldest max_samples samples
+    # (complete groups when grouped, else graphs) and keep the rest.
+    def is_full(self) -> bool: ...        # len(self) >= capacity
+    def __len__(self) -> int: ...
+    @property
+    def capacity(self) -> int: ...
+```
 
 ## Domain decomposition across GPUs
 

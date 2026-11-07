@@ -326,7 +326,7 @@ class TestNEBConfiguration:
             NEB.from_spec_dict(spec, model=strategy.model)
 
     def test_rejects_neb_managed_reprime_on_entry(self) -> None:
-        """NEB sets reprime_on_entry on its climbing optimizer itself."""
+        """NEB sets reprime_on_entry on its optimizers itself."""
         with pytest.raises(ValueError, match="NEB-managed keys: reprime_on_entry"):
             NEB(model=_model(), optimizer_kwargs={"reprime_on_entry": True})
 
@@ -764,7 +764,7 @@ class TestNEBConfiguration:
         assert engine.by_group is True
         assert engine.device_type == device
         assert engine.n_steps == 17
-        assert engine._reprime_status_codes == frozenset()
+        assert engine._reprime_status_codes == frozenset({0})
         assert len(engine.sub_stages) == 1
         stage = engine.sub_stages[0][1]
         assert stage.by_group is True
@@ -797,7 +797,7 @@ class TestNEBConfiguration:
         assert engine.device_type == device
         assert len(engine.sub_stages) == 2
         assert engine.n_steps == 500
-        assert engine._reprime_status_codes == frozenset({1})
+        assert engine._reprime_status_codes == frozenset({0, 1})
         regular = engine.sub_stages[0][1]
         climbing = engine.sub_stages[1][1]
         assert regular.n_steps == 11
@@ -1858,6 +1858,42 @@ def _neb_pipeline_worker(
 
 class TestNEBDistributedPipeline:
     """Engines from ``NEB.build_engine`` can form a two-rank pipeline."""
+
+    @pytest.mark.parametrize("climbing_mode", [None, "immediate", "after_regular"])
+    def test_received_forces_are_recomputed_before_first_update(
+        self, climbing_mode: str | None
+    ) -> None:
+        """A downstream NEB engine uses its own forces on the first update."""
+        strategy = NEB(
+            model=_HarmonicModel(),
+            spring=0.5,
+            climbing=(
+                None
+                if climbing_mode is None
+                else ClimbingImageConfig(mode=climbing_mode)
+            ),
+            optimizer_kwargs={"device_type": "cpu"},
+        )
+        incoming = _bands()
+        incoming.forces.fill_(99.0)
+        downstream = strategy.build_engine()
+        downstream._ensure_bookkeeping_fields(incoming)
+        incoming.status.fill_(downstream.exit_status)
+        expected = incoming.clone()
+        reference = strategy.build_engine()
+        reference._on_receive(expected)
+        reference.step(expected)
+
+        downstream._recv_to_batch(incoming)
+        batch = downstream.active_batch
+        with patch.object(
+            downstream, "_prime_forces", wraps=downstream._prime_forces
+        ) as prime:
+            downstream.step(batch)
+
+        torch.testing.assert_close(batch.positions, expected.positions)
+        torch.testing.assert_close(batch.forces, expected.forces)
+        prime.assert_called_once()
 
     @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
     def test_paths_finish_once_and_stay_complete(self, comm_mode: str) -> None:
