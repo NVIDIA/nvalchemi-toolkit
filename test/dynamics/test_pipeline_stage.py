@@ -35,9 +35,11 @@ from nvalchemi.data.level_storage import SegmentedLevelStorage
 from nvalchemi.dynamics.base import (
     BaseDynamics,
     BufferConfig,
+    ConvergenceHook,
     DistributedPipeline,
     _CommunicationMixin,
 )
+from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
@@ -1689,6 +1691,147 @@ class TestRecvToBatch:
 
 class TestPoststepBackPressure:
     """Test that _poststep_sync_buffers respects send buffer capacity (back-pressure)."""
+
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    @pytest.mark.parametrize("send_capacity", [1, 2])
+    def test_default_convergence_freezes_unsent_graduates(
+        self, comm_mode: str, send_capacity: int, device: str
+    ) -> None:
+        """Default convergence keeps unsent graduates frozen until transfer."""
+        batch = _make_batch_with_system(num_graphs=4).to(device)
+        batch["velocities"] = torch.ones_like(batch.positions)
+        batch["atomic_masses"] = torch.ones(batch.num_nodes, device=device)
+        batch["forces"] = torch.zeros_like(batch.positions)
+        batch["system_id"] = torch.arange(4, device=device).view(-1, 1)
+        batch["status"] = torch.zeros(4, 1, dtype=torch.long, device=device)
+        stage = DemoDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            n_steps=10,
+            convergence_hook=ConvergenceHook.from_fmax(),
+            active_batch=batch,
+            exit_status=2,
+            next_rank=1,
+            buffer_config=BufferConfig(
+                num_systems=send_capacity, num_nodes=3 * send_capacity, num_edges=0
+            ),
+            device_type=device,
+            comm_mode=comm_mode,
+        )
+
+        def compute(batch: Batch, *args: object) -> None:
+            """Only the first step reports the first three graphs as converged."""
+            batch.forces.fill_(1.0)
+            if stage.step_count == 0:
+                batch.forces[:9].zero_()
+
+        with (
+            patch.object(stage, "compute", side_effect=compute),
+            patch.object(Batch, "isend", return_value=Mock()),
+        ):
+            _, converged = stage.step(batch)
+            assert converged.tolist() == [0, 1, 2]
+            stage._ensure_buffers(batch)
+            stage._poststep_sync_buffers(converged)
+            sent_ids = stage.send_buffer.system_id.view(-1)[
+                : stage.send_buffer.num_graphs
+            ].tolist()
+
+            while stage.active_batch.num_graphs > 1:
+                batch = stage.active_batch
+                frozen_positions = batch.positions[:-3].clone()
+                frozen_velocities = batch.velocities[:-3].clone()
+                active_positions = batch.positions[-3:].clone()
+                _, converged = stage.step(batch)
+                assert converged is None
+                torch.testing.assert_close(batch.positions[:-3], frozen_positions)
+                torch.testing.assert_close(batch.velocities[:-3], frozen_velocities)
+                assert not torch.equal(batch.positions[-3:], active_positions)
+                stage._poststep_sync_buffers(converged)
+                sent_ids.extend(
+                    stage.send_buffer.system_id.view(-1)[
+                        : stage.send_buffer.num_graphs
+                    ].tolist()
+                )
+
+        assert sent_ids == [0, 1, 2]
+        assert stage.active_batch.system_id.view(-1).tolist() == [3]
+
+    def test_marked_graduates_are_admitted_at_entry_status(self, device: str) -> None:
+        """Graduates sent with a raised status are reset when the next stage admits them."""
+        batch = _make_batch_with_system(num_graphs=2).to(device)
+        batch["velocities"] = torch.ones_like(batch.positions)
+        batch["atomic_masses"] = torch.ones(batch.num_nodes, device=device)
+        batch["forces"] = torch.zeros_like(batch.positions)
+        batch["system_id"] = torch.arange(2, device=device).view(-1, 1)
+        batch["status"] = torch.zeros(2, 1, dtype=torch.long, device=device)
+        cfg = BufferConfig(num_systems=2, num_nodes=6, num_edges=0)
+        sender = DemoDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            n_steps=10,
+            convergence_hook=ConvergenceHook.from_fmax(),
+            active_batch=batch,
+            exit_status=2,
+            next_rank=1,
+            buffer_config=cfg,
+            device_type=device,
+            comm_mode="sync",
+        )
+        receiver = DemoDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            n_steps=10,
+            exit_status=2,
+            prior_rank=0,
+            next_rank=None,
+            buffer_config=cfg,
+            device_type=device,
+            comm_mode="sync",
+        )
+
+        def compute(batch: Batch, *args: object) -> None:
+            batch.forces.zero_()
+
+        with (
+            patch.object(sender, "compute", side_effect=compute),
+            patch.object(Batch, "isend", return_value=Mock()),
+        ):
+            _, converged = sender.step(batch)
+            sender._ensure_buffers(batch)
+            sender._poststep_sync_buffers(converged)
+
+        sent = sender.send_buffer
+        assert sent.status.view(-1)[: sent.num_graphs].tolist() == [2, 2]
+        receiver._recv_to_batch(sent)
+
+        arrived = receiver.active_batch
+        assert arrived.status.view(-1)[: arrived.num_graphs].tolist() == [0, 0]
+        assert receiver.active_graph_mask(arrived, receiver.exit_status).all()
+
+    def test_standalone_stage_does_not_mark_converged_status(
+        self, device: str
+    ) -> None:
+        """Without a next rank, default convergence leaves status untouched."""
+        batch = _make_batch_with_system(num_graphs=4).to(device)
+        batch["velocities"] = torch.ones_like(batch.positions)
+        batch["atomic_masses"] = torch.ones(batch.num_nodes, device=device)
+        batch["forces"] = torch.zeros_like(batch.positions)
+        batch["status"] = torch.zeros(4, 1, dtype=torch.long, device=device)
+        stage = DemoDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            n_steps=10,
+            convergence_hook=ConvergenceHook.from_fmax(),
+            active_batch=batch,
+            exit_status=2,
+            device_type=device,
+        )
+
+        def compute(batch: Batch, *args: object) -> None:
+            batch.forces.zero_()
+
+        with patch.object(stage, "compute", side_effect=compute):
+            _, converged = stage.step(batch)
+
+        assert converged is not None
+        assert batch.status.view(-1).tolist() == [0, 0, 0, 0]
 
     @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
     def test_plain_stage_retries_graduates_without_new_convergence(
