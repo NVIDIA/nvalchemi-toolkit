@@ -1,5 +1,5 @@
 ## Description: <br>
-Build and change NVIDIA ALCHEMI Toolkit workflows: atomistic data, model wrapping, molecular dynamics and optimization, training and fine-tuning, generative workflows, and custom extensions. <br>
+Build and change NVIDIA ALCHEMI Toolkit (nvalchemi) workflows for atomistic simulation and machine-learned interatomic potentials (MLIPs), including batched structure relaxation, molecular dynamics, reaction paths, MLIP training or fine-tuning, Zarr atomistic datasets, generative structure workflows, model wrapping, and custom hooks or integrators. <br>
 
 This skill is ready for commercial/non-commercial use. <br>
 
@@ -9,7 +9,7 @@ NVIDIA <br>
 ### License/Terms of Use: <br>
 Apache 2.0 <br>
 ## Use Case: <br>
-Developers and computational scientists use this skill to have an agent write or change Python code that imports nvalchemi, covering atomic data and Zarr storage, MLIP model wrappers, batched relaxation and MD, reaction paths and enhanced sampling, training, fine-tuning, distillation, generative sampling, and custom hooks or integrators. It is not for ALCHEMI Toolkit-Ops kernel work, other simulation packages without nvalchemi, or plain PyTorch questions. <br>
+Developers and computational scientists use this skill to have an agent write or change Python code that uses nvalchemi for atomic data and Zarr storage, MLIP model wrappers, batched relaxation and MD, reaction paths and enhanced sampling, training, fine-tuning, distillation, generative sampling, and custom hooks or integrators. It is not for other simulation packages without nvalchemi, ALCHEMI Toolkit-Ops (nvalchemiops) kernel work, or plain PyTorch questions. <br>
 
 ### Deployment Geography for Use: <br>
 Global <br>
@@ -47,7 +47,7 @@ Mitigation: Review and scan skill before deployment. <br>
 
 
 ## Evaluation Tasks: <br>
-6 evaluation tasks (5 positive, 1 negative), 1 attempt per task, each in its own isolated sandbox pod (`k8s-sandbox` environment), with no-skill baseline runs for comparison; evaluator version `1.6.9`, evaluated 2026-11-06. <br>
+9 evaluation tasks (7 positive, 2 negative), 1 attempt per task, each in its own isolated sandbox pod (`k8s-sandbox` environment), with no-skill baseline runs for comparison; evaluator version `1.6.9`, evaluated 2026-11-07. <br>
 
 ## Evaluation Metrics Used: <br>
 Reported benchmark dimensions: <br>
@@ -79,12 +79,12 @@ Recommended for publication based on the completed evaluation evidence in this r
 
 | Measure | Claude Code (Baseline → Skill Uplift) | Codex (Baseline → Skill Uplift) |
 |---|---:|---:|
-| Overall | 91.6% — baseline ran, but no comparable score was available; uplift unavailable | 90.7% — baseline ran, but no comparable score was available; uplift unavailable |
-| Security | 100.0% → 100.0% (±0.0 points) | 83.3% → 100.0% (+16.7 points) |
-| Correctness | 90.0% → 96.7% (+6.7 points) | 76.7% → 96.7% (+20.0 points) |
-| Discoverability | 93.6% — baseline ran, but no comparable score was available; uplift unavailable | 87.0% — baseline ran, but no comparable score was available; uplift unavailable |
-| Effectiveness | 83.7% → 82.5% (-1.2 points) | 62.4% → 89.8% (+27.4 points) |
-| Efficiency | 85.1% — baseline ran, but no comparable score was available; uplift unavailable | 80.1% — baseline ran, but no comparable score was available; uplift unavailable |
+| Overall | 93.1% — baseline ran, but no comparable score was available; uplift unavailable | 88.8% — baseline ran, but no comparable score was available; uplift unavailable |
+| Security | 94.4% → 100.0% (+5.6 points) | 94.4% → 100.0% (+5.6 points) |
+| Correctness | 88.9% → 95.6% (+6.7 points) | 82.2% → 97.8% (+15.6 points) |
+| Discoverability | 95.0% — baseline ran, but no comparable score was available; uplift unavailable | 82.9% — baseline ran, but no comparable score was available; uplift unavailable |
+| Effectiveness | 76.7% → 87.3% (+10.6 points) | 70.8% → 87.0% (+16.2 points) |
+| Efficiency | 87.6% — baseline ran, but no comparable score was available; uplift unavailable | 76.3% — baseline ran, but no comparable score was available; uplift unavailable |
 
 **How to read this table:** baseline is the same task attempted without the target skill. Scores are rounded to one decimal; threshold-adjacent values use additional precision so their displayed band matches the verdict. Uplift is derived from those displayed scores and shown in percentage points.
 
@@ -92,16 +92,16 @@ Example: `47.0% → 92.0% (+45.0 points)` means the skill-assisted run scored 92
 
 A partial dimension was calculated from only the available configured signals; review the detailed report before relying on it.
 
-### Comparison details
+#### Comparison details
 
 Shared-source comparisons use the same signals and weights on both conditions. They do not replace the full dimension scores above or change the publication verdict.
 
 | Agent | Dimension | Basis | Baseline → With skill (uplift) | Explanation |
 | --- | --- | --- | --- | --- |
 | claude-code | Discoverability | Dimension comparison | N/A | Discoverability is not applicable to the no-skill baseline; there is no installed skill to discover. |
-| claude-code | Efficiency | Token-only comparison | 81.6% → 87.8% (+6.2 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
+| claude-code | Efficiency | Token-only comparison | 80.9% → 85.3% (+4.4 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
 | codex | Discoverability | Dimension comparison | N/A | Discoverability is not applicable to the no-skill baseline; there is no installed skill to discover. |
-| codex | Efficiency | Token-only comparison | 82.3% → 87.5% (+5.2 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
+| codex | Efficiency | Token-only comparison | 81.3% → 84.1% (+2.8 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
 
 ### Tier Status
 
@@ -109,10 +109,10 @@ Shared-source comparisons use the same signals and weights on both conditions. T
 |---|---|---|---|
 | Tier 1 | Static validation | **PASSED WITH OBSERVATIONS** | 11 validator(s); 6 finding(s) |
 | Tier 2 | Semantic deduplication | **PASSED** | 2 validator(s); 0 finding(s) |
-| Tier 3 | Live agent evaluation | **PASS** | 2 agent(s); 6 task(s) |
+| Tier 3 | Live agent evaluation | **PASS** | 2 agent(s); 9 task(s) |
 
 ## Skill Version(s): <br>
-e63128e (source: git SHA, committed 2026-11-06); skill content targets nvalchemi release 0.3.0 (source: SKILL.md, nvalchemi/__init__.py) <br>
+53f09be (source: git SHA, committed 2026-11-06); skill content targets nvalchemi release 0.3.0 (source: SKILL.md) <br>
 
 ## Ethical Considerations: <br>
 NVIDIA believes Trustworthy AI is a shared responsibility and we have established policies and practices to enable development for a wide array of AI applications. When downloaded or used in accordance with our terms of service, developers should work with their internal team to ensure this skill meets requirements for the relevant industry and use case and addresses unforeseen product misuse. <br>
