@@ -1861,9 +1861,7 @@ class TestPoststepBackPressure:
         assert arrived.status.view(-1)[: arrived.num_graphs].tolist() == [0, 0]
         assert receiver.active_graph_mask(arrived, receiver.exit_status).all()
 
-    def test_standalone_stage_does_not_mark_converged_status(
-        self, device: str
-    ) -> None:
+    def test_standalone_stage_does_not_mark_converged_status(self, device: str) -> None:
         """Without a next rank, default convergence leaves status untouched."""
         batch = _make_batch_with_system(num_graphs=4).to(device)
         batch["velocities"] = torch.ones_like(batch.positions)
