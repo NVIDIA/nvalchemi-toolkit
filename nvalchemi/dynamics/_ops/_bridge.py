@@ -170,6 +170,40 @@ def _to_per_system(
     return torch.full((M,), float(val), dtype=dtype, device=device)
 
 
+def _arrival_atom_counts(template_batch: Batch, n: int) -> torch.Tensor:
+    """Return the atom counts of the *n* systems appended last to a batch.
+
+    Inflight refill and pipeline receive append admitted systems after the
+    resident ones, so state for the arrivals is sized from the end of the
+    updated batch.
+
+    Parameters
+    ----------
+    template_batch : Batch
+        The updated active batch, ending with the arrivals.
+    n : int
+        Number of arrivals.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-arrival atom counts ``[n]`` on the batch device.  A copy, so
+        state built from it never writes through into the batch.
+
+    Raises
+    ------
+    ValueError
+        If *template_batch* holds fewer than *n* graphs.
+    """
+    num_graphs = template_batch.num_graphs
+    if num_graphs < n:
+        raise ValueError(
+            f"template_batch holds {num_graphs} graph(s), fewer than the {n} "
+            "arrivals it must end with."
+        )
+    return template_batch.num_nodes_per_graph[num_graphs - n :].clone()
+
+
 def _vec_type(dtype: torch.dtype) -> type:
     """Return ``wp.vec3f`` or ``wp.vec3d`` from a torch float dtype.
 

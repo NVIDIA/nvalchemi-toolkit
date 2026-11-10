@@ -1155,14 +1155,19 @@ class _CommunicationMixin:
         """Normalize freshly received samples before they join the active batch.
 
         Called on every non-empty batch received from the prior rank. The
-        default is a no-op; subclasses that carry per-sample bookkeeping
-        (e.g. :class:`FusedStage` status codes) override it.
+        sender's ``status`` is its own ``exit_status``, which would read as
+        already graduated here, so it is reset to ``0``. Subclasses with their
+        own entry status or per-sample bookkeeping (e.g. :class:`FusedStage`)
+        override it.
 
         Parameters
         ----------
         incoming : Batch
             Batch received from the prior stage. May be modified in place.
         """
+        status = getattr(incoming, "status", None)
+        if status is not None:
+            status.zero_()
 
     def _prime_arrivals(self, n_existing: int) -> None:
         """Initialize forces for graphs admitted after the first *n_existing*.
@@ -2395,7 +2400,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         n : int
             Number of new systems to create state for.
         template_batch : Batch
-            The updated active batch; provides device and dtype.
+            The updated active batch, ending with the *n* arrivals; provides
+            device and dtype.
 
         Returns
         -------
@@ -3962,11 +3968,13 @@ class FusedStage(BaseDynamics):
     the ``n_steps`` attribute (inherited from ``BaseDynamics``) and any
     ``n_steps`` argument passed to ``run()`` are both the **maximum** number
     of steps; the loop runs until all samples have migrated to the
-    ``exit_status``, the sampler is exhausted, or ``n_steps`` is reached. Convergence-driven migration is handled
-    by ``ConvergenceHook`` instances auto-registered between adjacent
-    sub-stages: when samples converge in sub-stage *i*, their ``batch.status``
-    is updated to sub-stage *i+1*'s code, causing them to be processed by the
-    next dynamics on the following step. The ``+`` operator composes
+    ``exit_status``, the sampler is exhausted, or ``n_steps`` is reached. A
+    sample leaves sub-stage *i* when it meets that sub-stage's
+    ``convergence_hook`` criterion or has run its ``n_steps``, whichever comes
+    first; its ``batch.status`` is then set to sub-stage *i+1*'s code. For the
+    convergence case, ``FusedStage`` registers a migration hook with the same
+    criterion on the sub-stage. A sub-stage without a ``convergence_hook`` is
+    ended by its ``n_steps`` alone. The ``+`` operator composes
     sub-stages: ``dyn_a + dyn_b`` creates a ``FusedStage``, and
     ``fused + dyn_c`` appends a third sub-stage. The ``|`` operator (inherited
     from ``BaseDynamics`` via ``_CommunicationMixin``) creates a ``DistributedPipeline``
@@ -4168,16 +4176,28 @@ class FusedStage(BaseDynamics):
 
         self.init_fn = init_fn
 
-        for i in range(len(self.sub_stages)):
-            source_code, source_dynamics = self.sub_stages[i]
-            if i + 1 < len(self.sub_stages):
-                target_code, _ = self.sub_stages[i + 1]
-            else:
-                # The last stage graduates directly to exit_status when it
-                # declares a convergence criterion.
-                if source_dynamics.convergence_hook is None:
-                    continue
-                target_code = self.exit_status
+        for i, (source_code, source_dynamics) in enumerate(self.sub_stages):
+            is_last = i + 1 == len(self.sub_stages)
+            if source_dynamics.convergence_hook is None:
+                # Only the n_steps counter, or a migration hook registered by
+                # the caller, moves systems on from this sub-stage.
+                has_own_migrator = any(
+                    isinstance(h, ConvergenceHook)
+                    and h.source_status == source_code
+                    and h.target_status not in (None, source_code)
+                    for h in source_dynamics.hooks
+                )
+                has_budget = source_dynamics.n_steps is not None
+                if not (is_last or has_budget or has_own_migrator):
+                    warnings.warn(
+                        f"Sub-stage {i} ({type(source_dynamics).__name__}) has "
+                        "neither a convergence_hook nor n_steps, so its systems "
+                        "never move to the next sub-stage. Set one of them.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                continue
+            target_code = self.exit_status if is_last else self.sub_stages[i + 1][0]
 
             # Remove duplicate migration hooks with the same (source_status, target_status)
             # to prevent double-fire after __add__ reconstruction.
@@ -4193,16 +4213,11 @@ class FusedStage(BaseDynamics):
                 )
             ]
 
-            criteria = None
-            by_group = source_dynamics.by_group
-            if source_dynamics.convergence_hook is not None:
-                criteria = source_dynamics.convergence_hook.criteria
-                by_group = source_dynamics.convergence_hook.by_group
             hook = ConvergenceHook(
-                criteria=criteria,
+                criteria=source_dynamics.convergence_hook.criteria,
                 source_status=source_code,
                 target_status=target_code,
-                by_group=by_group,
+                by_group=source_dynamics.convergence_hook.by_group,
             )
             source_dynamics.register_hook(hook)
 

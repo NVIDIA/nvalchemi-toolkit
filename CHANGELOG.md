@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add the `nvalchemi-toolkit` agent skill under `skills/nvalchemi-toolkit/`: one
+  `SKILL.md` that scopes a request and routes to six task notes (data, models,
+  dynamics and optimization, training, generative workflows, and composition
+  and extension). It replaces the 14 skills under `.claude/skills/`, which are
+  removed from the repository.
+
+### Fixed
+
+- The fine-tuning guide now passes `--checkpoint-index` to
+  `nvalchemi-training spec resume`, the flag the CLI accepts.
+
 ## 0.3.0
 
 ### Added
@@ -574,6 +589,14 @@
   `neighbor_list_shifts`), so `read()` no longer fails when systems written from
   different batches had matrices of different widths. `SnapshotHook` shares the
   same `NEIGHBOR_KEYS` set.
+- `DomainParallel.partition` now closes the model from a previous `partition`
+  before building the new one. The old model's adapter restore could otherwise
+  run after the new model had installed its own and put the stock functions back
+  over them, so a compiled run on a second system silently lost its decomposition
+  adapters.
+- AIMNet2's domain-decomposition adapters (`mol_sum` and the Coulomb heads) no
+  longer break a plain forward made while a decomposed AIMNet2 model is open.
+  Outside a decomposed forward they now give the stock result.
 - `Batch.put` now copies selected graphs from sources larger than the buffer's
   remaining graph capacity and marks the indices of copied source graphs in
   `copied_mask`. A source that is itself a pre-allocated buffer no longer
@@ -606,6 +629,11 @@
   Large single systems were therefore given a coarse grid, which made
   neighbor-list builds considerably slower. The single-system cap is now used
   when the hook builds a cell list for one system.
+- `NVTNoseHoover`, `NPT`, and `NPH` now size the thermostat and barostat state
+  of systems admitted mid-run (inflight refill or pipeline receive) from each
+  system's own atom count, as for the first batch, instead of the batch
+  average. Arrivals far from the average size were thermostatted to the wrong
+  temperature and given the wrong barostat mass.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
@@ -649,6 +677,18 @@
   retired on-policy frame carrying the flag, so an evicting buffer write
   chained the resident frames to one graph node and the second training step
   failed with "backward through the graph a second time".
+- **`FusedStage` step budgets** — a non-final sub-stage without a
+  `convergence_hook` is now ended by its `n_steps` alone. It was given the
+  default `fmax < 0.05` criterion before, so in
+  `FIRE2 + NVTLangevin(n_steps=...) + NVE(n_steps=...)` the NVT stage ran
+  0 steps (#238). A non-final sub-stage with neither raises a `UserWarning`.
+- `NeighborListHook` also runs at `DynamicsStage.ON_ADMISSION` and re-derives
+  its neighbor width, buffers, and skin reference for the admitted systems. An
+  inflight refill or pipeline receive that kept the atom and graph counts left
+  them sized for the old systems, so MATRIX models silently lost neighbors
+  and computed wrong energies and forces. A change in graph count alone now
+  re-derives them too, and multi-source pipeline neighbor hooks reset every
+  source.
 
 ### Deprecated
 
