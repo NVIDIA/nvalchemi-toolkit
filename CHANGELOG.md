@@ -584,6 +584,10 @@
 
 ### Fixed
 
+- `MLIPSpec.with_adapters`, `with_compile` and `merge` no longer reset
+  `gp_replicate_geometry` to its default, so a spec that runs the wrapper on the
+  replicated geometry keeps doing so. `merge` raises `ValueError` when the two
+  specs disagree on it.
 - `DomainParallel.partition` now closes the model from a previous `partition`
   before building the new one. The old model's adapter restore could otherwise
   run after the new model had installed its own and put the stock functions back
