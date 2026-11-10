@@ -197,7 +197,7 @@ continue from the same session:
 ```bash
 nvalchemi-training spec resume training-outputs/checkpoints \
   --spec mace-ft.json \
-  --checkpoint_index 5
+  --checkpoint-index 5
 ```
 
 This will resume training at an arbitrary checkpoint index (in this case, the *6th* checkpoint

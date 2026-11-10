@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add the `nvalchemi-toolkit` agent skill under `skills/nvalchemi-toolkit/`: one
+  `SKILL.md` that scopes a request and routes to six task notes (data, models,
+  dynamics and optimization, training, generative workflows, and composition
+  and extension). It replaces the 14 skills under `.claude/skills/`, which are
+  removed from the repository.
+
+### Fixed
+
+- The fine-tuning guide now passes `--checkpoint-index` to
+  `nvalchemi-training spec resume`, the flag the CLI accepts.
+
 ## 0.3.0
 
 ### Added
@@ -573,6 +588,11 @@
   `gp_replicate_geometry` to its default, so a spec that runs the wrapper on the
   replicated geometry keeps doing so. `merge` raises `ValueError` when the two
   specs disagree on it.
+- `DomainParallel.partition` now closes the model from a previous `partition`
+  before building the new one. The old model's adapter restore could otherwise
+  run after the new model had installed its own and put the stock functions back
+  over them, so a compiled run on a second system silently lost its decomposition
+  adapters.
 - AIMNet2's domain-decomposition adapters (`mol_sum` and the Coulomb heads) no
   longer break a plain forward made while a decomposed AIMNet2 model is open.
   Outside a decomposed forward they now give the stock result.
