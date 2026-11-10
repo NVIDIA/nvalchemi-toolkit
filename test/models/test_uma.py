@@ -1895,3 +1895,201 @@ class TestTurboCompile:
         out = wrapper_turbo(_bcc_fe_batch("cuda"))
         assert torch.isfinite(out["energy"]).all()
         assert out["forces"].device.type == "cuda"
+
+
+class MOLE(nn.Module):
+    """Stand-in named like fairchem's pure-PyTorch MoLE layer (counted by class name)."""
+
+
+class MOLEDGL(nn.Module):
+    """Stand-in named like fairchem's fairchem_cpp segment_mm MoLE layer."""
+
+
+_UNMERGED = "compile=false,merge_mole=false,tf32=true,activation_checkpointing=false"
+
+
+def _settings(spec: str):
+    """Build ``InferenceSettings`` from a ``"key=value,..."`` spec of booleans."""
+    from fairchem.core.units.mlip_unit.api.inference import InferenceSettings
+
+    fields = dict(item.split("=") for item in spec.split(","))
+    return InferenceSettings(**{key: value == "true" for key, value in fields.items()})
+
+
+class TestMoLELayerType:
+    """``moe_layer_type`` picks fairchem's MoLE implementation for unmerged UMA."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        monkeypatch.delenv("NVALCHEMI_UMA_MOE_LAYER_TYPE", raising=False)
+
+    def _resolve(self, monkeypatch, requested, settings=_UNMERGED, cpp=True, uma=True):
+        monkeypatch.setattr(uma_module, "_fairchem_cpp_available", lambda: cpp)
+        return uma_module._resolve_moe_layer_type(
+            requested, _settings(settings), is_uma_name=uma
+        )
+
+    def test_availability_tracks_a_real_import(self):
+        # fairchem's mole_utils.fairchem_cpp_found is True even without the
+        # extension; the check must follow whether ``import fairchem_cpp`` works.
+        import importlib.util
+
+        expected = importlib.util.find_spec("fairchem_cpp") is not None
+        assert uma_module._fairchem_cpp_available() is expected
+
+    def test_auto_uses_dgl_when_available(self, monkeypatch):
+        assert self._resolve(monkeypatch, "auto") == "dgl"
+
+    def test_auto_warns_and_falls_back_without_fairchem_cpp(self, monkeypatch):
+        with pytest.warns(UserWarning, match="fairchem_cpp not found"):
+            assert self._resolve(monkeypatch, "auto", cpp=False) == "pytorch"
+
+    @pytest.mark.parametrize(
+        ("settings", "uma"),
+        [
+            ("compile=false,merge_mole=true", True),  # experts merged away
+            (  # MOLEDGL fails past the first checkpointing chunk
+                "compile=false,merge_mole=false,activation_checkpointing=true",
+                True,
+            ),
+            ("compile=true,merge_mole=false", True),  # dgl untested under compile
+            (_UNMERGED, False),  # local checkpoint may have no MoLE backbone
+        ],
+    )
+    def test_auto_stays_on_pytorch_outside_its_scope(self, monkeypatch, settings, uma):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert self._resolve(monkeypatch, "auto", settings, uma=uma) == "pytorch"
+
+    def test_env_dgl_makes_missing_fairchem_cpp_an_error(self, monkeypatch):
+        monkeypatch.setenv("NVALCHEMI_UMA_MOE_LAYER_TYPE", "dgl")
+        with pytest.raises(ImportError, match="fairchem_cpp"):
+            self._resolve(monkeypatch, "auto", cpp=False)
+
+    def test_env_dgl_keeps_auto_scope(self, monkeypatch):
+        # A site-wide NVALCHEMI_UMA_MOE_LAYER_TYPE=dgl must not break merged runs.
+        monkeypatch.setenv("NVALCHEMI_UMA_MOE_LAYER_TYPE", "dgl")
+        assert (
+            self._resolve(monkeypatch, "auto", "merge_mole=true", cpp=False)
+            == "pytorch"
+        )
+
+    def test_env_pytorch_opts_out(self, monkeypatch):
+        monkeypatch.setenv("NVALCHEMI_UMA_MOE_LAYER_TYPE", "pytorch")
+        assert self._resolve(monkeypatch, "auto") == "pytorch"
+
+    def test_explicit_dgl_requires_fairchem_cpp(self, monkeypatch):
+        with pytest.raises(ImportError, match="fairchem_cpp"):
+            self._resolve(monkeypatch, "dgl", cpp=False)
+
+    def test_explicit_dgl_is_ignored_with_a_warning_when_merged(self, monkeypatch):
+        with pytest.warns(UserWarning, match="no effect"):
+            assert self._resolve(monkeypatch, "dgl", "merge_mole=true") == "pytorch"
+
+    def test_explicit_dgl_falls_back_under_checkpointing(self, monkeypatch):
+        settings = (
+            "compile=false,merge_mole=false,tf32=true,activation_checkpointing=true"
+        )
+        with pytest.warns(UserWarning, match="activation_checkpointing"):
+            assert self._resolve(monkeypatch, "dgl", settings) == "pytorch"
+
+    def test_checkpointing_is_fairchems_default_for_unlisted_fields(self, monkeypatch):
+        # InferenceSettings() defaults activation_checkpointing=True.
+        with pytest.warns(UserWarning, match="activation_checkpointing"):
+            assert (
+                self._resolve(monkeypatch, "dgl", "compile=false,merge_mole=false")
+                == "pytorch"
+            )
+
+    def test_env_dgl_keeps_checkpointed_runs_on_pytorch(self, monkeypatch):
+        monkeypatch.setenv("NVALCHEMI_UMA_MOE_LAYER_TYPE", "dgl")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert (
+                self._resolve(
+                    monkeypatch,
+                    "auto",
+                    "merge_mole=false,activation_checkpointing=true",
+                )
+                == "pytorch"
+            )
+
+    def test_explicit_dgl_under_compile_warns(self, monkeypatch):
+        settings = "compile=true,merge_mole=false,activation_checkpointing=false"
+        with pytest.warns(UserWarning, match="untested"):
+            assert self._resolve(monkeypatch, "dgl", settings) == "dgl"
+
+    @pytest.mark.parametrize("bad_env", [None, "segment_mm"])
+    def test_invalid_values_raise(self, monkeypatch, bad_env):
+        if bad_env is None:
+            with pytest.raises(ValueError, match="moe_layer_type"):
+                self._resolve(monkeypatch, "fast")
+        else:
+            monkeypatch.setenv("NVALCHEMI_UMA_MOE_LAYER_TYPE", bad_env)
+            with pytest.raises(ValueError, match="NVALCHEMI_UMA_MOE_LAYER_TYPE"):
+                self._resolve(monkeypatch, "auto")
+
+    # --- from_checkpoint plumbing (fairchem's loader mocked) -----------------
+
+    def _patch_loader(self, monkeypatch, layer_cls=MOLEDGL, cpp=True):
+        from fairchem.core.calculate import pretrained_mlip
+
+        calls = {}
+
+        def fake_get_predict_unit(name, inference_settings, overrides, device):
+            calls["overrides"] = overrides
+            pu = _MockPredictUnit()
+            pu.model.module.backbone.add_module("mole0", layer_cls())
+            return pu
+
+        monkeypatch.setattr(pretrained_mlip, "get_predict_unit", fake_get_predict_unit)
+        monkeypatch.setattr(
+            pretrained_mlip, "available_models", ("uma-s-1p2",), raising=False
+        )
+        monkeypatch.setattr(uma_module, "_fairchem_cpp_available", lambda: cpp)
+        return calls
+
+    def test_dgl_reaches_the_backbone_overrides(self, monkeypatch):
+        calls = self._patch_loader(monkeypatch)
+        user = {"backbone": {"otf_graph": True}}
+        wrapper = UMAWrapper.from_checkpoint(
+            "uma-s-1p2",
+            task_name="omat",
+            inference_settings=_settings(_UNMERGED),
+            overrides=user,
+        )
+        assert calls["overrides"] == {
+            "backbone": {"otf_graph": True, "moe_layer_type": "dgl"}
+        }
+        assert user == {"backbone": {"otf_graph": True}}  # caller's dict untouched
+        assert wrapper.moe_layer_type == "dgl"
+        assert wrapper.mole_layer_counts == {"MOLEDGL": 1}
+
+    def test_pytorch_adds_no_override(self, monkeypatch):
+        calls = self._patch_loader(monkeypatch, layer_cls=MOLE)
+        wrapper = UMAWrapper.from_checkpoint(
+            "uma-s-1p2",
+            task_name="omat",
+            inference_settings=_settings(_UNMERGED),
+            moe_layer_type="pytorch",
+        )
+        assert calls["overrides"] is None
+        assert wrapper.moe_layer_type == "pytorch"
+
+    def test_dgl_without_moledgl_layers_raises(self, monkeypatch):
+        self._patch_loader(monkeypatch, layer_cls=MOLE)  # override silently ignored
+        with pytest.raises(RuntimeError, match="no MOLEDGL layer"):
+            UMAWrapper.from_checkpoint(
+                "uma-s-1p2", task_name="omat", inference_settings=_settings(_UNMERGED)
+            )
+
+    def test_conflicting_override_raises(self, monkeypatch):
+        self._patch_loader(monkeypatch)
+        with pytest.raises(ValueError, match="conflicts"):
+            UMAWrapper.from_checkpoint(
+                "uma-s-1p2",
+                task_name="omat",
+                inference_settings=_settings(_UNMERGED),
+                overrides={"backbone": {"moe_layer_type": "pytorch"}},
+                moe_layer_type="dgl",
+            )

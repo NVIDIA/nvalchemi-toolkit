@@ -21,6 +21,22 @@
   dynamics and optimization, training, generative workflows, and composition
   and extension). It replaces the 14 skills under `.claude/skills/`, which are
   removed from the repository.
+- `UMAWrapper.from_checkpoint(moe_layer_type=...)`: unmerged UMA backbones
+  (`merge_mole=False`, as SGC / VC-SGC requires) run their mixture-of-experts
+  layers through the `fairchem_cpp` `segment_mm` extension (fairchem's
+  `moe_layer_type="dgl"`) instead of fairchem's per-system Python loop.
+  `"auto"` (default) uses it for registered `uma-*` checkpoints without
+  compile whenever it is installed and warns otherwise;
+  `NVALCHEMI_UMA_MOE_LAYER_TYPE=dgl` makes a missing extension an error.
+  Merged (`merge_mole=True`) and checkpointed (`activation_checkpointing=True`)
+  settings always use the loop, with a warning when `"dgl"` was asked for:
+  fairchem cannot merge `MOLEDGL` layers, and `segment_mm` fails past the first
+  131,072-edge checkpointing chunk (~2,300 bulk atoms).
+  A100, 500 atoms: SGC-NPT hybrid 1.28x faster per block for one walker and
+  1.53x for four, ~15% more GPU memory. `UMAWrapper.moe_layer_type` and
+  `mole_layer_counts` report the layers built. Availability is read from
+  `fairchem...nn.mole.fairchem_cpp_found` (a real import): the same-named flag in
+  `mole_utils` is unconditionally True in fairchem 2.22-2.24.
 
 ### Changed
 

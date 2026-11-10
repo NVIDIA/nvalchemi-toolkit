@@ -87,12 +87,29 @@ through :meth:`from_checkpoint`'s ``inference_settings`` argument:
               execution_mode="general",
           ),
       )
+
+Mixture-of-linear-experts (MoLE) layers
+---------------------------------------
+UMA mixes per-system expert weights in its SO(2) convolutions. With
+``merge_mole=False`` (required whenever composition changes, e.g. SGC Monte
+Carlo, or when systems of different composition share a batch) fairchem runs
+those layers either as a pure-PyTorch loop over systems (``MOLE``) or through
+the ``fairchem_cpp`` ``segment_mm`` CUDA extension (``MOLEDGL``, fairchem's
+``moe_layer_type="dgl"``). :meth:`UMAWrapper.from_checkpoint` selects the
+extension automatically when it is installed (``moe_layer_type="auto"``),
+except with ``merge_mole=True`` or ``activation_checkpointing=True``, where
+fairchem's ``MOLEDGL`` does not work and the loop is always used; on
+an A100 it made 500-atom energy calls 1.6-2.0x faster and an SGC-NPT hybrid
+1.3x (one walker) to 1.5x (four walkers) faster, for ~15% more GPU memory.
+``fairchem_cpp`` is not on PyPI; see the user guide's UMA section for the
+build.
 """
 
 from __future__ import annotations
 
 import contextlib
 import copy
+import os
 import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -134,13 +151,167 @@ if TYPE_CHECKING:
     from fairchem.core.units.mlip_unit import MLIPPredictUnit
     from fairchem.core.units.mlip_unit.api.inference import InferenceSettings
 
-__all__ = ["UMATask", "UMAWrapper"]
+__all__ = ["MoLELayerType", "UMATask", "UMAWrapper"]
 
 
 # UMA task heads. The ``Literal`` is the single source of truth for valid task
 # names; the membership set is derived from it.
 UMATask = Literal["omol", "omat", "oc20", "odac", "omc"]
+#: MoLE layer implementation of an unmerged UMA backbone (see
+#: ``UMAWrapper.from_checkpoint``): fairchem's ``"pytorch"`` loop or the
+#: ``fairchem_cpp`` segment_mm extension, which fairchem names ``"dgl"``.
+MoLELayerType = Literal["auto", "pytorch", "dgl"]
 _UMA_TASKS: frozenset[str] = frozenset(get_args(UMATask))
+
+_FAIRCHEM_CPP_BUILD_HINT = (
+    "fairchem_cpp is not on PyPI: build it from the fairchem_cpp branch of "
+    "facebookresearch/fairchem (src/fairchem/fairchem_cpp, `pip install "
+    "--no-build-isolation -e .` on a GPU node with nvcc matching torch's CUDA). "
+    "`uv sync` removes it, so rebuild after every sync."
+)
+
+
+def _fairchem_cpp_available() -> bool:
+    """Whether ``fairchem_cpp`` imported where fairchem's ``MOLEDGL`` will call it.
+
+    Reads ``fairchem.core.models.uma.nn.mole.fairchem_cpp_found``, set by a real
+    ``import fairchem_cpp``. The same-named flag in ``mole_utils`` is set to True
+    without importing anything (fairchem 2.22-2.24), so it is True everywhere
+    and fairchem's own "dgl" guard never fires.
+    """
+    try:
+        from fairchem.core.models.uma.nn import mole  # noqa: PLC0415
+    except ImportError:
+        return False
+    return bool(getattr(mole, "fairchem_cpp_found", False))
+
+
+def _merge_compile_checkpointing(
+    settings: Any,
+) -> tuple[bool | None, bool | None, bool | None]:
+    """``(merge_mole, compile, activation_checkpointing)`` of resolved inference
+    settings; ``None`` where unknown."""
+    if isinstance(settings, str):
+        try:
+            from fairchem.core.units.mlip_unit.api import (  # noqa: PLC0415
+                inference,
+            )
+        except ImportError:
+            return None, None, None
+        # Preset name -> fairchem's inference_settings_<name>() factory.
+        factory = getattr(inference, f"inference_settings_{settings}", None)
+        if factory is None:
+            return None, None, None
+        settings = factory()
+    return (
+        getattr(settings, "merge_mole", None),
+        getattr(settings, "compile", None),
+        getattr(settings, "activation_checkpointing", None),
+    )
+
+
+def _resolve_moe_layer_type(
+    requested: str, inference_settings: Any, is_uma_name: bool
+) -> str:
+    """Pick fairchem's ``moe_layer_type`` (``"pytorch"`` or ``"dgl"``) for one load.
+
+    ``"auto"`` defers to ``NVALCHEMI_UMA_MOE_LAYER_TYPE`` (default ``"auto"``)
+    and then applies ``"dgl"`` only where it is known to work: a registered
+    ``uma-*`` checkpoint, ``merge_mole=False``, ``compile=False``,
+    ``activation_checkpointing=False``. Merged and checkpointed settings use the
+    loop even when ``"dgl"`` is requested explicitly (with a warning): fairchem's
+    merge step reads ``MOLE.merged_linear_layer``, which ``MOLEDGL`` lacks, and
+    checkpointing splits the edges into 131,072-edge chunks, past the first of
+    which ``MOLEDGL``'s ``segment_mm`` raises "Segment index out of bound"
+    (fairchem 2.22). Inside that
+    scope a missing ``fairchem_cpp`` is a warning under ``"auto"`` and an error
+    when ``"dgl"`` was asked for (argument or environment variable), so a
+    production job that requires the extension cannot silently run slower.
+
+    Raises
+    ------
+    ValueError
+        On a value outside :data:`MoLELayerType`.
+    ImportError
+        When ``"dgl"`` is required but ``fairchem_cpp`` is not importable.
+    """
+    choices = get_args(MoLELayerType)
+    if requested not in choices:
+        raise ValueError(f"moe_layer_type {requested!r} must be one of {choices}")
+    scoped = requested == "auto"
+    mode = requested
+    if scoped:
+        mode = os.environ.get("NVALCHEMI_UMA_MOE_LAYER_TYPE", "auto").strip().lower()
+        if mode not in choices:
+            raise ValueError(
+                f"NVALCHEMI_UMA_MOE_LAYER_TYPE={mode!r} must be one of {choices}"
+            )
+    if mode == "pytorch":
+        return "pytorch"
+    merge_mole, compile_on, checkpointing = _merge_compile_checkpointing(
+        inference_settings
+    )
+    if merge_mole:
+        # Merging folds the experts into plain linears: no MoLE layer runs, and
+        # fairchem's merge step cannot fold MOLEDGL (no merged_linear_layer).
+        if not scoped:
+            warnings.warn(
+                "moe_layer_type='dgl' has no effect with merge_mole=True "
+                "(fairchem cannot merge MOLEDGL layers): using the pytorch loop",
+                UserWarning,
+                stacklevel=3,
+            )
+        return "pytorch"
+    if checkpointing:
+        # Activation checkpointing chunks the edges (131,072 per chunk); MOLEDGL
+        # fails on every chunk after the first, i.e. on any large system.
+        if not scoped:
+            warnings.warn(
+                "moe_layer_type='dgl' is not supported with activation_checkpointing=True "
+                "(fairchem_cpp segment_mm fails past the first 131,072-edge chunk): "
+                "using the pytorch loop",
+                UserWarning,
+                stacklevel=3,
+            )
+        return "pytorch"
+    if scoped and (merge_mole is None or compile_on or not is_uma_name):
+        return "pytorch"
+    if not _fairchem_cpp_available():
+        if mode == "dgl":
+            raise ImportError(
+                f"moe_layer_type 'dgl' requires fairchem_cpp. {_FAIRCHEM_CPP_BUILD_HINT}"
+            )
+        warnings.warn(
+            "fairchem_cpp not found: unmerged UMA MoLE layers use fairchem's "
+            "pure-PyTorch loop (~1.3-2x slower MC-MD on GPU). "
+            + _FAIRCHEM_CPP_BUILD_HINT,
+            UserWarning,
+            stacklevel=3,
+        )
+        return "pytorch"
+    if compile_on:
+        warnings.warn(
+            "moe_layer_type='dgl' with compile=True is untested: fairchem_cpp "
+            "registers segment_mm without a fake-tensor kernel, so dynamo may "
+            "graph-break at every MoLE layer",
+            UserWarning,
+            stacklevel=3,
+        )
+    return "dgl"
+
+
+def _mole_layer_counts(predict_unit: Any) -> dict[str, int]:
+    """Count fairchem MoLE layers by class (``MOLE`` / ``MOLEDGL``) in a predict unit."""
+    model = getattr(predict_unit, "model", None)
+    if not isinstance(model, nn.Module):
+        return {}
+    counts: dict[str, int] = {}
+    for module in model.modules():
+        name = type(module).__name__
+        if name in ("MOLE", "MOLEDGL"):
+            counts[name] = counts.get(name, 0) + 1
+    return counts
+
 
 # Autograd-derived fairchem task properties that UMAWrapper can skip when
 # ``active_outputs`` does not ask for them (see ``_gated_derivatives``).
@@ -1127,6 +1298,8 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         self.predict_unit = predict_unit
         self.task_name = task_name
+        # MoLE layers as built, before any lazy merge_mole fold on first call.
+        self.mole_layer_counts = _mole_layer_counts(predict_unit)
         self._cutoff = self._extract_cutoff()
         # Snapshot before anything prunes the tables: fairchem builds them in
         # MLIPPredictUnit.__init__, so this is the full as-loaded set.
@@ -1176,6 +1349,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         inference_settings: "InferenceSettings | str" = "default",
         overrides: dict | None = None,
         train: bool = False,
+        moe_layer_type: MoLELayerType = "auto",
     ) -> "UMAWrapper":
         """Resolve and load a UMA checkpoint.
 
@@ -1220,6 +1394,24 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             ``forward`` path goes through fairchem's inference ``predict``
             (eval mode, detached forces); gradient-based training requires a
             separate path through the raw model.
+        moe_layer_type : {"auto", "pytorch", "dgl"}
+            Implementation of the backbone's mixture-of-linear-experts layers
+            when they stay unmerged (``merge_mole=False``). ``"dgl"`` is
+            fairchem's name for the ``fairchem_cpp`` ``segment_mm`` CUDA
+            extension; ``"pytorch"`` is fairchem's per-system Python loop.
+            ``"auto"`` (default) reads ``NVALCHEMI_UMA_MOE_LAYER_TYPE`` (unset =
+            ``"auto"``) and uses ``"dgl"`` for registered ``uma-*`` checkpoints
+            with ``merge_mole=False`` and ``compile=False`` when ``fairchem_cpp``
+            is installed, warning and falling back to ``"pytorch"`` when it is
+            not; ``NVALCHEMI_UMA_MOE_LAYER_TYPE=dgl`` turns that fallback into
+            an error. An explicit ``"dgl"`` applies to any unmerged checkpoint
+            and raises without ``fairchem_cpp``. Ignored with
+            ``merge_mole=True``, which removes the MoLE layers. Note that
+            fairchem's per-dataset output head always uses ``"pytorch"``
+            (3 small layers on uma-s-1p2). The resolved choice is
+            :attr:`moe_layer_type` on the returned wrapper. A
+            ``backbone.moe_layer_type`` in ``overrides`` takes precedence over
+            ``"auto"`` and must agree with an explicit value.
 
         Returns
         -------
@@ -1230,7 +1422,12 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         ------
         ValueError
             If ``name_or_path`` is neither a registered model name nor a local
-            file path.
+            file path, or ``moe_layer_type`` conflicts with ``overrides``.
+        ImportError
+            If ``"dgl"`` is required but ``fairchem_cpp`` is not importable.
+        RuntimeError
+            If ``"dgl"`` was resolved but the loaded model has no ``MOLEDGL``
+            layer (the override did not reach the backbone).
         """
         import os as _os
 
@@ -1257,6 +1454,30 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         inference_settings = _resolve_inference_settings(inference_settings)
 
         name_str = str(name_or_path)
+        user_moe = ((overrides or {}).get("backbone") or {}).get("moe_layer_type")
+        if user_moe is not None:
+            if moe_layer_type not in ("auto", user_moe):
+                raise ValueError(
+                    f"moe_layer_type={moe_layer_type!r} conflicts with "
+                    f"overrides['backbone']['moe_layer_type']={user_moe!r}"
+                )
+            resolved_moe = str(user_moe)
+        else:
+            resolved_moe = _resolve_moe_layer_type(
+                moe_layer_type,
+                inference_settings,
+                is_uma_name=name_str in pretrained_mlip.available_models
+                and name_str.startswith("uma"),
+            )
+            if resolved_moe == "dgl":
+                # Copy, never mutate the caller's dict; fairchem merges these
+                # keys into the checkpoint's backbone config.
+                overrides = dict(overrides or {})
+                overrides["backbone"] = {
+                    **(overrides.get("backbone") or {}),
+                    "moe_layer_type": "dgl",
+                }
+
         if name_str in pretrained_mlip.available_models:
             predict_unit = pretrained_mlip.get_predict_unit(
                 name_str,
@@ -1277,7 +1498,13 @@ class UMAWrapper(nn.Module, BaseModelMixin):
                 f"local file path. Known names: "
                 f"{sorted(pretrained_mlip.available_models)}"
             )
-        return cls(predict_unit, task_name=task_name, train=train)
+        wrapper = cls(predict_unit, task_name=task_name, train=train)
+        if resolved_moe == "dgl" and "MOLEDGL" not in wrapper.mole_layer_counts:
+            raise RuntimeError(
+                "moe_layer_type 'dgl' was requested but the loaded model has no "
+                f"MOLEDGL layer (MoLE layers: {wrapper.mole_layer_counts})"
+            )
+        return wrapper
 
     def _extract_cutoff(self) -> float:
         """Pull the radial cutoff from the loaded backbone.
@@ -1304,6 +1531,21 @@ class UMAWrapper(nn.Module, BaseModelMixin):
     def cutoff(self) -> float:
         """Radial cutoff (Å) for neighbor-list construction."""
         return self._cutoff
+
+    @property
+    def moe_layer_type(self) -> str | None:
+        """MoLE implementation the backbone was built with.
+
+        ``"dgl"`` (``fairchem_cpp`` segment_mm) if any ``MOLEDGL`` layer was
+        built, ``"pytorch"`` if only fairchem's ``MOLE`` loop, ``None`` for a
+        checkpoint without MoLE layers. Read from the layers at construction;
+        with ``merge_mole=True`` fairchem folds them into plain linears on the
+        first call, so this then names the layers that were merged, not ones
+        that run.
+        """
+        if "MOLEDGL" in self.mole_layer_counts:
+            return "dgl"
+        return "pytorch" if self.mole_layer_counts else None
 
     def distribution_spec(self, strategy: Any = None) -> Any:
         """MLIPSpec for UMA under domain decomposition.

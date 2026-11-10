@@ -212,6 +212,52 @@ fast = UMAWrapper.from_checkpoint(
 )
 ```
 
+**Mixture-of-experts layers (`moe_layer_type`).** UMA mixes per-system
+expert weights inside its SO(2) convolutions. `merge_mole=True` folds them
+into plain linears once, which is only valid while every system keeps one
+composition. Whenever composition changes (SGC / VC-SGC Monte Carlo) or a
+batch mixes compositions, the layers stay unmerged and fairchem runs them
+either as a Python loop over systems (`"pytorch"`) or through the
+`fairchem_cpp` `segment_mm` CUDA extension (fairchem calls it `"dgl"`).
+`from_checkpoint(..., moe_layer_type="auto")` (the default) uses the
+extension for registered `uma-*` checkpoints with `merge_mole=False`,
+`compile=False` and `activation_checkpointing=False` whenever it is
+installed, and otherwise warns and falls back to the loop. Merged and
+checkpointed settings use the loop even when `moe_layer_type="dgl"` is passed
+(with a warning): fairchem cannot merge `MOLEDGL` layers (`AttributeError:
+... merged_linear_layer`), and with checkpointing the edges are processed in
+131,072-edge chunks, past the first of which `segment_mm` fails ("Segment
+index out of bound"), i.e. above about 2,300 bulk or 3,000 nanoparticle atoms.
+On an A100-SXM4-80GB with `uma-s-1p2`, 500-atom Au-Pt:
+
+| Workload | 1 system | 4 systems |
+|---|---|---|
+| MC energy call | 1.57x faster | 1.95x faster |
+| MD call (energy, forces, stress) | 1.01x | 1.17x |
+| SGC-NPT hybrid, time per block | 1.28x faster | 1.53x faster |
+
+at about 15% more peak GPU memory. For a single ~100-atom system the MD call
+is CPU-bound and runs ~20% *slower* with the extension; pass
+`moe_layer_type="pytorch"` there. Results agree with the loop to
+~1e-5 eV/atom and ~5e-4 eV/A. Set `NVALCHEMI_UMA_MOE_LAYER_TYPE=dgl` in a
+job environment to make a missing extension an error instead of a warning
+(`=pytorch` opts out). `wrapper.moe_layer_type` reports what was built.
+
+`fairchem_cpp` is not on PyPI and lives on fairchem's unmerged
+`fairchem_cpp` branch. Build it on a GPU node (its `setup.py` checks
+`torch.cuda.is_available()`), with an `nvcc` whose major version matches
+`torch.version.cuda` and a C++17 compiler new enough for torch's headers:
+
+```bash
+git clone --depth 1 --branch fairchem_cpp https://github.com/facebookresearch/fairchem.git
+cd fairchem/src/fairchem/fairchem_cpp
+TORCH_CUDA_ARCH_LIST="8.0;9.0" USE_CUDA=1 pip install --no-build-isolation -e .
+python -c "import fairchem_cpp; from fairchem.core.models.uma.nn import mole; print(mole.fairchem_cpp_found)"
+```
+
+`uv sync` removes packages that are not in the lockfile, so rebuild after
+every sync.
+
 See {doc}`the UMA NVE/NVT example </examples/advanced/09_uma_nve>` for a
 runnable end-to-end molecular-dynamics walkthrough.
 
