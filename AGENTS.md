@@ -215,23 +215,34 @@ that should not import optional model backends.
 
 ## Agent Skills
 
-Task-focused API guides live in `.claude/skills/<name>/SKILL.md`. They are
-plain Markdown, readable by any agent: before nontrivial work in an area
-below, read the matching `SKILL.md`. Authoring conventions and dependency
-chains are documented in `.claude/skills/README.md`.
+Agents working with `nvalchemi` read `skills/nvalchemi-toolkit/SKILL.md`
+first; it scopes the request and routes to one note per kind of task.
 
-| Skill | Use when |
-|-------|----------|
-| `nvalchemi-data-structures` | Building, batching, or grouping atomic systems; shape, dtype, or device errors |
-| `nvalchemi-data-storage` | Writing, reading, composing, or streaming Zarr-backed atomic data |
-| `nvalchemi-zarr-perf` | Tuning Dataset/DataLoader throughput or Zarr chunking |
-| `nvalchemi-model-wrapping` | Wrapping an MLIP or custom PyTorch model via `BaseModelMixin` |
-| `nvalchemi-training-api` | Training from scratch: strategy, losses, optimizers, validation, checkpoints; scaling to multi-GPU/multi-node (DDP) |
-| `nvalchemi-fine-tuning` | Adapting a pretrained model to new reference data |
-| `nvalchemi-distillation` | Distilling a teacher MLIP into a student: signals, labeling, on-policy, evaluation |
-| `nvalchemi-loss-api` | Choosing, weighting, masking, or implementing loss functions |
-| `nvalchemi-dynamics-api` | Any MD/relaxation/EOS simulation script or batched GPU pipeline |
-| `nvalchemi-dynamics-hooks` | Per-step callbacks: neighbor lists, convergence, logging |
-| `nvalchemi-mep` | Reaction paths and minimum-energy paths: interpolation, IDPP, batched NEB |
-| `nvalchemi-dynamics-implementation` | Implementing a new integrator, optimizer, or sampler class |
-| `nvalchemi-reporting` | Progress dashboards, TensorBoard, or CSV observability |
+### Maintaining the skill
+
+The skill is one directory, `skills/nvalchemi-toolkit/`: `SKILL.md`, six
+notes under `references/`, and the evaluation set under `evals/`. Follow
+these rules when you edit it.
+
+- Frontmatter: `name` equals the directory name; `description` states when
+  the skill applies and when it does not; keep `license: Apache-2.0`.
+- Keep `SKILL.md` and each note under 500 lines. `SKILL.md` holds only what
+  applies to every request: scoping, the version check, routing, reuse, and
+  workspace rules.
+- Each note answers the same questions for its area: which docs page, API
+  page, and example cover the task; which component fits which need; how
+  the components connect; common mistakes; how to check the result.
+- Link to the published docs and to examples on GitHub at a fixed ref, never
+  to clone-relative paths. Link from `SKILL.md` to notes with relative paths.
+  Name the installed source module for each API, because the wheel ships no
+  docs or examples.
+- Keep code short (about 15 lines) and only for patterns agents get wrong.
+  Do not copy field tables, signatures, or full examples. Every import,
+  class, and argument in a snippet must exist in the source tree; run it
+  before you commit.
+- Named scientific procedures appear only as choices a user can make.
+- Never link to `evals/`, and never copy task names, scenarios, or expected
+  answers from `evals/` or from held-back tasks into the skill text.
+- If the docs miss something the skill needs, fix the docs too.
+- Run `uv run pre-commit run markdownlint -a` (`make lint` does not run
+  markdownlint) and check that the frontmatter parses as YAML.

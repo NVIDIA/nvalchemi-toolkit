@@ -215,6 +215,46 @@ class TestPartitionSingleProcess:
         assert dp._dist_model is None
 
 
+class TestPartitionClosesPreviousModel:
+    """A repeated ``partition`` must retire the previous model first.
+
+    Each model's adapters are installed on module-level targets and restored when
+    the model closes. If the old model were closed (or collected) after the new
+    one installed, it would put the stock functions back over the new model's
+    replacements.
+    """
+
+    def test_second_partition_closes_the_first_model(self) -> None:
+        dp, _ = _make_dp()
+        first, second = MagicMock(), MagicMock()
+        calls: list[str] = []
+        first.close.side_effect = lambda: calls.append("close first")
+
+        def _build(*args: Any, **kwargs: Any) -> MagicMock:
+            calls.append("build")
+            return [first, second][calls.count("build") - 1]
+
+        with (
+            patch.object(dist, "is_initialized", return_value=True),
+            patch.object(dist, "get_world_size", return_value=2),
+            patch(
+                "nvalchemi.distributed.distributed_model.DistributedModel",
+                side_effect=_build,
+            ),
+            patch("nvalchemi.distributed.domain_parallel.strategy_for_policy"),
+            patch(
+                "nvalchemi.distributed.domain_parallel.DynamicsDistributionCoordinator"
+            ),
+        ):
+            dp.partition(MagicMock())
+            first.close.assert_not_called()
+            dp.partition(MagicMock())
+
+        # The first model is closed before the second is built, not after.
+        assert calls == ["build", "close first", "build"]
+        assert dp._dist_model is second
+
+
 class TestGatherSingleProcess:
     def test_returns_local_batch(self) -> None:
         """Without a mesh / sharded batch, ``gather`` is a no-op —

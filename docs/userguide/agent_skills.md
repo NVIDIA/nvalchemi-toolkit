@@ -4,36 +4,43 @@
 
 # Agent Skills
 
-The ALCHEMI Toolkit ships a set of **agent skills** --- concise instruction
-files that AI coding assistants (Claude, Copilot, Cursor, etc.) can load to
-get up to speed with the `nvalchemi` API without lengthy context-gathering.
+The ALCHEMI Toolkit ships one **agent skill**, `nvalchemi-toolkit`. It helps
+AI coding assistants (Claude Code, Codex, Cursor, and others) write and change
+code that uses `nvalchemi`. The skill asks for missing scientific choices
+before it runs anything, checks the installed version, and routes the agent
+to a short note for the task at hand. Each note points to the user guide
+pages and examples for the full details.
 
-Skills live in the repository under `.claude/skills/`.
+The skill lives in the repository under `skills/nvalchemi-toolkit/`:
 
-## Installing skills
+| File | Covers |
+|------|--------|
+| `SKILL.md` | Scoping a request, the version check, routing, and reuse rules |
+| `references/data.md` | {py:class}`~nvalchemi.data.AtomicData`, {py:class}`~nvalchemi.data.Batch`, Zarr storage, and data loading ({ref}`data_guide`, {ref}`datapipes_guide`) |
+| `references/models.md` | Loading, wrapping, and combining models ({ref}`models_guide`) |
+| `references/dynamics-optimization.md` | Relaxation, MD, hooks, reaction paths, and enhanced sampling ({ref}`dynamics_guide`) |
+| `references/training.md` | Training, losses, fine-tuning, distillation, and multi-GPU training ({ref}`training_guide`) |
+| `references/generative-workflows.md` | Generative sampling and generate-then-relax pipelines |
+| `references/composition-and-extension.md` | Custom hooks, integrators, losses, biases, reporting, and domain decomposition |
 
-**Inside a repository clone** --- nothing to install. Claude Code discovers
-`.claude/skills/` automatically; other agents are routed to the right
-`SKILL.md` by the table in the repository's `AGENTS.md`.
+## Installing the skill
 
-**Outside a clone** --- copy the skill folders from `.claude/skills/` into
-your project's skills directory, or your user-level one (e.g.
-`~/.claude/skills/`) if you work with `nvalchemi` across many checkouts.
+**From a repository clone.** Copy or link the skill folder into the skills
+directory of your agent, for example:
 
-## Available skills
+```bash
+mkdir -p ~/.claude/skills
+cp -r skills/nvalchemi-toolkit ~/.claude/skills/
+```
 
-| Skill | Description | Related user guide |
-|-------|-------------|--------------------|
-| `nvalchemi-data-structures` | How to use {py:class}`~nvalchemi.data.AtomicData` and {py:class}`~nvalchemi.data.Batch` for representing, batching, and grouping atomic systems for GPU computation. | {ref}`data_guide` |
-| `nvalchemi-data-storage` | How to write, read, compose, and load atomic data using the composable Zarr-backed storage pipeline (Writer, Reader, Dataset, MultiDataset, DataLoader). | {ref}`datapipes_guide` |
-| `nvalchemi-zarr-perf` | How to tune Zarr-backed Reader, Dataset, MultiDataset, and DataLoader throughput with fused reads, validation skipping, pinned memory, and benchmark sweeps. | {ref}`read_performance_tuning` |
-| `nvalchemi-model-wrapping` | How to wrap an arbitrary MLIP using the {py:class}`~nvalchemi.models.base.BaseModelMixin` interface to standardize inputs, outputs, and embeddings. | {ref}`models_guide` |
-| `nvalchemi-training-api` | How to configure, run, extend, and debug {py:class}`~nvalchemi.training.TrainingStrategy` workflows. | {ref}`training_guide` |
-| `nvalchemi-loss-api` | How to use built-in loss terms, compose training objectives, and implement custom loss functions. | {ref}`losses_guide` |
-| `nvalchemi-fine-tuning` | How to configure fine-tuning workflows and adapt pretrained checkpoints through the CLI or API. | {ref}`finetuning_guide` |
-| `nvalchemi-distillation` | How to distill a teacher MLIP into a small student with {py:class}`~nvalchemi.training.distillation.DistillationStrategy` --- teacher signals, offline labeling, the on-policy segment loop, and evaluation. | {ref}`distillation_guide` |
-| `nvalchemi-dynamics-api` | How to configure and run dynamics simulations, compose multi-stage pipelines ({py:class}`~nvalchemi.dynamics.FusedStage`, {py:class}`~nvalchemi.dynamics.DistributedPipeline`), use inflight batching, and manage data sinks. | {ref}`dynamics_guide` |
-| `nvalchemi-dynamics-implementation` | How to implement a dynamics integrator by subclassing {py:class}`~nvalchemi.dynamics.base.BaseDynamics` and overriding `pre_update()` and `post_update()`. | {ref}`dynamics_guide` |
-| `nvalchemi-mep` | How to build reaction paths (interpolation, alignment, IDPP) and compute minimum-energy paths with batched NEB via {py:class}`~nvalchemi.dynamics.mep.NEB` or by building it manually with hooks. | {ref}`dynamics_mep_guide` |
-| `nvalchemi-dynamics-hooks` | How to use and write dynamics hooks --- callbacks that observe or modify batch state at specific points during each simulation step. | {ref}`hooks_guide` |
-| `nvalchemi-reporting` | How to add observability with `ReportingOrchestrator`, `RichReporter`, `TensorBoardReporter`, and the dynamics `LoggingHook`. | {ref}`reporting_guide` |
+Use your project's skills directory instead of the user-level one if you
+prefer. The `evals/` subfolder holds the evaluation set and is not needed at
+run time. Agents that read `AGENTS.md` are pointed to the skill from there, so
+inside a clone they find it without an install.
+
+**From the NVIDIA skills catalog.** Once the skill is listed in the
+[NVIDIA skills catalog](https://github.com/NVIDIA/skills), you can install it
+with the catalog's install command. Until then, use the clone install above.
+
+The skill needs no credentials. It runs Python and shell commands to inspect
+the installed package and to run small checks.
