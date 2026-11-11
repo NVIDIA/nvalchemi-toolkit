@@ -91,9 +91,12 @@ class SizeAwareSampler(Sampler[int]):
     field_defaults : mapping, optional
         Map missing fields to ``(level, scalar_or_callable)`` for node, edge,
         or system levels. A scalar value is expanded to the sample's size.
-        For other shapes or dtypes, pass a callable that takes
-        ``(num_rows, device)`` and returns a tensor. Defaults are added in
-        place; existing values are preserved.
+        Its Python type determines the dtype unless that sample's batch schema
+        already declares one. Use ``False``, not ``0``, for Boolean masks.
+        Grouped assembly keeps the first sample's dtype, so defaults should
+        match the dtype of supplied fields. For an explicit dtype or another
+        shape, pass a callable that takes ``(num_rows, device)`` and returns a
+        tensor. Defaults are added in place; existing values are preserved.
         Grouped node and edge defaults require existing tensors at that level.
 
     Attributes
@@ -166,9 +169,13 @@ class SizeAwareSampler(Sampler[int]):
             ``max_batch_size`` counts groups. Default False.
         field_defaults : mapping, optional
             Sample defaults mapping field names to ``(level, value)``.
-            Scalars are expanded on the sample device. Callables accept
-            ``(num_rows, device)`` and return a tensor with the desired shape
-            and dtype. Only missing node, edge, and system fields are added.
+            Scalars are expanded on the sample device. Their Python type
+            determines the dtype unless that sample's batch schema declares
+            one. Use ``False`` for Boolean masks. Grouped assembly keeps the
+            first sample's dtype, so defaults should match supplied fields.
+            Callables accept ``(num_rows, device)`` and return a tensor with
+            an explicit dtype and shape. Only missing node, edge, and system
+            fields are added.
             Grouped node and edge defaults require existing tensors at that
             level. Default is no defaults.
 
