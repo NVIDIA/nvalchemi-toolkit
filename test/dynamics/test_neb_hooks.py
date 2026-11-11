@@ -104,54 +104,64 @@ class TestClimbingImageSelection:
     ) -> None:
         """Retained and arriving paths keep fixed choices after first selection."""
         batch = _bands(
-            [0.0, 4.0, 1.0, 0.0, 0.0, 3.0, 2.0, 1.0, 0.0], [0] * 4 + [1] * 5
+            [0.0, 4.0, 1.0, 0.0, 0.0, 3.0, 2.0, 1.0, 0.0, 0.0, 2.0, 1.0, 0.0],
+            [0] * 4 + [1] * 5 + [2] * 4,
         ).to(device)
         hook, force_hook = _selection_hooks(selection)
-        ctx = DynamicsContext(batch=batch)
+        ctx = DynamicsContext(
+            batch=batch,
+            active_graph_mask=torch.tensor(
+                [False] * 4 + [True] * 5 + [False] * 4, device=device
+            ),
+        )
         self._update_selection(hook, force_hook, ctx)
-        assert torch.where(batch.force_mode == CLIMBING_NEB)[0].tolist() == [1, 5]
+        assert torch.where(batch.force_mode == CLIMBING_NEB)[0].tolist() == [5]
 
-        current = batch.index_select([4, 5, 6, 7, 8, 0, 1, 2, 3])
+        # Retain both a selected path and an unselected path, in a new order.
+        current = batch.index_select([4, 5, 6, 7, 8, 0, 1, 2, 3, 9, 10, 11, 12])
         current.energy.copy_(
             torch.tensor(
-                [0.0, 1.0, 5.0, 2.0, 0.0, 0.0, 1.0, 6.0, 0.0], device=device
+                [0.0, 1.0, 5.0, 2.0, 0.0, 0.0, 1.0, 6.0, 0.0, 0.0, 1.0, 6.0, 0.0],
+                device=device,
             ).unsqueeze(-1)
         )
         ctx = DynamicsContext(
             batch=current,
             previous_graph_indices=torch.tensor(
-                [4, 5, 6, 7, 8, -1, -1, -1, -1], device=device
+                [4, 5, 6, 7, 8, 0, 1, 2, 3, -1, -1, -1, -1], device=device
             ),
-            active_graph_mask=torch.tensor([True] * 5 + [False] * 4, device=device),
+            active_graph_mask=torch.tensor([True] * 9 + [False] * 4, device=device),
         )
         # Match the strategy's admission order: statistics, selection, force.
         hook.energy_stats_hook(ctx, DynamicsStage.ON_ADMISSION)
         hook(ctx, DynamicsStage.ON_ADMISSION)
+        if selection == "fixed":
+            assert hook._initialized_graphs.tolist() == [True] * 5 + [False] * 8
         force_hook(ctx, DynamicsStage.ON_ADMISSION)
         self._update_selection(hook, force_hook, ctx, admit=False)
         resident_climber = 1 if selection == "fixed" else 2
         climbers = torch.where(current.force_mode == CLIMBING_NEB)[0].tolist()
-        assert climbers == [resident_climber]
+        assert climbers == [resident_climber, 7]
 
         ctx.active_graph_mask.fill_(True)
         ctx.step_count = 1
         self._update_selection(hook, force_hook, ctx, admit=False)
         climbers = torch.where(current.force_mode == CLIMBING_NEB)[0].tolist()
-        assert climbers == [resident_climber, 7]
+        assert climbers == [resident_climber, 7, 11]
 
         # An arrival keeps its fixed choice even if a different image becomes
         # highest in energy; dynamic selection follows the new maximum.
-        current.energy[6] = 7.0
+        current.energy[10] = 7.0
         ctx.step_count = 2
         self._update_selection(hook, force_hook, ctx, admit=False)
-        arriving_climber = 7 if selection == "fixed" else 6
+        arriving_climber = 11 if selection == "fixed" else 10
         climbers = torch.where(current.force_mode == CLIMBING_NEB)[0].tolist()
-        assert climbers == [resident_climber, arriving_climber]
+        assert climbers == [resident_climber, 7, arriving_climber]
 
         # A fresh admission resets state even when the batch object is reused.
         ctx.previous_graph_indices = torch.full_like(ctx.previous_graph_indices, -1)
         self._update_selection(hook, force_hook, ctx)
-        assert torch.where(current.force_mode == CLIMBING_NEB)[0].tolist() == [2, 6]
+        assert torch.where(current.force_mode == CLIMBING_NEB)[0].tolist() == [2, 7, 10]
 
     def _update_selection(
         self,
