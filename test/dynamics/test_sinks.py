@@ -927,6 +927,34 @@ class TestZarrData:
         assert torch.equal(retrieved.atomic_numbers, original_atomic_numbers)
         assert retrieved.num_graphs == num_graphs
 
+    @pytest.mark.parametrize("num_writes", [1, 2])
+    def test_read_keeps_custom_levels(self, num_writes: int, tmp_path: Path) -> None:
+        """Custom segmented fields retain their values and per-graph slices."""
+        schema = LevelSchema()
+        schema.add_level("draws", segmented=True)
+        schema.set("samples", "draws")
+        sink = ZarrData(store=tmp_path / "test_store", capacity=10)
+        expected = []
+        for write in range(num_writes):
+            data_list = []
+            for count in (1, 3):
+                data = AtomicData(
+                    atomic_numbers=torch.tensor([6, 8]),
+                    positions=torch.zeros(2, 3),
+                )
+                data.samples = torch.full((count, 1), float(10 * write + count))
+                data_list.append(data)
+                expected.append(data.samples)
+            sink.write(Batch.from_data_list(data_list, attr_map=schema))
+
+        result = sink.read()
+
+        assert result.num_graphs == 2 * num_writes
+        assert "samples" in result.level_keys["draws"]
+        torch.testing.assert_close(result.samples, torch.cat(expected))
+        for i, samples in enumerate(expected):
+            torch.testing.assert_close(result.get_data(i).samples, samples)
+
     @pytest.mark.parametrize("num_graphs", [1, 4, 8])
     def test_zero_clears_store(self, num_graphs: int, tmp_path: Path) -> None:
         """Verify zero() clears all stored data."""
