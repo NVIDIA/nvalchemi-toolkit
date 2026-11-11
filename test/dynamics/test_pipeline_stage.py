@@ -866,15 +866,21 @@ class TestDevicePlacement:
         """device_type should accept custom values."""
         stage = _CommunicationMixin(device_type=device_type)
         if expectation:
-            stage.device == torch.device(device_type)
+            assert stage.device.type == device_type
         else:
-            with pytest.raises(RuntimeError, match="Unable to create"):
+            message = (
+                "Requested CUDA device type"
+                if device_type == "cuda"
+                else "Unable to create"
+            )
+            with pytest.raises(RuntimeError, match=message):
                 _ = stage.device
 
     def test_device_property_cuda_uses_local_rank(self) -> None:
         """CUDA device should incorporate local_rank."""
         stage = _CommunicationMixin(device_type="cuda")
         with (
+            patch.object(torch.cuda, "is_available", return_value=True),
             patch.object(dist, "is_initialized", return_value=True),
             patch.object(dist, "get_node_local_rank", return_value=3),
         ):
@@ -1806,9 +1812,7 @@ class TestPoststepBackPressure:
         assert arrived.status.view(-1)[: arrived.num_graphs].tolist() == [0, 0]
         assert receiver.active_graph_mask(arrived, receiver.exit_status).all()
 
-    def test_standalone_stage_does_not_mark_converged_status(
-        self, device: str
-    ) -> None:
+    def test_standalone_stage_does_not_mark_converged_status(self, device: str) -> None:
         """Without a next rank, default convergence leaves status untouched."""
         batch = _make_batch_with_system(num_graphs=4).to(device)
         batch["velocities"] = torch.ones_like(batch.positions)
