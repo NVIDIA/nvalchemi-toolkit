@@ -907,7 +907,7 @@ class TestFusedStage:
         try:
             model = model_cls()
             sampler = MagicMock(by_group=False)
-            sampler.assemble_samples = Batch.from_data_list
+            del sampler.assemble_samples
             sampler.max_atoms = sampler.max_edges = sampler.max_batch_size = None
             sampler.request_replacements_budget.return_value = [
                 AtomicData(atomic_numbers=torch.tensor([6]), positions=torch.ones(1, 3))

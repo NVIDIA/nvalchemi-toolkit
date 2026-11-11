@@ -98,11 +98,6 @@ class SizeAwareSampler(Sampler[int]):
 
     Attributes
     ----------
-    assemble_samples : Callable[..., Batch]
-        Assemble a nonempty list of samples into a batch on the supplied
-        ``device``. Samples are AtomicData graphs by default or single-group
-        Batch objects when ``by_group=True``. Group labels are rebased across
-        samples in grouped mode.
     field_defaults : dict
         Optional-field defaults applied when loading samples. Consumers
         can register defaults before the first sample is loaded.
@@ -217,9 +212,6 @@ class SizeAwareSampler(Sampler[int]):
         self.by_group = by_group
         self.field_defaults: dict[str, FieldDefault] = dict(field_defaults or {})
         self._load_sample = self._load_group if by_group else self._load_graph
-        self.assemble_samples: Callable[..., Batch] = (
-            self._assemble_groups if by_group else Batch.from_data_list
-        )
         self._bin_width = bin_width
         self._shuffle = shuffle
         self._max_gpu_memory_fraction = max_gpu_memory_fraction
@@ -402,6 +394,30 @@ class SizeAwareSampler(Sampler[int]):
                     "system": data.add_system_property,
                 }[level_name]
                 add_property(key, values)
+
+    def assemble_samples(
+        self,
+        samples: list[AtomicData] | list[Batch],
+        device: torch.device | str,
+    ) -> Batch:
+        """Assemble samples using the sampler's graph or grouped mode.
+
+        Parameters
+        ----------
+        samples : list[AtomicData] | list[Batch]
+            Nonempty list of graphs, or single-group batches when
+            ``self.by_group`` is True. Group labels are rebased across samples.
+        device : torch.device | str
+            Device for the assembled batch.
+
+        Returns
+        -------
+        Batch
+            Combined samples on the requested device.
+        """
+        if self.by_group:
+            return self._assemble_groups(samples, device=device)
+        return Batch.from_data_list(samples, device=device)
 
     @staticmethod
     def _assemble_groups(samples: list[Batch], device: torch.device | str) -> Batch:

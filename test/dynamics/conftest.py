@@ -301,7 +301,6 @@ class _MockSampler:
     """Minimal sampler stub for inflight batching tests."""
 
     def __init__(self, replacements: list):
-        self.assemble_samples = Batch.from_data_list
         self._queue = list(replacements)
         # Eagerly reflect exhausted state so base.py can snapshot it before requesting
         self.exhausted = len(self._queue) == 0

@@ -1113,6 +1113,57 @@ class MockGroupedDataset:
         return self.groups[index], {}
 
 
+class TestSampleAssembly:
+    """Assembly remains overridable for initial batches and refills."""
+
+    @pytest.mark.parametrize("by_group", [False, True])
+    def test_subclass_override_used_for_initial_batch_and_refill(
+        self, by_group: bool
+    ) -> None:
+        """Both entry points call the subclass's assembly method in either mode."""
+        from nvalchemi.dynamics.base import BaseDynamics
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+        class CustomSampler(SizeAwareSampler):
+            """Record assembly calls while retaining the default behavior."""
+
+            assembly_count = 0
+
+            def assemble_samples(
+                self,
+                samples: list[AtomicData] | list[Batch],
+                device: torch.device | str,
+            ) -> Batch:
+                """Count and assemble the supplied graphs or groups."""
+                self.assembly_count += 1
+                return super().assemble_samples(samples, device=device)
+
+        dataset = (
+            MockGroupedDataset([(2, 2, 0)] * 4)
+            if by_group
+            else MockDataset([(2, 0)] * 4)
+        )
+        sampler = CustomSampler(dataset, max_batch_size=2, by_group=by_group)
+        batch = sampler.build_initial_batch()
+        assert sampler.assembly_count == 1
+        batch.status.fill_(1)
+        dynamics = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            sampler=sampler,
+            device_type="cpu",
+            by_group=by_group,
+        )
+
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert sampler.assembly_count == 2
+        assert result is not None
+        assert result.num_graphs == (4 if by_group else 2)
+        assert result.status.eq(0).all()
+        if by_group:
+            assert result.group_layout.num_graphs_per_group.tolist() == [2, 2]
+
+
 class TestFieldDefaults:
     """Optional fields have the same defaults across graph sampling entry points."""
 
