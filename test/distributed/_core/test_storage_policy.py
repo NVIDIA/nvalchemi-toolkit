@@ -113,6 +113,35 @@ def test_merge_two_halo_specs_takes_more_permissive_modes():
     assert merged.distribution.policy.scatter_mode == "halo_correction"
 
 
+def test_gp_replicate_geometry_survives_the_copy_methods():
+    """``with_adapters``, ``with_compile`` and ``merge`` rebuild the spec field by
+    field, so a field they do not name reverts to its default."""
+    from nvalchemi.distributed._core.adapter import PythonAdapter
+    from nvalchemi.distributed.spec import CompilePolicy, ForceStrategy
+
+    def _spec() -> MLIPSpec:
+        return MLIPSpec(
+            distribution=DistributionSpec(policy=HaloStoragePolicy()),
+            gp_replicate_geometry=True,
+        )
+
+    adapter = PythonAdapter(module_path="os", attr_name="getcwd", replacement=None)
+    policy = CompilePolicy(force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY)
+    assert _spec().with_adapters(adapter).gp_replicate_geometry is True
+    assert _spec().with_compile(policy).gp_replicate_geometry is True
+    assert _spec().merge(_spec()).gp_replicate_geometry is True
+
+
+def test_merge_rejects_specs_that_disagree_on_gp_replicate_geometry():
+    replicated = MLIPSpec(
+        distribution=DistributionSpec(policy=HaloStoragePolicy()),
+        gp_replicate_geometry=True,
+    )
+    owned = MLIPSpec(distribution=DistributionSpec(policy=HaloStoragePolicy()))
+    with pytest.raises(ValueError, match="gp_replicate_geometry"):
+        replicated.merge(owned)
+
+
 def test_merge_system_reductions_is_or():
     a = MLIPSpec(
         distribution=DistributionSpec(policy=HaloStoragePolicy()),
