@@ -405,10 +405,8 @@ class SizeAwareSampler(Sampler[int]):
 
     @staticmethod
     def _assemble_groups(samples: list[Batch], device: torch.device | str) -> Batch:
-        """Append complete grouped batches and build their final layout once."""
-        batch = samples[0].to(device)
-        for sample in samples[1:]:
-            batch.append(sample.to(device))
+        """Concatenate complete grouped batches and build their final layout once."""
+        batch = Batch.concatenate(samples, device=device)
         batch.group_layout
         return batch
 

@@ -257,8 +257,11 @@ paths. Use climbing stage budgets for per-path limits. A path that cannot fit an
 empty active batch raises an error.
 
 Initial packing and refill both follow the sampler's limits.
-`build_engine(sampler=..., sinks=...)` builds the same streaming engine for
-manual stepping.
+`neb.run(sampler=sampler, sinks=[results])` automatically registers the
+`neb_fixed_node_mask` default before packing. If you call
+`sampler.build_initial_batch()` separately, first configure the sampler with
+`field_defaults={"neb_fixed_node_mask": ("node", False)}` so mixed paths keep
+their fixed-atom constraints.
 
 ### NEB methods
 
