@@ -12,7 +12,7 @@
   fields on loaded samples so optional fields survive packing. Samples are
   now modified in place when loaded, including grouped samples, which are no
   longer cloned.
-
+- `Batch.concatenate()` combines several batches in one pass.
 - Add the `nvalchemi-toolkit` agent skill under `skills/nvalchemi-toolkit/`: one
   `SKILL.md` that scopes a request and routes to six task notes (data, models,
   dynamics and optimization, training, generative workflows, and composition
@@ -21,8 +21,9 @@
 
 ### Fixed
 
-- `Batch.append()` and `concatenate()` discard unused buffer rows unless
-  `strip_padding=False`. `HostMemory.write()` trims padding before copying to CPU.
+- `Batch.append()` discards unused buffer rows. Pass `assume_compact=True` to
+  skip this for compact inputs. `HostMemory.write()` trims padding before
+  copying to CPU.
 
 - The fine-tuning guide now passes `--checkpoint-index` to
   `nvalchemi-training spec resume`, the flag the CLI accepts.

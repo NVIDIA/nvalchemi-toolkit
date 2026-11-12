@@ -2652,12 +2652,12 @@ class Batch(DataMixin):
         )
         if schema.level_names != other_schema.level_names:
             raise ValueError(
-                "Custom append requires identical schema level order: "
+                "Custom levels require identical schema level order: "
                 f"{schema.level_names} vs {other_schema.level_names}"
             )
         if custom_names != other_custom_names:
             raise ValueError(
-                "Custom append requires identical custom level definitions: "
+                "Custom levels require identical custom level definitions: "
                 f"{custom_names} vs {other_custom_names}"
             )
 
@@ -2687,7 +2687,7 @@ class Batch(DataMixin):
         }
         if self_materialized != other_materialized:
             raise ValueError(
-                "Custom append requires identical materialized level sets: "
+                "Custom levels require identical materialized level sets: "
                 f"{self_materialized} vs {other_materialized}"
             )
 
@@ -2956,120 +2956,277 @@ class Batch(DataMixin):
 
     @classmethod
     def concatenate(
-        cls, batches: Sequence[Batch], *, strip_padding: bool = True
+        cls,
+        batches: Sequence[Batch],
+        *,
+        missing_fields: Literal["drop", "fill"] = "drop",
+        field_defaults: Mapping[str, Callable[[int, torch.device], Tensor]]
+        | None = None,
+        assume_compact: bool = False,
+        device: torch.device | str | None = None,
     ) -> Batch:
         """Combine batches into an independently owned batch.
 
-        Matching storage layouts use one concatenation per payload field.
-        Differing fields or materialized levels use :meth:`append` to preserve
-        its missing-field behavior. Unused buffer capacity is discarded by default.
+        Payload fields are concatenated once.
+        Unused buffer capacity is discarded by default.
         Inputs are left unchanged, including when concatenation fails.
 
         Parameters
         ----------
         batches : sequence of Batch
             Nonempty sequence, all grouped or all ungrouped. Custom schemas
-            must satisfy :meth:`append` compatibility requirements. Tensors
-            are moved to the first batch's device, and built-in dtypes follow
-            PyTorch concatenation promotion rules.
-        strip_padding : bool, optional
-            Discard unused buffer capacity before concatenating. Default is
-            ``True``. Set to ``False`` only when every input is already compact.
+            must satisfy :meth:`append` compatibility requirements. Retained
+            fields must have matching dtypes and storage levels.
+        missing_fields : {"drop", "fill"}, optional
+            Default ``"drop"`` keeps only fields present in every batch.
+            ``"fill"`` keeps fields present in any batch and fills missing rows
+            with ``field_defaults`` or zeros. Filled values, including
+            ``neighbor_list`` rows, are placeholders to recompute before use.
+        field_defaults : mapping, optional
+            System-field factories accepting ``(num_graphs, device)`` and
+            returning a tensor with matching dtype and trailing shape, with
+            one row per graph.
+            Requires ``"fill"``. Only missing values of fields present in at
+            least one input are filled; defaults do not introduce new fields.
+        assume_compact : bool, optional
+            Skip discarding unused buffer capacity for speed. Default is
+            ``False``. Pass ``True`` only when every input is already compact;
+            padded inputs will give wrong results, with padding rows treated
+            as atoms or edges.
+        device : torch.device | str, optional
+            Device for the combined batch. Inputs on other devices are copied
+            there. If ``None`` (default), every input must already be on the
+            same device, so the result does not depend on input order.
 
         Returns
         -------
         Batch
-            Combined data on the first batch's device, retaining its data
-            class. Neighbor indices are offset and group labels are rebased.
+            Combined data on the target device, retaining the first batch's
+            data class. Neighbor indices are offset and group labels are
+            rebased.
 
         Raises
         ------
         ValueError
-            If no batches are supplied, grouping differs, or schemas or
-            trailing shapes are incompatible.
+            If no batches are supplied, ``device`` is ``None`` and inputs are
+            on different devices, grouping differs, level cardinalities
+            disagree with graph counts, or field levels, dtypes, schemas, or
+            trailing shapes are incompatible. Also if defaults are supplied
+            without ``"fill"``, target non-system fields, or return a tensor
+            with the wrong shape or dtype.
         TypeError
-            If an input is not a Batch.
+            If an input is not a Batch or a default does not return a tensor.
         OverflowError
             If a combined segmented pointer exceeds the signed int32 range.
         """
+        if missing_fields not in {"drop", "fill"}:
+            raise ValueError(f"Unknown missing_fields policy: {missing_fields!r}")
+        if field_defaults is not None and missing_fields != "fill":
+            raise ValueError("field_defaults requires missing_fields='fill'")
+        field_defaults = field_defaults or {}
         # Strip padding once per input so only occupied rows are concatenated.
         parts = []
         for batch in batches:
             if not isinstance(batch, Batch):
                 raise TypeError("All inputs must be Batch objects")
-            parts.append(batch._without_padding() if strip_padding else batch)
+            parts.append(batch if assume_compact else batch._without_padding())
         if not parts:
             raise ValueError("At least one batch is required")
+        for key in field_defaults:
+            if any(
+                part._storage._group_name_from_attr(key) not in (None, "system")
+                for part in parts
+            ):
+                raise ValueError(f"Default field '{key}' must be system-level")
         first = parts[0]
-        if len(parts) == 1:
-            return first.clone()
-
-        # The fast path needs identical group names, storage types, and field
-        # keys. Otherwise fall back to append, which drops fields that are not
-        # present in every batch.
-        first_groups = first._storage.groups
-        if any(
-            part._storage.groups.keys() != first_groups.keys()
-            or any(
-                type(part._storage.groups[name]) is not type(group)
-                or set(part._storage.groups[name].keys()) != set(group.keys())
-                for name, group in first_groups.items()
-            )
-            for part in parts[1:]
-        ):
-            merged = first.clone()
-            for part in parts[1:]:
-                merged.append(part, strip_padding=False)
-            return merged
-
-        # Apply append's custom-level schema checks.
-        for part in parts[1:]:
-            first._validate_custom_append(part)
-
-        device = first.device
-        # Check that the combined int32 segment pointers don't overflow before
-        # allocating the large tensors.
-        segment_lengths = {}
-        for name, group in first_groups.items():
-            if isinstance(group, SegmentedLevelStorage):
-                lengths = torch.cat(
-                    [
-                        part._storage.groups[name].segment_lengths.to(device)
-                        for part in parts
-                    ]
+        if device is None:
+            device = first.device
+            if any(part.device != device for part in parts[1:]):
+                raise ValueError(
+                    "Batches are on different devices "
+                    f"{sorted({str(part.device) for part in parts})}; "
+                    "pass device= to choose the target"
                 )
-                segment_lengths[name], _ = _checked_segment_metadata(lengths, device)
+        else:
+            device = resolve_device(device)
+        if len(parts) == 1:
+            return first.clone() if first.device == device else first.to(device)
 
-        # Per-input atom offset (to shift neighbor indices) and first graph
-        # index (to mark group boundaries).
-        atom_offsets = []
-        graph_starts = []
-        num_atoms = num_graphs = 0
+        grouped = "group_idx" in first
+        for part in parts[1:]:
+            # Apply append's custom-level schema checks.
+            first._validate_custom_append(part)
+            if ("group_idx" in part) != grouped:
+                raise ValueError("Cannot concatenate grouped and ungrouped batches")
+
+        # Collect fields from every input to choose `selected`, their intersection
+        # ("drop") or union ("fill").
+        level_groups = {}
+        field_refs = {}
+        field_levels = {}
+        common_fields = None
+        input_fields = []
         for part in parts:
-            atom_offsets.append(num_atoms)
-            if part.num_graphs:
+            present = set()
+            part_fields = {}
+            input_fields.append(part_fields)
+            for name, group in part._storage.groups.items():
+                reference = level_groups.setdefault(name, group)
+                if type(group) is not type(reference):
+                    raise ValueError(f"Level '{name}' has incompatible storage kinds")
+                refs = field_refs.setdefault(name, {})
+                values = dict(group.items())
+                part_fields[name] = values
+                for key, value in values.items():
+                    field_levels.setdefault(key, set()).add(name)
+                    refs.setdefault(key, value)
+                    present.add(key)
+            common_fields = (
+                present if common_fields is None else common_fields & present
+            )
+        selected = set(field_levels) if missing_fields == "fill" else common_fields
+        # Storage levels must agree for fields the result keeps.
+        conflicts = sorted(key for key in selected if len(field_levels[key]) > 1)
+        if conflicts:
+            raise ValueError(f"Field '{conflicts[0]}' has incompatible storage levels")
+        level_groups = {
+            name: level_groups[name]
+            for name in first._storage.attr_map.level_names
+            if name in level_groups
+        }
+
+        # First graph index of each input (to mark group boundaries).
+        graph_counts = [part.num_graphs for part in parts]
+        graph_starts = []
+        num_graphs = 0
+        for count in graph_counts:
+            if count:
                 graph_starts.append(num_graphs)
-            num_atoms += part.num_nodes
-            num_graphs += part.num_graphs
+            num_graphs += count
+
+        # Plan fields and cardinalities before allocating combined payloads.
+        plans = {}
+        for name, group in level_groups.items():
+            sources = [part._storage.groups.get(name) for part in parts]
+            segmented = isinstance(group, SegmentedLevelStorage)
+            fields = {
+                key: value for key, value in field_refs[name].items() if key in selected
+            }
+            needs_rows = bool(fields) or (
+                name == "atoms" and "neighbor_list" in selected
+            )
+            rows = []
+            lengths = []
+            unknown_rows = []
+            for i, (source, count) in enumerate(
+                zip(sources, graph_counts, strict=True)
+            ):
+                if source is not None and len(source) != count:
+                    raise ValueError(
+                        f"Level '{name}' has {len(source)} graph rows or segments; "
+                        f"expected {count}"
+                    )
+                if segmented:
+                    lengths.append(
+                        source.segment_lengths.to(device)
+                        if source is not None
+                        else torch.zeros(count, dtype=torch.int32, device=device)
+                    )
+                    rows.append(source._data.shape[0] if source is not None else 0)
+                    if (
+                        source is not None
+                        and needs_rows
+                        and count
+                        and rows[-1] == 0
+                        and not source._data.keys()
+                    ):
+                        unknown_rows.append(i)
+                else:
+                    rows.append(len(source) if source is not None else count)
+            if unknown_rows:
+                # Fieldless levels can have nonzero cardinalities without a
+                # tensor shape to read. Fetch all such counts once per level.
+                counts = torch.stack([lengths[i].sum() for i in unknown_rows]).tolist()
+                for i, count in zip(unknown_rows, counts, strict=True):
+                    rows[i] = count
+            combined_lengths = None
+            if segmented:
+                # Check that the combined int32 segment pointers don't overflow
+                # before allocating the large tensors.
+                combined_lengths, _ = _checked_segment_metadata(
+                    torch.cat(lengths), device
+                )
+            plans[name] = (
+                [values.get(name, {}) for values in input_fields],
+                fields,
+                rows,
+                combined_lengths,
+            )
+
+        # Per-input atom offset (to shift neighbor indices).
+        atom_offsets = []
+        num_atoms = 0
+        atom_rows = plans["atoms"][2] if "atoms" in plans else [0] * len(parts)
+        for count in atom_rows:
+            atom_offsets.append(num_atoms)
+            num_atoms += count
 
         # Build each level with a single torch.cat per field.
         schema = first._storage.attr_map.clone()
         groups = {}
-        for name, group in first_groups.items():
-            sources = [part._storage.groups[name] for part in parts]
-            fields = {}
-            for key in group.keys():
-                values = [source[key].to(device) for source in sources]
-                if any(value.shape[1:] != values[0].shape[1:] for value in values[1:]):
+        for name, group in level_groups.items():
+            sources, fields, rows, lengths = plans[name]
+            payloads = {}
+            for key, ref in fields.items():
+                owner = schema.attr_to_group.get(key)
+                if owner is not None and owner != name:
                     raise ValueError(
-                        f"Level '{name}' field '{key}' has incompatible trailing shapes"
+                        f"Field '{key}' has incompatible declared storage levels"
                     )
-                # Offset neighbor indices by the atom offsets.
-                if name == "edges" and key in _INDEX_KEYS:
-                    values = [
-                        value + offset if offset else value
-                        for value, offset in zip(values, atom_offsets, strict=True)
-                    ]
+                schema.set(key, name, dtype=ref.dtype)
+                shape = ref.shape[1:]
+                values = []
+                for source, count, offset in zip(
+                    sources, rows, atom_offsets, strict=True
+                ):
+                    value = source.get(key)
+                    if value is None:
+                        if key not in field_defaults:
+                            value = torch.zeros(
+                                (count, *shape), dtype=ref.dtype, device=device
+                            )
+                        else:
+                            value = field_defaults[key](count, device)
+                            if not isinstance(value, Tensor):
+                                raise TypeError(
+                                    f"Default for '{key}' must return a tensor"
+                                )
+                            expected_shape = (count, *shape)
+                            if (value.shape, value.dtype) != (
+                                expected_shape,
+                                ref.dtype,
+                            ):
+                                raise ValueError(
+                                    f"Default for '{key}' must have shape "
+                                    f"{expected_shape} and dtype {ref.dtype}, got "
+                                    f"{tuple(value.shape)} and {value.dtype}"
+                                )
+                            value = value.to(device)
+                    else:
+                        if value.dtype != ref.dtype:
+                            raise ValueError(
+                                f"Level '{name}' field '{key}' has incompatible dtypes: "
+                                f"{ref.dtype} vs {value.dtype}"
+                            )
+                        if value.shape[1:] != shape:
+                            raise ValueError(
+                                f"Level '{name}' field '{key}' has incompatible trailing shapes"
+                            )
+                        value = value.to(device)
+                    # Offset neighbor indices by the atom offsets.
+                    if name == "edges" and key in _INDEX_KEYS and offset:
+                        value = value + offset
+                    values.append(value)
                 value = torch.cat(values, dim=0)
                 # Rebase group labels to dense, zero-based IDs via cumsum.
                 if key == "group_idx" and num_graphs:
@@ -3078,22 +3235,26 @@ class Batch(DataMixin):
                     # Each input starts a distinct group even if labels match.
                     starts[graph_starts] = True
                     value = starts.cumsum(0) - 1
-                fields[key] = value
-            rows = sum(source._data.shape[0] for source in sources)
+                payloads[key] = value
             kwargs = {
-                "data": TensorDict(fields, batch_size=[rows], device=device),
+                "data": TensorDict(payloads, batch_size=[sum(rows)], device=device),
                 "device": device,
                 "attr_map": schema,
                 "validate": False,
             }
-            if isinstance(group, SegmentedLevelStorage):
-                kwargs["segment_lengths"] = segment_lengths[name]
+            if lengths is not None:
+                kwargs["segment_lengths"] = lengths
             groups[name] = type(group)(**kwargs)
+        keys = None
+        if first.keys is not None:
+            retained = set().union(*(set(group.keys()) for group in groups.values()))
+            keys = {level: names & retained for level, names in first.keys.items()}
+            for name, group in groups.items():
+                if name in _KEYS_LEVELS:
+                    keys[_KEYS_LEVELS[name]] = set(group.keys())
         return cls._construct(
             device=device,
-            keys={level: names.copy() for level, names in first.keys.items()}
-            if first.keys is not None
-            else None,
+            keys=keys,
             storage=MultiLevelStorage(groups=groups, attr_map=schema, validate=False),
             data_class=first._data_class,
         )
@@ -3105,7 +3266,7 @@ class Batch(DataMixin):
         missing_fields: Literal["drop", "fill"] = "drop",
         field_defaults: Mapping[str, Callable[[int, torch.device], Tensor]]
         | None = None,
-        strip_padding: bool = True,
+        assume_compact: bool = False,
     ) -> None:
         """Append another batch (in-place via concatenation).
 
@@ -3121,8 +3282,9 @@ class Batch(DataMixin):
         rows for appended graphs that lack a field are filled with zeros or
         supplied system-field defaults. Fields only *other* carries are dropped
         as with ``"drop"``. Zero-filled values are storage placeholders, not
-        valid model outputs. Custom levels retain their strict schema
-        compatibility requirements.
+        valid model outputs. Filled ``neighbor_list`` rows are not valid
+        edges, so rebuild the neighbor list before use. Custom levels retain
+        their strict schema compatibility requirements.
 
         Grouped batches may only be appended to other grouped batches. The
         appended batch's local ``group_idx`` values are rebased after the
@@ -3148,9 +3310,11 @@ class Batch(DataMixin):
             returning a tensor with one row per graph. Requires ``"fill"``.
             They fill this batch's fields that *other* lacks; other missing
             fields use zeros. Fields this batch lacks are never added.
-        strip_padding : bool, optional
-            Discard unused buffer capacity in both inputs. Default is ``True``.
-            Set to ``False`` only when both inputs are already compact.
+        assume_compact : bool, optional
+            Skip discarding unused buffer capacity in both inputs for speed.
+            Default is ``False``. Pass ``True`` only when both inputs are
+            already compact; padded inputs will give wrong results, with
+            padding rows treated as atoms or edges.
         """
         if other is self or other._storage is self._storage:
             raise ValueError(
@@ -3164,8 +3328,8 @@ class Batch(DataMixin):
         if field_defaults is not None and missing_fields != "fill":
             raise ValueError("field_defaults requires missing_fields='fill'")
         self._validate_custom_append(other)
-        target = self._without_padding() if strip_padding else self
-        other = other._without_padding() if strip_padding else other
+        target = self if assume_compact else self._without_padding()
+        other = other if assume_compact else other._without_padding()
         if missing_fields == "fill":
             field_defaults = field_defaults or {}
             for key in field_defaults:

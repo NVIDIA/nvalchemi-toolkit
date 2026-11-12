@@ -678,7 +678,7 @@ class HostMemory(DataSink):
                         )
                 start += stored.num_graphs
             # Concatenate each field once and cache only after merging succeeds.
-            self._batches = [Batch.concatenate(self._batches, strip_padding=False)]
+            self._batches = [Batch.concatenate(self._batches, assume_compact=True)]
         return self._batches[0].clone()
 
     def zero(self) -> None:

@@ -165,9 +165,10 @@ Grouped batches reject `append_data()`. `put()` and `trim()`
 accept whole-group masks and reject partial groups; `put()` copies only
 complete groups that fit. See [data.md][doc-data] (Grouping graphs).
 
-`append()` and `concatenate()` discard unused buffer rows by default. Use
-`strip_padding=False` only when those rows must be retained. `HostMemory.write()`
-trims padding before copying to CPU.
+`append()` and `concatenate()` discard unused buffer rows by default.
+`assume_compact=True` skips that step for speed and is only safe when inputs
+have no padding; padded inputs then return padding rows as atoms. Use `put()`
+to keep buffer capacity. `HostMemory.write()` trims padding before copying to CPU.
 
 ## Storage patterns
 
