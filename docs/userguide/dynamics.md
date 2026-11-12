@@ -343,7 +343,7 @@ data a single transfer can carry:
 | Field | What it controls |
 |-------|------------------|
 | `num_systems` | Maximum number of graphs (structures) per transfer. Determines throughput per step --- higher values move more data but consume more GPU memory. |
-| `num_nodes` | Total atom capacity across all graphs in the buffer. Must be large enough for the worst-case combination of systems. For example, transferring up to 4 structures of at most 50 atoms each requires `num_nodes=200`. |
+| `num_nodes` | Total atom capacity across all graphs in the buffer. Must hold at least the largest individual graph, or complete group in grouped dynamics. To transfer up to 4 structures of at most 50 atoms each together, use `num_nodes=200`. |
 | `num_edges` | Total edge capacity. Set to **0** when the downstream model recomputes edges via its neighbor list (the common case). Edges are omitted from transport, and arriving graphs have no edges until the neighbor-list hook rebuilds them. Only set a non-zero value if pre-computed edge attributes must be transferred. |
 
 ```python
@@ -362,6 +362,15 @@ active batch the same way. A graph larger than the empty buffer can never be sen
 so the pipeline raises `ValueError` before removing graphs from the active batch or
 sending the buffer. The message gives the largest atom and edge counts among the
 selected graphs and the `BufferConfig` capacities to increase.
+
+Grouped dynamics, including NEB, send a prefix of complete converged groups in
+batch order. A path is never split across messages, and later groups do not skip
+ahead of a group that does not fit in the remaining space. Each complete group
+must fit in an empty buffer across all transported dimensions. If the first
+waiting group cannot fit, the error reports its total graph, atom, and edge
+counts and the buffer capacities. Size the buffer for the largest expected path,
+rather than every path that might converge together. With `num_edges=0`, edges
+are omitted and do not limit transfers.
 
 ```{important}
 Every pair of communicating stages **must** share an identical

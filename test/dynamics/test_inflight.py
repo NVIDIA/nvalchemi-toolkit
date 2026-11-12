@@ -438,12 +438,19 @@ class _ConvergeAllGroupsDynamics(_IncrementDynamics):
 
 
 def _grouped_pipeline_worker(
-    rank: int, world_size: int, queue: Any, comm_mode: str, group_sizes: list[int]
+    rank: int,
+    world_size: int,
+    queue: Any,
+    comm_mode: str,
+    group_sizes: list[int],
+    limit: str,
 ) -> None:
     """Stream complete groups over several messages into a limited final stage."""
     model = DemoModelWrapper(DemoModel())
-    # One atom per graph: graph-limited selections also fit the atom budget.
-    config = BufferConfig(num_systems=4, num_nodes=4, num_edges=0)
+    # One atom per graph lets either graph or atom capacity limit messages.
+    config = BufferConfig(
+        num_systems=4 if limit == "graphs" else 6, num_nodes=4, num_edges=0
+    )
     sampler = SizeAwareSampler(
         _GroupDataset(group_sizes),
         max_atoms=6,
@@ -2534,14 +2541,17 @@ class TestFusedStageUnsentGraduatesThroughGloo:
 class TestGroupedPipelineThroughGloo:
     """Complete groups stream through a real two-rank pipeline."""
 
+    @pytest.mark.parametrize("limit", ["graphs", "atoms"])
     @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
-    def test_each_group_finishes_once_and_stays_complete(self, comm_mode: str) -> None:
+    def test_each_group_finishes_once_and_stays_complete(
+        self, comm_mode: str, limit: str
+    ) -> None:
         """Every group converges once downstream and is stored whole and in order."""
         group_sizes = [2, 3, 1, 2, 3, 1]
         results = run_gloo(
             world_size=2,
             fn=_grouped_pipeline_worker,
-            args=(comm_mode, group_sizes),
+            args=(comm_mode, group_sizes, limit),
         )
         assert len(results) == 1
         groups, converged_groups = results[0]

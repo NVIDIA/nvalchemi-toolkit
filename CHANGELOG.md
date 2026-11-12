@@ -4,6 +4,9 @@
 
 ### Added
 
+- `DistributedPipeline` supports grouped dynamics, including NEB, with
+  complete-path transfers and preserved optimizer state. Transfer capacities
+  apply to complete paths.
 - Single-device in-flight NEB batching via `NEB.run(sampler=..., sinks=...)`
   with `SizeAwareSampler(by_group=True)`. The updated
   `examples/advanced/11_batched_neb.py` demonstrates path refilling and
@@ -23,8 +26,8 @@
 
 - `DistributedPipeline` sends that reach the send buffer's atom or edge
   capacity send the graduates that fit and keep the rest for a later send.
-  Only a graph larger than the empty buffer raises `ValueError`, which gives
-  the largest selected atom and edge counts and the `BufferConfig` capacities.
+  Samples that cannot fit an empty buffer raise `ValueError` with their sizes
+  and the `BufferConfig` capacities.
 - Plain pipeline stages detect graphs finished by status-setting hooks and
   send them downstream or write them to final result sinks.
 - `HostMemory`, `GPUBuffer`, and `ZarrData` omit temporary neighbor data so

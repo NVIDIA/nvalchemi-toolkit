@@ -1748,8 +1748,8 @@ class TestPoststepBackPressure:
         assert stage.active_batch is batch
         assert stage._num_unsent_graduates == 0
 
-    def test_new_graduates_send_without_retry_scan(self) -> None:
-        """Reported graduates reach the send path without scanning status."""
+    def test_new_graduates_are_sent(self) -> None:
+        """Reported graduates are copied into the send buffer."""
         batch = _make_batch_with_system(num_graphs=2)
         batch["status"] = torch.tensor([[1], [0]])
         stage = BaseDynamics(
@@ -1762,8 +1762,9 @@ class TestPoststepBackPressure:
         stage._ensure_buffers(batch)
         with (
             patch.object(Batch, "isend", return_value=Mock()),
-            patch.object(stage, "_populate_send_buffer") as populate,
-            patch("torch.where", side_effect=AssertionError("Unexpected status scan")),
+            patch.object(
+                stage, "_populate_send_buffer", wraps=stage._populate_send_buffer
+            ) as populate,
         ):
             stage._poststep_sync_buffers(torch.tensor([0]))
 
@@ -3144,9 +3145,10 @@ class TestGroupedTransfers:
         ]
         assert stage.send_buffer.num_graphs <= capacity
 
-    def test_group_larger_than_buffer_raises(self) -> None:
+    @pytest.mark.parametrize("num_systems", [0, 4])
+    def test_group_larger_than_buffer_raises(self, num_systems: int) -> None:
         """An unsendable first group raises instead of waiting indefinitely."""
-        stage = self._sender([5, 2], num_systems=4)
+        stage = self._sender([5, 2], num_systems=num_systems)
         batch = stage.active_batch
 
         with patch.object(Batch, "isend") as send:
@@ -3157,20 +3159,127 @@ class TestGroupedTransfers:
         assert stage.active_batch is batch
         assert stage.send_buffer.num_graphs == 0
 
-    def test_grouped_atom_shortfall_still_raises(self) -> None:
-        """Graph-count back-pressure does not allow incomplete atom copies."""
-        stage = self._sender([2, 2], num_systems=4)
-        batch = stage.active_batch
-        stage.send_buffer = Batch.empty(
-            num_systems=4, num_nodes=5, num_edges=0, template=batch
+    @pytest.mark.parametrize(
+        ("num_systems", "num_nodes", "num_edges"),
+        [(4, 100, 100), (7, 10, 100), (7, 100, 13), (7, 10, 0)],
+        ids=["graphs", "atoms", "edges", "omitted_edges"],
+    )
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_variable_size_groups_retry_without_loss(
+        self,
+        num_systems: int,
+        num_nodes: int,
+        num_edges: int,
+        comm_mode: str,
+        device: str,
+    ) -> None:
+        """Different paths converge together and leave in complete, ordered messages."""
+        batch = None
+        for group_id, (graphs, atoms, edges) in enumerate(
+            [(2, 2, 1), (3, 3, 4), (2, 1, 2)]
+        ):
+            group = Batch.from_data_list(
+                [
+                    AtomicData(
+                        atomic_numbers=torch.ones(atoms, dtype=torch.long),
+                        positions=torch.full((atoms, 3), float(10 * group_id + graph)),
+                        neighbor_list=torch.zeros(edges, 2, dtype=torch.long),
+                        shifts=torch.zeros(edges, 3),
+                    )
+                    for graph in range(graphs)
+                ]
+            )
+            group.set_group_layout(torch.zeros(graphs, dtype=torch.long))
+            if batch is None:
+                batch = group
+            else:
+                batch.append(group)
+        batch = batch.to(device)
+        batch["status"] = torch.ones(7, 1, dtype=torch.long, device=device)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=BufferConfig(
+                num_systems=num_systems,
+                num_nodes=num_nodes,
+                num_edges=num_edges,
+            ),
+            device_type=device,
+            comm_mode=comm_mode,
         )
+        stage.exit_status = 1
+        stage._ensure_buffers(batch)
+        expected = [[0.0, 1.0], [10.0, 11.0, 12.0], [20.0, 21.0]]
+        sync_state = Mock()
+        stage._sync_state_to_batch = sync_state
+        stage.by_group = True
 
+        with patch.object(Batch, "isend", return_value=Mock()) as send:
+            for step, graph_ids in enumerate(expected):
+                # Only the first step reports new convergence. Later sends
+                # must discover waiting graduates without another event.
+                selected = torch.arange(7, device=device) if step == 0 else None
+                stage._poststep_sync_buffers(selected)
+                sent = stage.send_buffer.index_select(list(range(len(graph_ids))))
+                assert _graph_ids(sent) == graph_ids
+                assert sent.group_idx.flatten().tolist() == [0] * len(graph_ids)
+                assert sent.num_nodes == len(graph_ids) * [2, 3, 1][step]
+                if num_edges:
+                    assert sent.num_edges == len(graph_ids) * [1, 4, 2][step]
+                    expected_edges = (
+                        sent.batch_ptr[:-1].long().repeat_interleave([1, 4, 2][step])
+                    )
+                    assert torch.equal(
+                        sent.neighbor_list, expected_edges[:, None].expand(-1, 2)
+                    )
+                else:
+                    assert "edges" not in sent._storage.groups
+                remaining = [value for group in expected[step + 1 :] for value in group]
+                if remaining:
+                    assert _graph_ids(stage.active_batch) == remaining
+                    assert stage.active_batch.status.flatten().tolist() == [1] * len(
+                        remaining
+                    )
+                else:
+                    assert stage.active_batch is None
+                assert stage._num_unsent_graduates == len(remaining)
+                assert sync_state.call_args.args[0].tolist() == list(range(1, 3 - step))
+            assert send.call_count == 3
+
+    @pytest.mark.parametrize("limit", ["atoms", "edges"])
+    def test_single_group_exceeding_payload_capacity_raises(self, limit: str) -> None:
+        """An individually oversized path fails without copying part of it."""
+        batch = Batch.from_data_list(
+            [
+                AtomicData(
+                    atomic_numbers=torch.ones(2, dtype=torch.long),
+                    positions=torch.zeros(2, 3),
+                    neighbor_list=torch.tensor([[0, 1]]),
+                    shifts=torch.zeros(1, 3),
+                )
+                for _ in range(4)
+            ]
+        )
+        batch.set_group_layout(torch.tensor([0, 0, 0, 1]))
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            device_type="cpu",
+            buffer_config=BufferConfig(
+                num_systems=4,
+                num_nodes=3 if limit == "atoms" else 100,
+                num_edges=1 if limit == "edges" else 100,
+            ),
+        )
+        stage._ensure_buffers(batch)
         with patch.object(Batch, "isend") as send:
-            with pytest.raises(ValueError, match="copied 2 of 4 requested graphs"):
+            with pytest.raises(ValueError, match="first converged group") as error:
                 stage._poststep_sync_buffers(torch.arange(4))
             send.assert_not_called()
-
+        assert "3 graphs, 6 atoms and 3 edges" in str(error.value)
+        assert f"buffer_config={stage.buffer_config}" in str(error.value)
         assert stage.active_batch is batch
+        assert stage.send_buffer.num_graphs == 0
 
     def test_send_rejects_part_of_a_group(self) -> None:
         """Converged graphs must form complete groups."""

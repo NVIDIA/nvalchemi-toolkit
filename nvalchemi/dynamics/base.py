@@ -72,7 +72,6 @@ from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import Batch
-from nvalchemi.data.group_layout import _complete_group_mask
 from nvalchemi.data.level_storage import SegmentedLevelStorage
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks._context import DynamicsContext
@@ -165,9 +164,9 @@ class BufferConfig(BaseModel):
     three capacities size the flattened graph tensors independently:
     ``num_systems`` bounds how many graphs fit in the buffer, ``num_nodes``
     bounds the combined atom count across those graphs, and ``num_edges``
-    bounds the combined edge count. Because the buffers are fixed-size, they
-    must be large enough to hold the biggest batch that will ever cross the
-    rank boundary; batches that exceed any capacity cannot be communicated.
+    bounds the combined edge count. Each graph, or complete group in grouped
+    batches, must fit in an empty buffer. When the combined graduates exceed
+    a capacity, those that do not fit wait in the active batch for a later step.
 
     You supply a ``BufferConfig`` when a stage participates in inter-rank
     communication, i.e. it is wired into a :class:`DistributedPipeline` with a
@@ -195,9 +194,9 @@ class BufferConfig(BaseModel):
 
     Notes
     -----
-    All three fields are constrained to be ``>= 0``. Choose the capacities from
-    the worst-case batch you expect to communicate: undersizing any dimension
-    fails at runtime, while oversizing wastes pre-allocated memory.
+    All three fields are constrained to be ``>= 0``. Size each dimension for
+    at least the largest graph or complete group expected. Larger buffers can
+    transfer more graduates per step but use more pre-allocated memory.
     """
 
     num_systems: Annotated[
@@ -1451,12 +1450,24 @@ class _CommunicationMixin:
         # put already updates host-side occupancy. Reuse it for validation.
         num_copied = self.send_buffer.num_graphs - n_before
         if num_copied == 0 and n_before == 0 and num_requested > 0:
+            cfg = self.buffer_config
+            if "group_idx" in previous_batch:
+                layout = previous_batch.group_layout
+                first_group = int(torch.where(layout.reduce_all(mask))[0][0])
+                start, end = layout.group_ptr[first_group : first_group + 2].tolist()
+                atoms = int(previous_batch.num_nodes_per_graph[start:end].sum())
+                edges = int(previous_batch.num_edges_per_graph[start:end].sum())
+                raise ValueError(
+                    "The first converged group cannot fit an empty send buffer: "
+                    f"{end - start} graphs, {atoms} atoms and {edges} edges. "
+                    "Increase BufferConfig capacities to hold the complete group; "
+                    f"buffer_config={cfg}."
+                )
             # put copies selected graphs in order, so an empty buffer takes
             # none only when a graph exceeds its capacity on its own.
             atoms = previous_batch.num_nodes_per_graph[mask]
             edges = previous_batch.num_edges_per_graph
             edges = edges[mask] if edges.numel() else torch.zeros_like(atoms)
-            cfg = self.buffer_config
             raise ValueError(
                 "Cannot send a graph larger than the empty send buffer: the "
                 f"selected graphs have up to {int(atoms.max())} atoms and up to "
@@ -1638,8 +1649,9 @@ class _CommunicationMixin:
         Parameters
         ----------
         converged_indices : torch.Tensor
-            Integer indices of converged graphs, already limited to available
-            graph capacity. Grouped selections contain only complete groups.
+            Integer indices of converged graphs to consider for transfer.
+            Grouped selections contain only complete groups. Graphs that do
+            not fit stay in the active batch for retry.
         """
         mask = torch.zeros(
             self.active_batch.num_graphs,
@@ -1647,12 +1659,13 @@ class _CommunicationMixin:
             device=self.device,
         )
         mask[converged_indices] = True
+        n_before = self.send_buffer.num_graphs
         self._batch_to_buffer(mask, num_requested=converged_indices.numel())
         if self.debug_mode:
             logger.debug(
                 "[rank {}] populated send buffer with {} converged graphs",
                 self.global_rank,
-                converged_indices.numel(),
+                self.send_buffer.num_graphs - n_before,
             )
 
     def _remove_converged_final_stage(self, converged_indices: torch.Tensor) -> None:
@@ -1728,11 +1741,11 @@ class _CommunicationMixin:
 
         Back-pressure behavior
         ----------------------
-        Select at most the available send-buffer graph capacity, keeping
-        complete groups for grouped batches. Excess converged graphs or groups
-        remain active for a later step. A group larger than the buffer raises.
-        Every selected graph must fit the buffer's graph, atom, and edge
-        capacities, otherwise the transfer raises before removing any graphs.
+        Copy converged graphs that fit all transported levels. Grouped
+        batches send a prefix of complete converged groups in batch order.
+        Excess graphs or groups remain active for a later step. If the first
+        selected graph or group cannot fit an empty buffer, raise before
+        removing graphs or sending the buffer.
 
         Parameters
         ----------
@@ -1773,30 +1786,17 @@ class _CommunicationMixin:
         if has_converged:
             if self.next_rank is not None:
                 num_graduated = converged_indices.numel()
-                send_capacity = self._send_buffer_capacity
-                if send_capacity > 0:
-                    if converged_indices.numel() > send_capacity:
-                        if "group_idx" in batch:
-                            layout = batch.group_layout
-                            mask = torch.zeros(
-                                batch.num_graphs, dtype=torch.bool, device=batch.device
-                            )
-                            mask[converged_indices] = True
-                            groups = _complete_group_mask(layout, mask)
-                            # Limit graph slots without splitting a group.
-                            counts = (layout.num_graphs_per_group * groups).cumsum(0)
-                            mask = layout.broadcast(groups & (counts <= send_capacity))
-                            converged_indices = torch.where(mask)[0]
-                            if converged_indices.numel() == 0:
-                                raise ValueError(
-                                    "The first converged group exceeds the send buffer's "
-                                    "graph capacity. Increase BufferConfig.num_systems."
-                                )
-                        else:
-                            converged_indices = converged_indices[:send_capacity]
+                n_before = self.send_buffer.num_graphs
+                if "group_idx" in batch:
+                    # Batch.put applies every capacity limit at whole-group
+                    # boundaries and reports exactly which graphs were copied.
                     self._populate_send_buffer(converged_indices)
-                self._num_unsent_graduates = (
-                    num_graduated - self.send_buffer.num_graphs
+                else:
+                    send_capacity = self._send_buffer_capacity
+                    if send_capacity > 0:
+                        self._populate_send_buffer(converged_indices[:send_capacity])
+                self._num_unsent_graduates = num_graduated - (
+                    self.send_buffer.num_graphs - n_before
                 )
             if self.is_final_stage:
                 self._remove_converged_final_stage(converged_indices)
