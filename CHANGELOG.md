@@ -29,7 +29,8 @@
   trigger force priming. Remove the unused receive staging buffer and its
   per-step zeroing.
 - Distributed pipelines retain and retry graduates that do not fit the send
-  buffer, without dropping them during in-flight sampler refills.
+  buffer. `fill_available()` fills free batch capacity from the sampler without
+  removing unsent graduates.
 - Pipeline receive templates retain their field layout when stages add
   bookkeeping fields to incoming batches.
 - `DistributedPipeline` no longer drains finished results back into

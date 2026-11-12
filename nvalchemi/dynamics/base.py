@@ -80,6 +80,7 @@ from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.models.base import BaseModelMixin
 
 if TYPE_CHECKING:
+    from nvalchemi.data import AtomicData
     from nvalchemi.dynamics.sampler import SizeAwareSampler
     from nvalchemi.dynamics.sinks import DataSink
 
@@ -3474,9 +3475,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             self._close_hooks()
         return batch
 
-    def refill_check(
-        self, batch: Batch, exit_status: int, *, remove_graduated: bool = True
-    ) -> Batch | None:
+    def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
         """Replace graduated samples via index-select and append.
 
         Graduated graphs (``status >= exit_status``) are written to sinks,
@@ -3499,10 +3498,6 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             The current batch with a ``status`` field.
         exit_status : int
             Status code indicating graduation.
-        remove_graduated : bool, optional
-            Whether to store and remove graduated graphs before refilling.
-            Set to ``False`` after a pipeline send to fill available capacity
-            while retaining graphs that are still waiting to be sent.
 
         Returns
         -------
@@ -3526,16 +3521,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         status = batch.status
         if status.dim() == 2:
             status = status.squeeze(-1)
-        graduated_mask = (
-            status >= exit_status
-            if remove_graduated
-            else torch.zeros_like(status, dtype=torch.bool)
-        )
-
-        has_graduated = bool(graduated_mask.any())
-        if remove_graduated and not has_graduated:
+        graduated_mask = status >= exit_status
+        if not graduated_mask.any():
             return batch
 
+        remaining_units = None
         if self.by_group:
             layout = batch.group_layout
             graduated_groups = layout.reduce_all(graduated_mask)
@@ -3582,9 +3572,78 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             max_count=max_new,
         )
 
-        if not has_graduated and not replacements:
-            return batch
+        if self.sinks:
+            self._write_to_sinks(batch, mask=graduated_mask)
+        return self._apply_replacements(
+            batch, remaining_indices, replacements, remaining_units
+        )
 
+    def fill_available(self, batch: Batch) -> Batch | None:
+        """Fill sampler capacity while retaining every current graph.
+
+        Used after a pipeline send so graduates still waiting to be sent stay
+        in the batch. At the atom or sample limit, returns without querying
+        the sampler.
+
+        Parameters
+        ----------
+        batch : Batch
+            Current batch, including any unsent graduates.
+
+        Returns
+        -------
+        Batch | None
+            The current batch if no samples fit, otherwise a batch with
+            replacements appended. ``None`` if both batch and sampler are empty.
+
+        Raises
+        ------
+        RuntimeError
+            If no sampler is configured.
+        """
+        if self.sampler is None:
+            raise RuntimeError("fill_available requires a sampler to be configured.")
+        if (
+            self.sampler.max_atoms is not None
+            and batch.num_nodes >= self.sampler.max_atoms
+        ):
+            return batch
+        count = batch.group_layout.num_groups if self.by_group else batch.num_graphs
+        if (
+            self.sampler.max_batch_size is not None
+            and count >= self.sampler.max_batch_size
+        ):
+            return batch
+        replacements = self.sampler.request_replacements_budget(
+            atom_budget=self.sampler.max_atoms - batch.num_nodes
+            if self.sampler.max_atoms is not None
+            else None,
+            edge_budget=self.sampler.max_edges - batch.num_edges
+            if self.sampler.max_edges is not None
+            else None,
+            max_count=self.sampler.max_batch_size - count
+            if self.sampler.max_batch_size is not None
+            else None,
+        )
+        if not replacements and batch.num_graphs:
+            return batch
+        remaining_indices = torch.arange(batch.num_graphs, device=batch.device)
+        remaining_units = (
+            torch.arange(count, device=batch.device) if self.by_group else None
+        )
+        return self._apply_replacements(
+            batch, remaining_indices, replacements, remaining_units
+        )
+
+    def _apply_replacements(
+        self,
+        batch: Batch,
+        remaining_indices: torch.Tensor,
+        replacements: list[AtomicData | Batch],
+        remaining_units: torch.Tensor | None = None,
+    ) -> Batch | None:
+        """Keep survivors, append replacements, and update dynamics state."""
+        n_remaining = remaining_indices.numel()
         # Batch composition changes here; drop stale converged indices so the
         # next _build_context mask doesn't over-index the resized batch.
         self._last_converged = None
@@ -3595,10 +3654,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         )
         self._forces_primed = False
 
-        if self.sinks and has_graduated:
-            self._write_to_sinks(batch, mask=graduated_mask)
-
-        result = batch.index_select(remaining_indices) if n_remaining > 0 else None
+        result = None
+        if n_remaining > 0:
+            result = (
+                batch.clone()
+                if n_remaining == batch.num_graphs
+                else batch.index_select(remaining_indices)
+            )
 
         if replacements:
             assemble_samples = getattr(
@@ -3639,7 +3701,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 self._forces_primed = True
                 self._refill_pending = True
             self._sync_state_to_batch(
-                remaining_units if self.by_group else remaining_indices,
+                remaining_units if remaining_units is not None else remaining_indices,
                 len(replacements),
                 result,
             )
@@ -3653,7 +3715,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 "No remaining sample fits the empty active batch under the "
                 "sampler's max_batch_size, max_atoms, or max_edges limits."
             )
-        # Nothing remains in either mode, so this only clears per-system state.
+        # Clear per-system state when no graphs remain.
         self._sync_state_to_batch(remaining_indices, 0, batch)
         self._record_batch_change(None, remaining_indices)
         return None
@@ -4586,6 +4648,7 @@ class FusedStage(BaseDynamics):
         """
         for _, sub_stage in self.sub_stages:
             sub_stage._sync_state_to_batch(remaining_indices, n_new, template_batch)
+            sub_stage._last_converged = None
 
     def _ensure_bookkeeping_fields(self, batch: Batch) -> None:
         """Auto-initialize status and registered bookkeeping fields if absent.
@@ -5324,46 +5387,6 @@ class FusedStage(BaseDynamics):
         finally:
             self._close_hooks()
 
-    def refill_check(
-        self, batch: Batch, exit_status: int, *, remove_graduated: bool = True
-    ) -> Batch | None:
-        """Replace graduated samples and clear stale convergence indices.
-
-        Delegates to the parent :meth:`BaseDynamics.refill_check` to remove
-        graduated graphs and append replacements from the sampler.  When the
-        batch composition changes, ``_last_converged`` is cleared on this
-        ``FusedStage`` and all its sub-stages so that subsequent hooks do not
-        receive an invalid ``converged_mask``. In an already-primed stage,
-        newly added graphs skip integrator updates for one iteration while the
-        regular model evaluation computes their initial forces.
-
-        Parameters
-        ----------
-        batch : Batch
-            The current batch with a ``status`` field.
-        exit_status : int
-            Status code indicating graduation.
-        remove_graduated : bool, optional
-            Whether to store and remove graduates, or retain all current graphs
-            and only fill available sampler capacity after a pipeline send.
-
-        Returns
-        -------
-        Batch | None
-            A new batch with graduated graphs replaced by fresh samples,
-            or ``None`` if no active samples remain.
-        """
-        result = super().refill_check(
-            batch, exit_status, remove_graduated=remove_graduated
-        )
-        if result is batch:
-            return result
-        # Clear stale convergence indices since the batch configuration has changed
-        self._last_converged = None
-        for _, dynamics in self.sub_stages:
-            dynamics._last_converged = None
-        return result
-
     def __add__(self, other: BaseDynamics) -> FusedStage:
         """Append a sub-stage to this fused stage via ``fused + dyn``.
 
@@ -6054,9 +6077,7 @@ class DistributedPipeline:
                 if stage.active_batch is not None:
                     # Sending already removed the outgoing graphs. Retain all
                     # others, including unsent graduates, when filling capacity.
-                    stage.active_batch = stage.refill_check(
-                        stage.active_batch, stage.exit_status, remove_graduated=False
-                    )
+                    stage.active_batch = stage.fill_available(stage.active_batch)
                 else:
                     if self.debug_mode:
                         logger.debug(

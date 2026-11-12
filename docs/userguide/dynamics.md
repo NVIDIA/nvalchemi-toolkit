@@ -289,6 +289,11 @@ model evaluation gives them forces. Residents keep their forces and keep updatin
 so graphs arriving at different steps add no extra model evaluations. Sending,
 final-stage removal, and sampler refill do not refresh residents' forces.
 
+After sending, the first stage calls `fill_available(batch)` to fill sampler
+capacity without removing graduates still waiting to be sent. A batch at its
+atom or sample limit returns without querying the sampler. Normal graduation
+and replacement continue to use `refill_check(batch, exit_status)`.
+
 With either setting, initial sampler batches are primed locally. When received
 graphs need local forces, an empty or unprimed receiving stage primes the whole
 batch instead of skipping their update.

@@ -839,11 +839,19 @@ class TestFusedStageInflight:
             max_edges=0,
             max_batch_size=4,
         )
+
+        class LegacyStage(FusedStage if fused_stage else _IncrementDynamics):
+            """Downstream stage retaining the original refill override signature."""
+
+            def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
+                """Delegate normal graduation without accepting new keywords."""
+                return super().refill_check(batch, exit_status)
+
         dynamics = _IncrementDynamics(model=self.model, device_type="cpu")
         stage = (
-            FusedStage(sub_stages=[(0, dynamics)], device_type="cpu")
+            LegacyStage(sub_stages=[(0, dynamics)], device_type="cpu")
             if fused_stage
-            else dynamics
+            else LegacyStage(model=self.model, device_type="cpu")
         )
         stage.sampler = sampler
         stage.prior_rank = None
@@ -1645,6 +1653,102 @@ class TestRefillCheck:
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
         self.model = DemoModelWrapper(DemoModel())
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("limit", ["atoms", "samples"])
+    def test_fill_full_batch_does_not_query_sampler(
+        self, fused_stage: bool, limit: str
+    ) -> None:
+        """A full pipeline batch never scans pending samples or drops graduates."""
+        sampler = SizeAwareSampler(
+            MockDataset([(2, 0)] * 10),
+            max_atoms=4 if limit == "atoms" else None,
+            max_batch_size=2 if limit == "samples" else None,
+        )
+        dynamics = BaseDynamics(model=self.model, device_type="cpu")
+        stage = (
+            FusedStage(sub_stages=[(0, dynamics)], sampler=sampler, device_type="cpu")
+            if fused_stage
+            else BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+        )
+        batch = sampler.build_initial_batch()
+        batch.status.fill_(stage.exit_status)
+        stage._forces_primed = True
+        stage._last_converged = torch.tensor([0, 1])
+        converged = stage._last_converged
+
+        with patch.object(sampler, "request_replacements_budget") as request:
+            result = stage.fill_available(batch)
+
+        assert result is batch
+        request.assert_not_called()
+        assert not sampler.exhausted
+        assert stage._forces_primed
+        assert stage._last_converged is converged
+        assert (batch.status == stage.exit_status).all()
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    def test_fill_keeps_residents_and_clears_stale_convergence(
+        self, fused_stage: bool
+    ) -> None:
+        """Filling keeps resident data and aligns convergence and priming state."""
+        sampler = SizeAwareSampler(MockDataset([(2, 0)] * 4), max_batch_size=3)
+        dynamics = BaseDynamics(model=self.model, device_type="cpu")
+        stage = (
+            FusedStage(sub_stages=[(0, dynamics)], sampler=sampler, device_type="cpu")
+            if fused_stage
+            else BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+        )
+        batch = sampler.build_initial_batch().index_select([0, 1])
+        batch.status.fill_(stage.exit_status)
+        positions = batch.positions.clone()
+        stage._forces_primed = True
+        stage._last_converged = torch.tensor([0, 1])
+        dynamics._last_converged = torch.tensor([0, 1])
+
+        result = stage.fill_available(batch)
+
+        assert result is not batch
+        assert result.num_graphs == 3
+        torch.testing.assert_close(result.positions[:4], positions)
+        torch.testing.assert_close(batch.positions, positions)
+        assert batch.num_graphs == 2
+        assert result.status.view(-1).tolist() == [stage.exit_status] * 2 + [0]
+        assert result.reprime_pending.view(-1).tolist() == [False, False, True]
+        assert stage._last_converged is None
+        if fused_stage:
+            assert dynamics._last_converged is None
+
+    def test_fill_counts_groups_instead_of_graphs(self) -> None:
+        """Several graphs in one group leave room under a two-group limit."""
+        sampler = Mock(
+            spec=SizeAwareSampler,
+            by_group=True,
+            max_atoms=None,
+            max_edges=None,
+            max_batch_size=2,
+        )
+        sampler.request_replacements_budget.return_value = []
+        dynamics = BaseDynamics(
+            model=self.model, sampler=sampler, by_group=True, device_type="cpu"
+        )
+        batch = create_batch_with_status(n_graphs=4)
+        batch.set_group_layout(torch.zeros(4, dtype=torch.long))
+
+        assert dynamics.fill_available(batch) is batch
+        sampler.request_replacements_budget.assert_called_once_with(
+            atom_budget=None, edge_budget=None, max_count=1
+        )
+        sampler.request_replacements_budget.reset_mock()
+        sampler.max_batch_size = 1
+        assert dynamics.fill_available(batch) is batch
+        sampler.request_replacements_budget.assert_not_called()
+
+    def test_fill_requires_sampler(self) -> None:
+        """Filling without a sampler reports a clear configuration error."""
+        dynamics = BaseDynamics(model=self.model, device_type="cpu")
+        with pytest.raises(RuntimeError, match="fill_available requires a sampler"):
+            dynamics.fill_available(create_batch_with_status())
 
     @pytest.mark.parametrize("primed", [False, True])
     def test_refill_preserves_flat_bookkeeping(self, primed: bool) -> None:
