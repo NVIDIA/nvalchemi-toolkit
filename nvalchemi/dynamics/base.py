@@ -1490,9 +1490,11 @@ class _CommunicationMixin:
         Iterates through ``overflow_sinks`` in priority order.  For each
         non-empty sink, removes at most the remaining room's worth of its
         oldest samples and routes them into the active batch via
-        :meth:`_buffer_to_batch`.  Samples that do not fit stay where they
-        are, so the cost follows the samples admitted rather than the
-        queue length.  Stops early when the active batch has no more room.
+        :meth:`_buffer_to_batch`.  With the default :class:`HostMemory`
+        overflow sink, samples that do not fit stay where they are, so
+        drain cost follows the samples admitted rather than the queue length.
+        Other sink implementations may read and rewrite the remaining queue.
+        Stops early when the active batch has no more room.
         Result ``sinks`` are never read.
 
         Notes
