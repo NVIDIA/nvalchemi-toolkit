@@ -151,6 +151,7 @@ class NVTLangevin(BaseDynamics):
             [self._random_seed + self.step_count], dtype=torch.int32, device=dev
         )
         self._rng_host_step: int = self.step_count
+        self._rng_base_seed: int = self._random_seed
 
     def apply_per_system_params(
         self, params: Mapping[str, torch.Tensor], batch: Batch
@@ -213,9 +214,20 @@ class NVTLangevin(BaseDynamics):
         batch : Batch
             Current batch; *positions* and *velocities* updated in-place.
         """
-        if self._rng_host_step != self.step_count:
-            # step_count was set from outside (restart, rewind): resync the seed.
-            self._rng_seed.fill_(self._random_seed + self.step_count)
+        if (
+            self._rng_host_step != self.step_count
+            or self._rng_base_seed != self._random_seed
+        ):
+            # step_count or random_seed was changed from outside (restart, rewind,
+            # ``seed_offset``): resync the device seed.  A resync recorded into a
+            # CUDA graph would reset the seed on every replay, so it is refused there.
+            if torch.cuda.is_available() and torch.cuda.is_current_stream_capturing():
+                raise RuntimeError(
+                    "NVTLangevin: the device RNG seed is out of sync with step_count "
+                    "or random_seed during CUDA-graph capture.  Call dyn.sync_rng() "
+                    "(or run one eager step) before capturing."
+                )
+            self.sync_rng()
         langevin_half_step_device_seed(
             batch.positions,
             batch.velocities,
@@ -228,6 +240,34 @@ class NVTLangevin(BaseDynamics):
             batch.batch_idx.int(),
         )
         self._rng_host_step = self.step_count + 1
+
+    def sync_rng(self) -> None:
+        """Set the device RNG seed to ``random_seed + step_count`` (eager only).
+
+        ``pre_update`` does this by itself before an eager step whenever
+        ``step_count`` or ``random_seed`` changed since the last step (a restart,
+        a rewind, ``seed_offset``).  Call it explicitly after such a change and
+        before capturing ``step`` in a CUDA graph: a resync cannot be recorded
+        into a graph, because every replay would reset the seed.
+
+        Raises
+        ------
+        RuntimeError
+            If the integrator state is not initialised yet, or the current CUDA
+            stream is capturing.
+        """
+        if getattr(self, "_rng_seed", None) is None:
+            raise RuntimeError(
+                "NVTLangevin.sync_rng: integrator state is not initialised; "
+                "run or prime the dynamics first."
+            )
+        if torch.cuda.is_available() and torch.cuda.is_current_stream_capturing():
+            raise RuntimeError(
+                "NVTLangevin.sync_rng must run eagerly, not in a capture."
+            )
+        self._rng_seed.fill_(self._random_seed + self.step_count)
+        self._rng_host_step = self.step_count
+        self._rng_base_seed = self._random_seed
 
     def post_update(self, batch: Batch) -> None:
         """BAOAB post-force final B step.

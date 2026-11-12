@@ -196,6 +196,43 @@ class TestNVTLangevinSeed:
         assert torch.equal(ba.positions, bc.positions)
         assert torch.equal(ba.velocities, bc.velocities)
 
+    @pytest.mark.parametrize("how", ["setter", "seed_offset"])
+    def test_seed_changed_after_steps_takes_effect(self, device, how):
+        """A new base seed on an initialised engine must change the noise from the next step on."""
+        a, ba = _langevin(seed=9), _batch(device)
+        a._ensure_state_initialized(ba)
+        for _ in range(3):  # host mirror equals step_count after a normal step
+            a.pre_update(ba)
+            a.post_update(ba)
+            a.step_count += 1
+        ref, bref = _langevin(seed=1009), _batch(device)
+        ref._ensure_state_initialized(bref)
+        ref.step_count = 3
+        bref.positions.copy_(ba.positions)
+        bref.velocities.copy_(ba.velocities)
+        if how == "setter":
+            a.random_seed = 1009
+        else:
+            assert a.seed_offset(1000) == ()
+        a.pre_update(ba)
+        ref.pre_update(bref)
+        assert torch.equal(ba.positions, bref.positions)
+        assert torch.equal(ba.velocities, bref.velocities)
+        assert int(a._rng_seed.item()) == 1009 + 3 + 1
+
+    def test_sync_rng_is_public_and_eager(self, device):
+        dyn, b = _langevin(seed=9), _batch(device)
+        with pytest.raises(RuntimeError, match="not initialised"):
+            dyn.sync_rng()
+        dyn._ensure_state_initialized(b)
+        dyn.step_count = 17
+        dyn.random_seed = 100
+        dyn.sync_rng()
+        assert int(dyn._rng_seed.item()) == 117
+        # in sync now: a step must not resync (the seed only advances by the op's own +1)
+        dyn.pre_update(b)
+        assert int(dyn._rng_seed.item()) == 118
+
 
 @pytest.mark.usefixtures("gpu_device")
 class TestCapturedStep:
@@ -206,6 +243,37 @@ class TestCapturedStep:
         with torch.cuda.graph(graph, stream=dyn.torch_stream):
             dyn.step(b)
         return graph
+
+    def test_capture_after_a_restore_refuses_a_stale_seed_then_syncs(self, gpu_device):
+        """Warm up, restore a checkpoint (new step_count), then capture: never record a resync."""
+        dyn, b = _langevin(), _batch(gpu_device)
+        dyn._ensure_state_initialized(b)
+        with dyn:
+            dyn.step(b)  # warm-up
+            dyn.step_count = 50  # what load_state_dict does
+            graph = torch.cuda.CUDAGraph()
+            with pytest.raises(RuntimeError, match="sync_rng"):
+                with torch.cuda.graph(graph, stream=dyn.torch_stream):
+                    dyn.step(b)
+            # the documented remedy: resync eagerly, then capture
+            dyn.sync_rng()
+            assert int(dyn._rng_seed.item()) == 9 + 50
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph, stream=dyn.torch_stream):
+                dyn.step(b)
+            snap = (b.positions.clone(), b.velocities.clone(), b.forces.clone())
+            outs = []
+            for _ in range(2):
+                b.positions.copy_(snap[0])
+                b.velocities.copy_(snap[1])
+                b.forces.copy_(snap[2])
+                graph.replay()
+                torch.cuda.synchronize()
+                outs.append(b.velocities.clone())
+        assert not torch.equal(
+            outs[0], outs[1]
+        )  # fresh noise per replay, no recorded reset
+        assert int(dyn._rng_seed.item()) == 9 + 50 + 2
 
     def test_replays_draw_fresh_noise(self, gpu_device):
         dyn, b = _langevin(), _batch(gpu_device)
