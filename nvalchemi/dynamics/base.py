@@ -555,6 +555,8 @@ class _CommunicationMixin:
     _pending_send_handle : Any
         Stored ``isend`` handle when send is deferred (``"fully_async"``).
         ``None`` when no send is pending.
+    _num_unsent_graduates : int
+        Host count of graduates left in the active batch after a send.
     _stream : torch.cuda.Stream | None
         The torch CUDA stream created when entering the context manager
         (see :attr:`torch_stream`).  ``None`` when outside a ``with``
@@ -683,6 +685,7 @@ class _CommunicationMixin:
         self.comm_mode: CommMode = comm_mode
         self._pending_recv_handle: Any = None
         self._pending_send_handle: Any = None
+        self._num_unsent_graduates = 0
         self._stream: torch.cuda.Stream | None = None
         self._wp_stream: wp.Stream | None = None
         self._stream_ctx: ExitStack | None = None
@@ -1637,9 +1640,9 @@ class _CommunicationMixin:
     ) -> None:
         """Synchronize buffers after a dynamics step.
 
-        When the stage defines ``exit_status``, graphs already at or beyond
-        that status are included alongside ``converged_indices``. This retries
-        graduates that did not fit the send buffer on an earlier step.
+        When an earlier send left graduates waiting, scan their status and
+        combine them with ``converged_indices``. A host count skips this scan
+        when no graduates are waiting, and final stages never need it.
 
         If a next rank exists with available capacity, graduated samples are
         copied into ``send_buffer`` via :meth:`_populate_send_buffer`. The send
@@ -1662,7 +1665,7 @@ class _CommunicationMixin:
         converged_indices : torch.Tensor | None, optional
             Integer indices of converged samples in the active batch.
             Typically obtained from ``BaseDynamics._check_convergence()``.
-            If ``None``, only graphs already at or beyond ``exit_status``
+            If ``None``, only graduates left waiting by an earlier send
             are considered.
         """
         if self.next_rank is not None:
@@ -1673,26 +1676,29 @@ class _CommunicationMixin:
                 self._pending_send_handle = None
             self.send_buffer.zero()
 
-        batch = self.active_batch
-        exit_status = getattr(self, "exit_status", None)
-        status = getattr(batch, "status", None) if batch is not None else None
-        if status is not None and exit_status is not None:
-            graduated = status.view(-1)[: batch.num_graphs] >= exit_status
-            if converged_indices is not None:
-                graduated[converged_indices] = True
-            converged_indices = torch.where(graduated)[0]
+            if self._num_unsent_graduates:
+                batch = self.active_batch
+                exit_status = getattr(self, "exit_status", None)
+                status = getattr(batch, "status", None) if batch is not None else None
+                if status is not None and exit_status is not None:
+                    graduated = status.view(-1)[: batch.num_graphs] >= exit_status
+                    if converged_indices is not None:
+                        graduated[converged_indices] = True
+                    converged_indices = torch.where(graduated)[0]
 
         has_converged = converged_indices is not None and converged_indices.numel() > 0
 
         if has_converged:
             if self.next_rank is not None:
-                send_capacity = self._send_buffer_capacity
-                if send_capacity > 0:
-                    if converged_indices.numel() > send_capacity:
-                        converged_indices = converged_indices[:send_capacity]
-                    self._populate_send_buffer(converged_indices)
+                num_graduated = converged_indices.numel()
+                num_to_send = min(num_graduated, max(0, self._send_buffer_capacity))
+                if num_to_send:
+                    self._populate_send_buffer(converged_indices[:num_to_send])
+                self._num_unsent_graduates = num_graduated - num_to_send
             if self.is_final_stage:
                 self._remove_converged_final_stage(converged_indices)
+        elif self.next_rank is not None:
+            self._num_unsent_graduates = 0
 
         if self.next_rank is not None:
             handle = self.send_buffer.isend(dst=self.next_rank)

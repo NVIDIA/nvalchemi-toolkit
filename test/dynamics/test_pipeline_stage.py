@@ -1642,6 +1642,112 @@ class TestRecvToBatch:
 class TestPoststepBackPressure:
     """Test that _poststep_sync_buffers respects send buffer capacity (back-pressure)."""
 
+    @pytest.mark.parametrize("next_rank", [None, 1])
+    @pytest.mark.parametrize("empty_indices", [False, True])
+    def test_no_waiting_graduates_skips_status_scan(
+        self, next_rank: int | None, empty_indices: bool, device: str
+    ) -> None:
+        """Idle sending and final stages do not scan status on CPU or CUDA."""
+        batch = _make_batch_with_system(num_graphs=2).to(device)
+        batch["status"] = torch.zeros(2, 1, dtype=torch.long, device=device)
+        stage = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            active_batch=batch,
+            next_rank=next_rank,
+            buffer_config=_DEFAULT_CFG,
+            device_type=device,
+        )
+        stage._ensure_buffers(batch)
+        indices = (
+            torch.empty(0, dtype=torch.long, device=device) if empty_indices else None
+        )
+
+        with (
+            patch.object(Batch, "isend", return_value=Mock()),
+            patch("torch.where", side_effect=AssertionError("Unexpected status scan")),
+        ):
+            stage._poststep_sync_buffers(indices)
+
+        assert stage.active_batch is batch
+        assert stage._num_unsent_graduates == 0
+
+    def test_new_graduates_send_without_retry_scan(self) -> None:
+        """Reported graduates reach the send path without scanning status."""
+        batch = _make_batch_with_system(num_graphs=2)
+        batch["status"] = torch.tensor([[1], [0]])
+        stage = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=_DEFAULT_CFG,
+            device_type="cpu",
+        )
+        stage._ensure_buffers(batch)
+        with (
+            patch.object(Batch, "isend", return_value=Mock()),
+            patch.object(stage, "_populate_send_buffer") as populate,
+            patch("torch.where", side_effect=AssertionError("Unexpected status scan")),
+        ):
+            stage._poststep_sync_buffers(torch.tensor([0]))
+
+        populate.assert_called_once()
+        assert populate.call_args.args[0].tolist() == [0]
+        assert stage._num_unsent_graduates == 0
+
+    def test_retry_combines_waiting_and_new_graduates(self) -> None:
+        """A new graduate joins the retry set, and draining it clears the count."""
+        batch = _make_batch_with_system(num_graphs=4)
+        batch["status"] = torch.tensor([[2], [2], [0], [0]])
+        batch["system_id"] = torch.arange(4).view(-1, 1)
+        stage = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            active_batch=batch,
+            exit_status=2,
+            next_rank=1,
+            buffer_config=BufferConfig(num_systems=1, num_nodes=3, num_edges=0),
+            device_type="cpu",
+        )
+        stage._ensure_buffers(batch)
+        with patch.object(Batch, "isend", return_value=Mock()):
+            stage._poststep_sync_buffers(torch.tensor([0, 1]))
+            assert stage.send_buffer.system_id.item() == 0
+            assert stage._num_unsent_graduates == 1
+
+            stage.active_batch.status[2] = stage.exit_status
+            stage._poststep_sync_buffers(torch.tensor([2]))
+            assert stage.send_buffer.system_id.item() == 1
+            assert stage._num_unsent_graduates == 1
+
+            stage._poststep_sync_buffers(None)
+            assert stage.send_buffer.system_id.item() == 3
+            assert stage._num_unsent_graduates == 0
+            with patch(
+                "torch.where", side_effect=AssertionError("Unexpected status scan")
+            ):
+                stage._poststep_sync_buffers(None)
+
+        assert stage.active_batch.system_id.view(-1).tolist() == [2]
+
+    def test_empty_batch_clears_waiting_count(self) -> None:
+        """Removing the active batch cannot leave retries enabled indefinitely."""
+        batch = _make_batch_with_system(num_graphs=1)
+        stage = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=_DEFAULT_CFG,
+            device_type="cpu",
+        )
+        stage._ensure_buffers(batch)
+        stage.active_batch = None
+        stage._num_unsent_graduates = 1
+        with (
+            patch.object(Batch, "isend", return_value=Mock()),
+            patch("torch.where", side_effect=AssertionError("Unexpected status scan")),
+        ):
+            stage._poststep_sync_buffers(None)
+        assert stage._num_unsent_graduates == 0
+
     @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
     @pytest.mark.parametrize("send_capacity", [1, 2])
     def test_default_convergence_freezes_unsent_graduates(
@@ -1787,7 +1893,7 @@ class TestPoststepBackPressure:
     ) -> None:
         """Retained graduates leave even when later steps report none."""
         batch = _make_batch_with_system(num_graphs=4)
-        batch["status"] = torch.tensor([[0], [2], [3], [0]])
+        batch["status"] = torch.tensor([[2], [2], [3], [0]])
         batch["system_id"] = torch.arange(4).view(-1, 1)
         retained_positions = batch.positions[9:].clone()
         stage = BaseDynamics(
@@ -1804,9 +1910,10 @@ class TestPoststepBackPressure:
 
         with patch.object(Batch, "isend", return_value=Mock()):
             for expected_id, indices in enumerate(
-                (torch.tensor([0, 1]), None, torch.empty(0, dtype=torch.long))
+                (torch.tensor([0, 1, 2]), None, torch.empty(0, dtype=torch.long))
             ):
                 stage._poststep_sync_buffers(indices)
+                assert stage._num_unsent_graduates == 2 - expected_id
                 assert stage.send_buffer.num_graphs == 1
                 assert stage.send_buffer.system_id.view(-1).tolist() == [expected_id]
 
@@ -1816,8 +1923,8 @@ class TestPoststepBackPressure:
         assert stage.active_batch.system_id.view(-1).tolist() == [3]
         torch.testing.assert_close(stage.active_batch.positions, retained_positions)
 
-    def test_plain_final_stage_combines_reported_and_retained_graduates(self) -> None:
-        """The final stage stores both reported and status-marked graduates once."""
+    def test_plain_final_stage_stores_reported_graduates(self) -> None:
+        """The final stage stores the reported graduates without a retry scan."""
         batch = _make_batch_with_system(num_graphs=3)
         batch["status"] = torch.tensor([[0], [2], [0]])
         batch["system_id"] = torch.arange(3).view(-1, 1)
@@ -1832,7 +1939,7 @@ class TestPoststepBackPressure:
             device_type="cpu",
         )
 
-        stage._poststep_sync_buffers(torch.tensor([2]))
+        stage._poststep_sync_buffers(torch.tensor([1, 2]))
         stage._poststep_sync_buffers(None)
 
         assert sink.read().system_id.view(-1).tolist() == [1, 2]
@@ -1916,6 +2023,7 @@ class TestPoststepBackPressure:
 
         # Active batch should still have all 5 samples
         assert stage.active_batch_size == 5
+        assert stage._num_unsent_graduates == 2
 
     def test_remaining_converged_samples_persist(self) -> None:
         """Verify samples not extracted due to capacity remain in active_batch.
