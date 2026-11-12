@@ -34,7 +34,10 @@
   bookkeeping fields to incoming batches.
 - `DistributedPipeline` no longer drains finished results back into
   computation. Received samples that do not fit wait in a new
-  `overflow_sinks` list, a private `HostMemory` by default.
+  `overflow_sinks` list on the receiving stage, a private unbounded `HostMemory`
+  by default. Bounded host/GPU overflow storage raises when full rather than
+  making upstream stages wait. Pipeline setup warns about result `sinks` on
+  stages with a downstream rank.
 - `Batch.append()` discards unused buffer rows. Pass `assume_compact=True` to
   skip this for compact inputs. `HostMemory.write()` trims padding before
   copying to CPU.

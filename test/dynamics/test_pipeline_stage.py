@@ -24,7 +24,8 @@ Tests cover:
 
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+import warnings
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 import torch
@@ -40,7 +41,7 @@ from nvalchemi.dynamics.base import (
     _CommunicationMixin,
 )
 from nvalchemi.dynamics.demo import DemoDynamics
-from nvalchemi.dynamics.sinks import HostMemory
+from nvalchemi.dynamics.sinks import GPUBuffer, HostMemory
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 _DEFAULT_CFG = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
@@ -499,6 +500,40 @@ class TestDistributedPipelineConstruction:
         # Last stage
         assert s2.prior_rank == 1
         assert s2.next_rank is None
+
+    @pytest.mark.parametrize("rank", [0, 1, 2])
+    @pytest.mark.parametrize("has_result_sinks", [False, True])
+    def test_setup_warns_for_unused_local_result_sinks(
+        self, rank: int, has_result_sinks: bool
+    ) -> None:
+        """Warn for first and middle stages after their endpoints are assigned."""
+        stages = {
+            index: _CommunicationMixin(buffer_config=_DEFAULT_CFG, device_type="cpu")
+            for index in range(3)
+        }
+        stage = stages[rank]
+        stage.model = Mock()
+        if has_result_sinks:
+            stage.sinks = [HostMemory(capacity=2)]
+        pipeline = DistributedPipeline(stages=stages)
+
+        with (
+            patch.object(
+                type(pipeline),
+                "global_rank",
+                new_callable=PropertyMock,
+                return_value=rank,
+            ),
+            warnings.catch_warnings(record=True) as caught,
+        ):
+            warnings.simplefilter("always")
+            pipeline.setup()
+
+        assert len(caught) == int(has_result_sinks and rank < 2)
+        if caught:
+            assert caught[0].category is UserWarning
+            assert "Use overflow_sinks on the receiving stage" in str(caught[0].message)
+        assert stage.next_rank == (rank + 1 if rank < 2 else None)
 
     def test_setup_two_stages(self) -> None:
         """Verify setup() works with exactly two stages."""
@@ -2512,6 +2547,32 @@ class TestOverflowSinksSeparation:
         assert stage.active_batch.positions.device.type == device
         assert sum(len(sink) for sink in stage.overflow_sinks) == 0
         assert len(results) == 0
+
+    @pytest.mark.parametrize("sink_kind", ["host", "gpu"])
+    def test_bounded_overflow_raises_without_changing_stored_samples(
+        self, sink_kind: str
+    ) -> None:
+        """Insufficient overflow capacity raises instead of accepting part of a write."""
+        if sink_kind == "gpu" and not torch.cuda.is_available():
+            pytest.skip("requires CUDA")
+        sink = (
+            HostMemory(capacity=2)
+            if sink_kind == "host"
+            else GPUBuffer(capacity=2, max_atoms=3, max_edges=0)
+        )
+        sink.write(_make_batch(num_graphs=1))
+        stage = _CommunicationMixin(
+            active_batch=_make_batch(num_graphs=1),
+            max_batch_size=1,
+            overflow_sinks=[sink],
+            device_type="cpu",
+        )
+
+        with pytest.raises(RuntimeError, match="Cannot store 2 overflow samples"):
+            stage._buffer_to_batch(_make_batch(num_graphs=2))
+
+        assert len(sink) == 1
+        assert stage.active_batch_size == 1
 
     def test_result_write_skips_sink_without_room_for_whole_write(self) -> None:
         """Result writes also choose a sink that can hold every result."""

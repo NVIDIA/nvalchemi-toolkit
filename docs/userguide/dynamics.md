@@ -433,8 +433,36 @@ A step proceeds as follows:
 
 ```{tip}
 **Back-pressure**: when the send buffer is full, excess converged samples remain in
-the upstream active batch as no-ops until buffer capacity opens up. This naturally
-throttles fast producers without dropping data.
+the upstream active batch as no-ops and are retried on later steps. This limit
+applies to the sender's buffer. It does not check free space in downstream storage.
+```
+
+### Result sinks and overflow storage
+
+Both `sinks` and `overflow_sinks` belong to the stage on which they are configured
+and live on that stage's rank. In a two-stage pipeline, stage 2 uses
+`overflow_sinks` for arrivals that cannot yet enter its active batch and `sinks`
+for finished results. Pending samples return to computation; finished results do
+not. A stage with a downstream rank forwards graduates instead of writing them
+to `sinks`. Pipeline setup warns if such a stage has nonempty `sinks`.
+
+Receiving stages default to a private, effectively unbounded `HostMemory` overflow
+sink. Set `overflow_sinks=[HostMemory(capacity=128)]` on the **receiving stage** to
+limit the queue to 128 samples. This limits sample count, not bytes. To keep
+pending samples on the receiving GPU and avoid host transfers, use
+`overflow_sinks=[GPUBuffer(capacity=128, max_atoms=50, max_edges=0, device="cuda:1")]`
+on a stage running on `cuda:1`. Import these classes from `nvalchemi.dynamics.sinks`.
+Choose `max_atoms` and `max_edges` to cover each sample. GPU storage is allocated
+on the first write according to those capacities. A host sink uses less device
+memory but copies overflow to the host and admitted samples back to the device.
+
+```{warning}
+Bounded overflow storage does not make upstream stages wait. Each overflow write
+goes to the first sink with room for the entire write; it is not split across
+sinks. If none has room, the pipeline raises `RuntimeError`. A `GPUBuffer` also
+raises if a sample exceeds its atom or edge capacity. Size overflow storage for
+the expected backlog and incoming transfer size. A full queue stops the run
+instead of retaining the already-sent samples upstream.
 ```
 
 ### Communication modes

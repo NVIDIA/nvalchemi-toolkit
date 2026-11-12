@@ -488,7 +488,8 @@ class _CommunicationMixin:
         ``-1`` (unset), with the same auto-assignment semantics as
         ``prior_rank``.
     sinks : list[DataSink] | None
-        Priority-ordered sinks for finished results.
+        Priority-ordered sinks for finished results on stages without a downstream
+        rank. Pipeline setup warns if these are configured on other stages.
     overflow_sinks : list[DataSink] | None
         Priority-ordered storage for received samples that do not fit in
         the active batch yet. ``None`` uses a private unbounded
@@ -602,11 +603,15 @@ class _CommunicationMixin:
             Rank to send graduated samples to (next stage). Default None.
         sinks : Sequence[DataSink] | None, optional
             Priority-ordered sinks for finished results. Default None
-            (empty list).
+            (empty list). Only used on stages without a downstream rank.
         overflow_sinks : Sequence[DataSink] | None, optional
             Priority-ordered storage for received samples that do not fit
             in the active batch yet. Default None, which uses a private
-            unbounded :class:`~nvalchemi.dynamics.sinks.HostMemory`.
+            unbounded :class:`~nvalchemi.dynamics.sinks.HostMemory`. Storage belongs
+            to this receiving stage. Pass bounded sinks to limit queued samples
+            or a :class:`~nvalchemi.dynamics.sinks.GPUBuffer` to retain them on GPU.
+            If no sink can hold the entire overflow write, raises ``RuntimeError``;
+            downstream storage limits do not make upstream stages wait.
         active_batch : Batch | None, optional
             The currently active working batch. Default None.
         max_batch_size : int, optional
@@ -5660,6 +5665,7 @@ class DistributedPipeline:
         """
         if self._grouped:
             self._setup_grouped()
+            self._warn_unused_result_sinks()
             return
 
         sorted_ranks = sorted(self.stages.keys())
@@ -5730,6 +5736,21 @@ class DistributedPipeline:
                 "FusedStage to apply a per-system step budget.",
                 UserWarning,
                 stacklevel=2,
+            )
+
+        self._warn_unused_result_sinks()
+
+    def _warn_unused_result_sinks(self) -> None:
+        """Warn when the local stage has result sinks but sends results onward."""
+        stage = self.local_stage
+        if stage.next_rank is not None and stage.sinks:
+            warnings.warn(
+                f"Pipeline stage with next_rank={stage.next_rank} has sinks configured, "
+                "but sinks only collect finished results on stages without a "
+                "downstream rank. These sinks will not be written. Use overflow_sinks "
+                "on the receiving stage to store samples waiting for active-batch space.",
+                UserWarning,
+                stacklevel=3,
             )
 
     def _setup_grouped(self) -> None:
