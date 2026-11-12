@@ -4,6 +4,11 @@
 
 ### Added
 
+- `langevin_half_step_device_seed`: the BAOAB half step with its RNG seed in a
+  one-element device tensor that the op advances after every launch.
+  `NVTLangevin` uses it, so a `dyn.step()` captured in a CUDA graph draws fresh
+  noise on every replay instead of repeating the noise of the captured step;
+  the noise stream is unchanged (`random_seed + step_count`, bitwise).
 - Add the `nvalchemi-toolkit` agent skill under `skills/nvalchemi-toolkit/`: one
   `SKILL.md` that scopes a request and routes to six task notes (data, models,
   dynamics and optimization, training, generative workflows, and composition
