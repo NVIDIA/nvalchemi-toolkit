@@ -137,7 +137,10 @@ when screening candidate crystal structures or computing equations of state.
 
 Molecular dynamics (MD) propagates the equations of motion forward in time, sampling
 the trajectory of a system at finite temperature. The toolkit provides integrators
-for three standard ensembles.
+for three standard ensembles. All MD integrators require `by_group=False`.
+Grouped updates (`by_group=True`) are supported by fixed-cell FIRE2 and LBFGS
+only. Legacy FIRE and all variable-cell optimizers also reject grouped mode
+at construction.
 
 ### NVE: energy conservation
 

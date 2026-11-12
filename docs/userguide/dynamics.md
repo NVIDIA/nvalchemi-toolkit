@@ -606,7 +606,8 @@ Single-device grouped dynamics supports whole-group refill with a matching
 place of graphs. Refill follows only the sampler's limits, not the engine's own
 `max_batch_size`. Partial-group graduation is rejected.
 `DistributedPipeline` supports complete-group transfers when every stage uses
-`by_group=True`. Combining grouped stages with `mesh` raises
+`by_group=True`. MD integrators reject grouped mode, so grouped relaxation
+followed by MD is unsupported. Combining grouped stages with `mesh` raises
 `NotImplementedError`. For prepared NEB paths, use
 `NEB.run(sampler=..., sinks=...)` as shown in
 [Reaction Paths and NEB](dynamics_mep.md#streaming-prepared-paths).

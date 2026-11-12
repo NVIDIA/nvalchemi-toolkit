@@ -547,6 +547,11 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
             convergence_hook=convergence_hook,
             **kwargs,
         )
+        if self.by_group:
+            raise NotImplementedError(
+                "LBFGSVariableCell does not support by_group=True because cell "
+                "degrees of freedom remain graph-level."
+            )
         self._cell_force_scale = cell_force_scale
 
     @property
@@ -606,11 +611,6 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
         return cell
 
     def _extra_state_kwargs(self, batch: Batch, n: int) -> dict[str, Any]:
-        if self.by_group:
-            raise NotImplementedError(
-                "LBFGSVariableCell does not support by_group=True because cell "
-                "degrees of freedom remain graph-level."
-            )
         return dict(
             cell=self._reference_cells(batch, n),
             cell_force_scale=self.cell_force_scale,

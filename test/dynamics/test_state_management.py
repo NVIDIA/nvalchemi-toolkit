@@ -124,6 +124,47 @@ class TestStateLazyInit:
     def _run_step(self, dynamics, batch):
         dynamics.step(batch)
 
+    @pytest.mark.parametrize(
+        "dynamics_cls",
+        [
+            cls
+            for cls in _discover_dynamics_implementations()
+            if cls.__name__
+            in {
+                "NVE",
+                "NVTLangevin",
+                "NVTNoseHoover",
+                "NPT",
+                "NPH",
+                "FIRE",
+                "FIREVariableCell",
+                "FIRE2VariableCell",
+                "LBFGSVariableCell",
+            }
+        ],
+        ids=lambda cls: cls.__name__,
+    )
+    @pytest.mark.parametrize("by_group", [False, True])
+    def test_graph_state_dynamics_reject_grouped_mode(self, dynamics_cls, by_group):
+        """Reject grouped mode at construction, before any state can be created."""
+        from inspect import signature
+
+        kwargs = {
+            name: value
+            for name, value in _STATE_INIT_ARGUMENTS.items()
+            if name in signature(dynamics_cls).parameters
+        }
+        model = _make_model(needs_stress="stress" in dynamics_cls.__needs_keys__)
+        if by_group:
+            with pytest.raises(
+                NotImplementedError,
+                match=f"{dynamics_cls.__name__} does not support by_group=True",
+            ):
+                dynamics_cls(model=model, by_group=True, **kwargs)
+        else:
+            dyn = dynamics_cls(model=model, by_group=False, **kwargs)
+            assert not dyn.by_group
+
     def test_nve_state_initialized_on_first_step(self):
         from nvalchemi.dynamics.integrators.nve import NVE
 
