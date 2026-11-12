@@ -38,7 +38,10 @@ import torch
 
 from nvalchemi.data import Batch
 from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
-from nvalchemi.dynamics._ops.langevin import langevin_finalize, langevin_half_step
+from nvalchemi.dynamics._ops.langevin import (
+    langevin_finalize,
+    langevin_half_step_device_seed,
+)
 from nvalchemi.dynamics._units import (
     KB_EV,
     fs_to_internal_time,
@@ -141,6 +144,14 @@ class NVTLangevin(BaseDynamics):
             },
             dev,
         )
+        # The RNG seed of the NEXT half step lives on the device and is advanced
+        # by the op itself: a captured CUDA graph then draws fresh noise on every
+        # replay (a Python int seed would be baked into the graph).
+        self._rng_seed: torch.Tensor = torch.tensor(
+            [self._random_seed + self.step_count], dtype=torch.int32, device=dev
+        )
+        self._rng_host_step: int = self.step_count
+        self._rng_base_seed: int = self._random_seed
 
     def apply_per_system_params(
         self, params: Mapping[str, torch.Tensor], batch: Batch
@@ -203,7 +214,21 @@ class NVTLangevin(BaseDynamics):
         batch : Batch
             Current batch; *positions* and *velocities* updated in-place.
         """
-        langevin_half_step(
+        if (
+            self._rng_host_step != self.step_count
+            or self._rng_base_seed != self._random_seed
+        ):
+            # step_count or random_seed was changed from outside (restart, rewind,
+            # ``seed_offset``): resync the device seed.  A resync recorded into a
+            # CUDA graph would reset the seed on every replay, so it is refused there.
+            if torch.cuda.is_available() and torch.cuda.is_current_stream_capturing():
+                raise RuntimeError(
+                    "NVTLangevin: the device RNG seed is out of sync with step_count "
+                    "or random_seed during CUDA-graph capture.  Call dyn.sync_rng() "
+                    "(or run one eager step) before capturing."
+                )
+            self.sync_rng()
+        langevin_half_step_device_seed(
             batch.positions,
             batch.velocities,
             batch.forces,
@@ -211,9 +236,38 @@ class NVTLangevin(BaseDynamics):
             self._state.dt,
             self._state.temperature,
             self._state.friction,
-            self._random_seed + self.step_count,
+            self._rng_seed,
             batch.batch_idx.int(),
         )
+        self._rng_host_step = self.step_count + 1
+
+    def sync_rng(self) -> None:
+        """Set the device RNG seed to ``random_seed + step_count`` (eager only).
+
+        ``pre_update`` does this by itself before an eager step whenever
+        ``step_count`` or ``random_seed`` changed since the last step (a restart,
+        a rewind, ``seed_offset``).  Call it explicitly after such a change and
+        before capturing ``step`` in a CUDA graph: a resync cannot be recorded
+        into a graph, because every replay would reset the seed.
+
+        Raises
+        ------
+        RuntimeError
+            If the integrator state is not initialised yet, or the current CUDA
+            stream is capturing.
+        """
+        if getattr(self, "_rng_seed", None) is None:
+            raise RuntimeError(
+                "NVTLangevin.sync_rng: integrator state is not initialised; "
+                "run or prime the dynamics first."
+            )
+        if torch.cuda.is_available() and torch.cuda.is_current_stream_capturing():
+            raise RuntimeError(
+                "NVTLangevin.sync_rng must run eagerly, not in a capture."
+            )
+        self._rng_seed.fill_(self._random_seed + self.step_count)
+        self._rng_host_step = self.step_count
+        self._rng_base_seed = self._random_seed
 
     def post_update(self, batch: Batch) -> None:
         """BAOAB post-force final B step.
