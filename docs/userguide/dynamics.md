@@ -330,8 +330,8 @@ patterns are planned for a future release.
 
 ### Sizing the buffer
 
-NCCL point-to-point transfers require fixed-size tensors, so each communicating stage
-pre-allocates a send buffer and a receive buffer whose dimensions are set by
+NCCL point-to-point transfers require fixed-size tensors, so each stage with a
+downstream rank pre-allocates a send buffer whose dimensions are set by
 {py:class}`~nvalchemi.dynamics.base.BufferConfig`. The three fields control how much
 data a single transfer can carry:
 
@@ -365,8 +365,8 @@ Every pair of communicating stages **must** share an identical
 
 ### Buffer synchronization
 
-The diagram below shows how two adjacent ranks exchange data through pre-allocated
-send and receive buffers during a single step. The upstream rank pushes converged
+The diagram below shows how two adjacent ranks exchange data through a pre-allocated
+send buffer during a single step. The upstream rank pushes converged
 samples; the downstream rank pulls them into its active batch.
 
 ```{graphviz}
@@ -415,7 +415,7 @@ digraph buffer_sync {
 
 A step proceeds as follows:
 
-1. **Pre-step** --- The downstream rank zeros its receive buffer and posts an
+1. **Pre-step** --- The downstream rank posts an
    asynchronous `irecv` from its `prior_rank`. In `async_recv` mode (the default),
    the wait is deferred until later in the step; in `sync` mode it blocks
    immediately.

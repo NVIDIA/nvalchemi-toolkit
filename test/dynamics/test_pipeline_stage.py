@@ -1171,8 +1171,7 @@ class TestEdgelessBuffers:
 
         stage._ensure_buffers(batch)
 
-        for buffer in (stage.send_buffer, stage.recv_buffer):
-            assert "edges" not in buffer._storage.groups
+        assert "edges" not in stage.send_buffer._storage.groups
         copied = torch.zeros(3, dtype=torch.bool)
         stage.send_buffer.put(
             batch, torch.ones(3, dtype=torch.bool), copied_mask=copied
@@ -1184,17 +1183,15 @@ class TestEdgelessBuffers:
     def test_buffers_keep_edges_when_capacity_is_set(self) -> None:
         batch = _make_batch_with_edges(num_graphs=2)
         stage = _CommunicationMixin(
-            prior_rank=0, buffer_config=_DEFAULT_CFG, device_type="cpu"
+            next_rank=1, buffer_config=_DEFAULT_CFG, device_type="cpu"
         )
 
         stage._ensure_buffers(batch)
 
-        assert "neighbor_list" in stage.recv_buffer._storage.groups["edges"]
+        assert "neighbor_list" in stage.send_buffer._storage.groups["edges"]
 
-    @pytest.mark.parametrize("recv_buffer_exists", [False, True])
-    def test_receive_template_matches_sender_buffer(
-        self, recv_buffer_exists: bool
-    ) -> None:
+    @pytest.mark.parametrize("has_residents", [False, True])
+    def test_receive_template_matches_sender_buffer(self, has_residents: bool) -> None:
         """The irecv template has exactly the sender buffer's fields."""
         batch = _make_batch_with_edges(num_graphs=2)
         sender = _CommunicationMixin(
@@ -1208,12 +1205,12 @@ class TestEdgelessBuffers:
             device_type="cpu",
         )
         receiver._recv_template = Batch.empty_like(batch)
-        if recv_buffer_exists:
+        if has_residents:
             # A stepped receiver carries bookkeeping the sender never sends.
             resident = batch.clone()
             resident["reprime_pending"] = torch.zeros(2, 1, dtype=torch.bool)
+            receiver.active_batch = resident
             receiver._ensure_buffers(resident)
-            assert "reprime_pending" in receiver.recv_buffer
 
         with patch.object(Batch, "irecv", return_value=Mock()) as mock_irecv:
             receiver._prestep_sync_buffers()
@@ -1400,66 +1397,30 @@ class TestSyncDoneFlags:
 class TestEnsureBuffersWiring:
     """Test that _ensure_buffers is called during pipeline step operations."""
 
-    def test_ensure_buffers_called_on_first_step(self) -> None:
-        """Verify send/recv buffers are created after relevant pipeline methods.
-
-        When a stage has buffer_config, prior_rank, and next_rank, calling
-        _ensure_buffers with an active_batch should create both send_buffer
-        and recv_buffer.
-        """
-        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+    @pytest.mark.parametrize("prior_rank", [None, 0])
+    @pytest.mark.parametrize("next_rank", [None, 2])
+    def test_ensure_buffers_allocates_only_one_send_buffer(
+        self, prior_rank: int | None, next_rank: int | None
+    ) -> None:
+        """Receive-only stages allocate nothing; senders allocate once."""
         batch = _make_batch_with_system(num_graphs=3)
         stage = _CommunicationMixin(
-            buffer_config=cfg,
-            prior_rank=0,
-            next_rank=2,
+            buffer_config=BufferConfig(num_systems=10, num_nodes=100, num_edges=200),
+            prior_rank=prior_rank,
+            next_rank=next_rank,
             active_batch=batch,
             device_type="cpu",
         )
 
-        # Before _ensure_buffers, buffers are None
-        assert stage.send_buffer is None
-        assert stage.recv_buffer is None
+        with patch.object(Batch, "empty", wraps=Batch.empty) as allocate:
+            stage._ensure_buffers(batch)
+            stage._ensure_buffers(batch)
 
-        # Call _ensure_buffers with the template batch
-        stage._ensure_buffers(batch)
-
-        # After _ensure_buffers, buffers should be created
-        assert stage.send_buffer is not None
-        assert stage.recv_buffer is not None
-        assert stage.send_buffer.system_capacity == 10
-        assert stage.recv_buffer.system_capacity == 10
-
-    def test_ensure_buffers_only_creates_needed_buffers(self) -> None:
-        """Verify _ensure_buffers only creates buffers for active directions.
-
-        When next_rank is None (final stage), only recv_buffer is created.
-        When prior_rank is None (first stage), only send_buffer is created.
-        """
-        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
-        batch = _make_batch_with_system(num_graphs=3)
-
-        # Final stage: no next_rank
-        final_stage = _CommunicationMixin(
-            buffer_config=cfg,
-            prior_rank=0,
-            next_rank=None,
-            device_type="cpu",
-        )
-        final_stage._ensure_buffers(batch)
-        assert final_stage.send_buffer is None
-        assert final_stage.recv_buffer is not None
-
-        # First stage: no prior_rank
-        first_stage = _CommunicationMixin(
-            buffer_config=cfg,
-            prior_rank=None,
-            next_rank=2,
-            device_type="cpu",
-        )
-        first_stage._ensure_buffers(batch)
-        assert first_stage.send_buffer is not None
-        assert first_stage.recv_buffer is None
+        assert allocate.call_count == (0 if next_rank is None else 1)
+        if next_rank is None:
+            assert stage.send_buffer is None
+        else:
+            assert stage.send_buffer.system_capacity == 10
 
 
 # ---------------------------------------------------------------------------
@@ -1576,43 +1537,6 @@ class TestPrestepZerosSendBuffer:
             # Should not raise even with send_buffer=None
             stage._prestep_sync_buffers()
 
-    def test_prestep_zeros_recv_buffer(self) -> None:
-        """Verify _prestep_sync_buffers zeros recv_buffer when present.
-
-        When a stage has prior_rank and a recv_buffer, _prestep_sync_buffers
-        should call recv_buffer.zero() before initiating the receive.
-        """
-        batch = _make_batch(num_graphs=3)
-        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
-
-        stage = _CommunicationMixin(
-            prior_rank=0,
-            comm_mode="sync",
-            active_batch=batch,
-            max_batch_size=10,
-            buffer_config=cfg,
-        )
-
-        # Create mock buffers
-        mock_send_buffer = Mock()
-        mock_recv_buffer = Mock()
-        stage.send_buffer = mock_send_buffer
-        stage.recv_buffer = mock_recv_buffer
-
-        mock_incoming = _make_batch(num_graphs=2)
-        mock_handle = Mock()
-        mock_handle.wait.return_value = mock_incoming
-
-        with (
-            patch.object(Batch, "irecv", return_value=mock_handle),
-            patch.object(stage, "_recv_to_batch"),
-        ):
-            stage._prestep_sync_buffers()
-
-            # Verify both send_buffer.zero() and recv_buffer.zero() were called
-            mock_send_buffer.zero.assert_called_once()
-            mock_recv_buffer.zero.assert_called_once()
-
 
 # ---------------------------------------------------------------------------
 # TestRecvToBatch — _recv_to_batch routing behavior
@@ -1623,9 +1547,9 @@ class TestRecvToBatch:
     """Test how _recv_to_batch routes received data into the active batch."""
 
     def test_recv_to_batch_routes_incoming_directly(self) -> None:
-        """Verify _recv_to_batch routes incoming without staging it in recv_buffer.
+        """Verify _recv_to_batch routes incoming without adding template fields.
 
-        The recv buffer's fields follow its template, so staging could add
+        Staging through a local template could add
         placeholder outputs the prior stage never sent.
         """
         batch = _make_batch(num_graphs=3)
@@ -1639,23 +1563,18 @@ class TestRecvToBatch:
             buffer_config=cfg,
         )
 
-        mock_recv_buffer = Mock()
-        stage.recv_buffer = mock_recv_buffer
-
         incoming = _make_batch(num_graphs=2)
 
         with patch.object(stage, "_buffer_to_batch") as mock_b2b:
             stage._recv_to_batch(incoming)
 
             mock_b2b.assert_called_once_with(incoming)
-            mock_recv_buffer.put.assert_not_called()
-            mock_recv_buffer.zero.assert_not_called()
 
     def test_recv_to_batch_falls_back_on_empty_incoming(self) -> None:
         """Verify _recv_to_batch routes directly when incoming has 0 graphs.
 
         When incoming.num_graphs == 0 (sentinel/empty batch), route directly
-        via _buffer_to_batch rather than going through recv_buffer.
+        via _buffer_to_batch.
         """
         batch = _make_batch(num_graphs=3)
         cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
@@ -1668,10 +1587,6 @@ class TestRecvToBatch:
             buffer_config=cfg,
         )
 
-        # Create a mock recv_buffer that should NOT be used
-        mock_recv_buffer = Mock()
-        stage.recv_buffer = mock_recv_buffer
-
         # Create a mock empty incoming batch (0 graphs)
         # Note: Batch.from_data_list([]) raises, so we use a Mock
         empty_incoming = Mock()
@@ -1680,14 +1595,8 @@ class TestRecvToBatch:
         with patch.object(stage, "_buffer_to_batch") as mock_b2b:
             stage._recv_to_batch(empty_incoming)
 
-            # recv_buffer.put should NOT be called
-            mock_recv_buffer.put.assert_not_called()
-
             # _buffer_to_batch should be called directly with incoming
             mock_b2b.assert_called_once_with(empty_incoming)
-
-            # recv_buffer.zero() should NOT be called
-            mock_recv_buffer.zero.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -2142,9 +2051,8 @@ class TestOverflowDrainBack:
 
     @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
     @pytest.mark.parametrize("max_batch_size", [1, 2])
-    @pytest.mark.parametrize("recv_buffer_exists", [False, True])
     def test_receive_skips_staging_without_changing_admission_order(
-        self, comm_mode: str, max_batch_size: int, recv_buffer_exists: bool
+        self, comm_mode: str, max_batch_size: int
     ) -> None:
         """Bypass staging at any occupancy, preserving arrival-first admission."""
         batch = _make_batch_with_system(num_graphs=5)
@@ -2162,8 +2070,7 @@ class TestOverflowDrainBack:
             device_type="cpu",
             buffer_config=BufferConfig(num_systems=2, num_nodes=6, num_edges=0),
         )
-        if recv_buffer_exists:
-            stage._ensure_buffers(incoming)
+        stage._ensure_buffers(incoming)
         handle = Mock()
         handle.wait.return_value = incoming
 

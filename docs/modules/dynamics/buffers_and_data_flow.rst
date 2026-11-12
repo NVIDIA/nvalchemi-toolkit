@@ -26,7 +26,7 @@ The three buffer layers
      - Storage
      - Purpose
    * - Communication
-     - ``send_buffer`` / ``recv_buffer`` on :class:`~nvalchemi.dynamics.base._CommunicationMixin`
+     - ``send_buffer`` on :class:`~nvalchemi.dynamics.base._CommunicationMixin`
      - Pre-allocated :meth:`Batch.empty() <nvalchemi.data.Batch.empty>`
      - Zero-copy inter-rank transfer via ``isend`` / ``irecv``
    * - Overflow sinks
@@ -122,7 +122,7 @@ Communication buffers are configured via
        buffer_config=buffer_config,
    )
 
-**Lazy initialization.** Buffers are created on the first step via
+**Lazy initialization.** Send buffers are created on the first step via
 ``_ensure_buffers()``. The first concrete batch serves as a template
 for attribute keys, dtypes, and trailing shapes (e.g., hidden
 dimensions). This lazy approach is necessary because the attribute
@@ -130,8 +130,7 @@ schema is not known until a real batch appears.
 
 **The buffer lifecycle.**  The ``send_buffer`` follows a
 ``Batch.empty()`` → ``put()`` → ``zero()`` cycle. Received batches are
-routed into the active batch directly rather than staged in
-``recv_buffer``:
+routed into the active batch directly, without a separate staging buffer:
 
 1. :meth:`Batch.empty() <nvalchemi.data.Batch.empty>` allocates storage
    with zero graphs but full capacity.

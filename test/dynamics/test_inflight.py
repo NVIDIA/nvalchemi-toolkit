@@ -1494,10 +1494,10 @@ class TestPipelinePerGraphPriming:
 
     @pytest.mark.parametrize("fused_stage", [False, True])
     @pytest.mark.parametrize("via_overflow", [False, True])
-    def test_recv_buffer_placeholder_output_does_not_count_as_received(
+    def test_local_placeholder_output_does_not_count_as_received(
         self, fused_stage: bool, via_overflow: bool
     ) -> None:
-        """A recv-buffer field the prior stage never sent does not skip priming."""
+        """A local field the prior stage never sent does not skip priming."""
         sink = HostMemory(capacity=10)
         stage, sampler, pipeline = self._make_stage(
             fused_stage,
@@ -1509,7 +1509,7 @@ class TestPipelinePerGraphPriming:
         stage.__needs_keys__ = {"forces", "energy"}
         template = initialize_batch_for_dynamics(sampler.build_initial_batch())
         stage._ensure_buffers(template)
-        assert "energy" in stage.recv_buffer
+        assert "energy" in template
         if via_overflow:
             # A full stage sends arrivals to the sink until room opens up.
             stage.active_batch = template

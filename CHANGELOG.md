@@ -26,7 +26,8 @@
   stage sinks, direct writes, and DomainParallel snapshot hooks. Live batches
   keep their neighbor tensors.
 - Received pipeline samples bypass template-buffer copies so missing outputs
-  trigger force priming.
+  trigger force priming. Remove the unused receive staging buffer and its
+  per-step zeroing.
 - Distributed pipelines retain and retry graduates that do not fit the send
   buffer, without dropping them during in-flight sampler refills.
 - Pipeline receive templates retain their field layout when stages add

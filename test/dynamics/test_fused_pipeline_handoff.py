@@ -142,7 +142,6 @@ class TestFusedStageOnReceive:
         assert not batch.reprime_pending.any()
         assert (batch.n_steps_counter_0 == 0).all()
         torch.testing.assert_close(batch.system_id, incoming.system_id)
-        assert stage.recv_buffer.num_graphs == 0
         assert batch.reprime_pending.shape == (n_graphs, 1)
         assert batch.n_steps_counter_0.shape == (n_graphs, 1)
 

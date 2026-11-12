@@ -156,7 +156,7 @@ def requires_grad_ctx(
 
 
 class BufferConfig(BaseModel):
-    """Pre-allocated send/receive buffer capacities for pipeline communication.
+    """Send-buffer capacities for pipeline communication.
 
     A ``BufferConfig`` declares the maximum size of the ``Batch`` that a
     distributed dynamics stage may exchange with a neighbouring rank. The
@@ -506,7 +506,7 @@ class _CommunicationMixin:
         One of ``"sync"``, ``"async_recv"``, or ``"fully_async"``.
         Default ``"sync"``.
     buffer_config : BufferConfig
-        Pre-allocation capacities for send/recv communication buffers.
+        Pre-allocation capacities for send buffers.
         **Required** when ``prior_rank`` or ``next_rank`` is set to a
         valid rank.  A ``ValueError`` is raised at construction if
         omitted for a stage that has neighbors.
@@ -633,7 +633,7 @@ class _CommunicationMixin:
             additionally stores the send handle and drains it at the start
             of the next ``_prestep_sync_buffers`` call.
         buffer_config : BufferConfig | None, optional
-            Pre-allocation capacities for send/recv buffers.  Buffers
+            Pre-allocation capacities for send buffers.  Buffers
             are created lazily via ``Batch.empty()`` on the first step
             using the first concrete batch as a template.  **Required**
             when ``prior_rank`` or ``next_rank`` is a valid rank;
@@ -696,7 +696,6 @@ class _CommunicationMixin:
                 "Pre-allocated buffers are mandatory for inter-rank communication."
             )
         self.send_buffer: Batch | None = None
-        self.recv_buffer: Batch | None = None
         self._recv_template: Batch | None = None
         self.debug_mode = debug_mode
 
@@ -708,7 +707,7 @@ class _CommunicationMixin:
         return next_rank or prior_rank
 
     def _ensure_buffers(self, template: Batch) -> None:
-        """Lazily create send/recv buffers from the first concrete batch.
+        """Lazily create the send buffer from the first concrete batch.
 
         Called automatically at the start of the first communication
         step when ``buffer_config`` is set.  Uses *template* (the first
@@ -723,27 +722,16 @@ class _CommunicationMixin:
         if self.buffer_config is None:
             return
         cfg = self.buffer_config
-        need_send = self.send_buffer is None and self.next_rank is not None
-        need_recv = self.recv_buffer is None and self.prior_rank is not None
-        if not (need_send or need_recv):
+        if self.send_buffer is not None or self.next_rank is None:
             return
         template = self._transport_template(template)
-        if need_send:
-            self.send_buffer = Batch.empty(
-                num_systems=cfg.num_systems,
-                num_nodes=cfg.num_nodes,
-                num_edges=cfg.num_edges,
-                template=template,
-                device=self.device,
-            )
-        if need_recv:
-            self.recv_buffer = Batch.empty(
-                num_systems=cfg.num_systems,
-                num_nodes=cfg.num_nodes,
-                num_edges=cfg.num_edges,
-                template=template,
-                device=self.device,
-            )
+        self.send_buffer = Batch.empty(
+            num_systems=cfg.num_systems,
+            num_nodes=cfg.num_nodes,
+            num_edges=cfg.num_edges,
+            template=template,
+            device=self.device,
+        )
 
     def _transport_template(self, template: Batch) -> Batch:
         """Return *template* without its edges level when buffers carry no edges.
@@ -1269,10 +1257,9 @@ class _CommunicationMixin:
     def _recv_to_batch(self, incoming: Batch) -> None:
         """Route received data into the active batch or overflow sinks.
 
-        *incoming* is routed directly rather than through ``recv_buffer``.
-        The buffer's fields follow its template, so a copy could carry
-        placeholder outputs the prior stage never sent and hide that
-        arrivals need repriming.
+        *incoming* is routed directly into the active batch.
+        Staging through a local template could add placeholder outputs
+        the prior stage never sent and hide that arrivals need repriming.
 
         Parameters
         ----------
@@ -1458,13 +1445,12 @@ class _CommunicationMixin:
     def _prestep_sync_buffers(self) -> None:
         """Synchronize buffers before a dynamics step.
 
-        If this stage has a prior rank, zeros the send buffer and receive
-        buffer, then receives data from the prior stage via ``Batch.irecv``.
+        If this stage has a prior rank, zeros the send buffer if present,
+        then receives data from the prior stage via ``Batch.irecv``.
 
         In ``"sync"`` mode the receive completes inline and incoming
-        data is staged through the receive buffer (if present) into the
-        active batch via :meth:`_recv_to_batch`.  In ``"async_recv"`` and
-        ``"fully_async"`` modes the receive handle is stored in
+        data is routed directly into the active batch via :meth:`_recv_to_batch`.
+        In ``"async_recv"`` and ``"fully_async"`` modes the receive handle is stored in
         ``_pending_recv_handle`` and the caller must invoke
         ``_complete_pending_recv`` before accessing ``active_batch``.
 
@@ -1491,15 +1477,12 @@ class _CommunicationMixin:
         if self.prior_rank is not None:
             if self.send_buffer is not None:
                 self.send_buffer.zero()
-            if self.recv_buffer is not None:
-                self.recv_buffer.zero()
 
             if self._recv_template is not None:
                 # Match the sender's send buffer, which omits edges the same way.
                 self._recv_template = self._transport_template(self._recv_template)
             # Receive with _recv_template, which matches what the sender transmits.
-            # The receive buffer is built from this stage's own batch, so it can hold
-            # bookkeeping fields the sender never sends.
+            # Local batches can carry bookkeeping fields the sender never sends.
             template = self._recv_template
             if self.debug_mode:
                 logger.debug(
@@ -1535,9 +1518,8 @@ class _CommunicationMixin:
         In ``"sync"`` mode this is a no-op because
         ``_prestep_sync_buffers`` already completed the receive inline.
         In ``"async_recv"`` and ``"fully_async"`` modes, this method
-        calls ``wait()`` on the stored receive handle and stages the
-        incoming batch through the receive buffer (if present) into the
-        active batch via :meth:`_recv_to_batch`.
+        calls ``wait()`` on the stored receive handle and routes the
+        incoming batch directly into the active batch via :meth:`_recv_to_batch`.
 
         After processing incoming data, any remaining capacity in the
         active batch is backfilled from overflow sinks via
