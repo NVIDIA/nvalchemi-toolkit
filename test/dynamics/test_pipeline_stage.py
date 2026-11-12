@@ -38,6 +38,7 @@ from nvalchemi.dynamics.base import (
     BufferConfig,
     ConvergenceHook,
     DistributedPipeline,
+    DynamicsStage,
     _CommunicationMixin,
 )
 from nvalchemi.dynamics.demo import DemoDynamics
@@ -1728,6 +1729,180 @@ class TestPoststepBackPressure:
 
         assert stage.active_batch.system_id.view(-1).tolist() == [2]
 
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    @pytest.mark.parametrize("next_rank", [None, 1])
+    @pytest.mark.parametrize(
+        "hook_stage", [DynamicsStage.BEFORE_STEP, DynamicsStage.AFTER_STEP]
+    )
+    def test_hook_finished_graphs_reach_destination(
+        self,
+        comm_mode: str,
+        next_rank: int | None,
+        hook_stage: DynamicsStage,
+        device: str,
+    ) -> None:
+        """Status-only graduates reach the next stage or sink, including retries."""
+        batch = _make_batch_with_system(num_graphs=3).to(device)
+        batch["status"] = torch.zeros(3, 1, dtype=torch.long, device=device)
+        batch["system_id"] = torch.arange(3, device=device).view(-1, 1)
+        batch["velocities"] = torch.ones_like(batch.positions)
+        batch["atomic_masses"] = torch.ones(batch.num_nodes, device=device)
+        batch["forces"] = torch.zeros_like(batch.positions)
+        sink = HostMemory(capacity=3)
+
+        def finish_graphs(ctx, stage):
+            status = ctx.batch.status.view(-1)
+            status[ctx.batch.system_id.view(-1) < 2] = ctx.workflow.exit_status
+
+        hook = Mock(
+            spec=["stage", "frequency", "__call__"],
+            stage=hook_stage,
+            frequency=1,
+        )
+        hook.side_effect = finish_graphs
+        stage = DemoDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            n_steps=10,
+            active_batch=batch,
+            exit_status=2,
+            prior_rank=0 if next_rank is None else None,
+            next_rank=next_rank,
+            buffer_config=BufferConfig(num_systems=1, num_nodes=3, num_edges=0),
+            sinks=[sink],
+            hooks=[hook],
+            device_type=device,
+            comm_mode=comm_mode,
+        )
+        stage._ensure_buffers(batch)
+        sent_ids = []
+        with (
+            patch.object(stage, "compute"),
+            patch.object(Batch, "isend", return_value=Mock()),
+        ):
+            for iteration in range(2):
+                with patch(
+                    "torch.where",
+                    side_effect=AssertionError("Unexpected step status scan"),
+                ):
+                    stage.active_batch, converged = stage.step(stage.active_batch)
+                assert converged is None
+                assert stage._last_converged is None
+                if iteration == 0:
+                    assert stage._num_unsent_graduates == 0
+                stage._poststep_sync_buffers(converged)
+                if next_rank is not None:
+                    sent_ids.extend(stage.send_buffer.system_id.view(-1).tolist())
+
+        if next_rank is None:
+            assert sink.read().system_id.view(-1).tolist() == [0, 1]
+        else:
+            assert sent_ids == [0, 1]
+        assert stage.active_batch.system_id.view(-1).tolist() == [2]
+        assert stage._num_unsent_graduates == 0
+
+    @pytest.mark.parametrize("waiting_count", [0, 1])
+    def test_step_combines_hook_and_convergence_graduates(
+        self, waiting_count: int, device: str
+    ) -> None:
+        """Reporting hook graduates preserves the convergence hook context."""
+        batch = _make_batch_with_system(num_graphs=2).to(device)
+        batch["status"] = torch.zeros(2, 1, dtype=torch.long, device=device)
+        batch["velocities"] = torch.ones_like(batch.positions)
+        batch["atomic_masses"] = torch.ones(batch.num_nodes, device=device)
+        batch["forces"] = torch.zeros_like(batch.positions)
+
+        def finish_graph(ctx, stage):
+            ctx.batch.status[0] = ctx.workflow.exit_status
+
+        hook = Mock(
+            spec=["stage", "frequency", "__call__"],
+            stage=DynamicsStage.AFTER_STEP,
+            frequency=1,
+            side_effect=finish_graph,
+        )
+        observer = Mock(
+            spec=["stage", "frequency", "__call__"],
+            stage=DynamicsStage.ON_CONVERGE,
+            frequency=1,
+        )
+        stage = DemoDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            n_steps=10,
+            next_rank=1,
+            active_batch=batch,
+            hooks=[hook, observer],
+            buffer_config=_DEFAULT_CFG,
+            device_type=device,
+        )
+        with (
+            patch.object(stage, "compute"),
+            patch.object(
+                stage,
+                "_check_convergence",
+                return_value=torch.tensor([1], device=device),
+            ),
+        ):
+            _, graduates = stage.step(batch)
+
+        assert graduates.tolist() == [1]
+        assert stage._last_converged.tolist() == [1]
+        observer.assert_called_once()
+        assert observer.call_args.args[0].converged_mask.tolist() == [False, True]
+
+        stage._ensure_buffers(batch)
+        stage._num_unsent_graduates = waiting_count
+        with (
+            patch.object(Batch, "isend", return_value=Mock()),
+            patch.object(stage, "_populate_send_buffer") as populate,
+            patch("torch.where", wraps=torch.where) as where,
+        ):
+            stage._poststep_sync_buffers(graduates)
+        populate.assert_called_once()
+        assert populate.call_args.args[0].tolist() == [0, 1]
+        assert len([call for call in where.call_args_list if len(call.args) == 1]) == 1
+        assert stage._pending_hook_graduates is None
+
+    @pytest.mark.parametrize("next_rank", [None, -1])
+    @pytest.mark.parametrize("finishes_graphs", [False, True])
+    def test_standalone_hooks_do_not_extract_graduate_indices(
+        self, next_rank: int | None, finishes_graphs: bool, device: str
+    ) -> None:
+        """Standalone steps and runs keep convergence results without scanning."""
+        batch = _make_batch_with_system(num_graphs=2).to(device)
+        batch["status"] = torch.zeros(2, 1, dtype=torch.long, device=device)
+        batch["velocities"] = torch.ones_like(batch.positions)
+        batch["atomic_masses"] = torch.ones(batch.num_nodes, device=device)
+        batch["forces"] = torch.zeros_like(batch.positions)
+
+        def finish_graphs(ctx, stage):
+            if finishes_graphs:
+                ctx.batch.status.fill_(ctx.workflow.exit_status)
+
+        hook = Mock(
+            spec=["stage", "frequency", "__call__"],
+            stage=DynamicsStage.AFTER_STEP,
+            frequency=1,
+            side_effect=finish_graphs,
+        )
+        stage = DemoDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            n_steps=2,
+            next_rank=next_rank,
+            hooks=[hook],
+            sinks=[HostMemory(capacity=2)],
+            device_type=device,
+        )
+        with (
+            patch.object(stage, "compute"),
+            patch("torch.where", side_effect=AssertionError("Unexpected status scan")),
+        ):
+            _, converged = stage.step(batch)
+            stage.run(batch)
+
+        assert converged is None
+        assert stage._pending_hook_graduates is None
+        assert stage.step_count == 3
+
     def test_empty_batch_clears_waiting_count(self) -> None:
         """Removing the active batch cannot leave retries enabled indefinitely."""
         batch = _make_batch_with_system(num_graphs=1)
@@ -1741,12 +1916,14 @@ class TestPoststepBackPressure:
         stage._ensure_buffers(batch)
         stage.active_batch = None
         stage._num_unsent_graduates = 1
+        stage._pending_hook_graduates = torch.ones(1, dtype=torch.bool)
         with (
             patch.object(Batch, "isend", return_value=Mock()),
             patch("torch.where", side_effect=AssertionError("Unexpected status scan")),
         ):
             stage._poststep_sync_buffers(None)
         assert stage._num_unsent_graduates == 0
+        assert stage._pending_hook_graduates is None
 
     @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
     @pytest.mark.parametrize("send_capacity", [1, 2])
@@ -1924,7 +2101,7 @@ class TestPoststepBackPressure:
         torch.testing.assert_close(stage.active_batch.positions, retained_positions)
 
     def test_plain_final_stage_stores_reported_graduates(self) -> None:
-        """The final stage stores the reported graduates without a retry scan."""
+        """The final stage stores reported and status-marked graduates."""
         batch = _make_batch_with_system(num_graphs=3)
         batch["status"] = torch.tensor([[0], [2], [0]])
         batch["system_id"] = torch.arange(3).view(-1, 1)

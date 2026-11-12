@@ -557,6 +557,9 @@ class _CommunicationMixin:
         ``None`` when no send is pending.
     _num_unsent_graduates : int
         Host count of graduates left in the active batch after a send.
+    _pending_hook_graduates : torch.Tensor | None
+        Device mask of graphs finished by hooks in the last plain pipeline step.
+        Consumed by buffer synchronization before batch membership changes.
     _stream : torch.cuda.Stream | None
         The torch CUDA stream created when entering the context manager
         (see :attr:`torch_stream`).  ``None`` when outside a ``with``
@@ -686,6 +689,7 @@ class _CommunicationMixin:
         self._pending_recv_handle: Any = None
         self._pending_send_handle: Any = None
         self._num_unsent_graduates = 0
+        self._pending_hook_graduates: torch.Tensor | None = None
         self._stream: torch.cuda.Stream | None = None
         self._wp_stream: wp.Stream | None = None
         self._stream_ctx: ExitStack | None = None
@@ -1116,6 +1120,7 @@ class _CommunicationMixin:
         A further change to ``[C, D, E, F]`` before admission hooks run composes
         the mapping to ``[2, -1, -1, -1]``, still relative to the last dispatch.
         """
+        self._pending_hook_graduates = None
         pending_graphs = self._pending_graph_indices
         observed = self._admission_initialized or pending_graphs is not None
         self._admission_initialized = False
@@ -1640,9 +1645,10 @@ class _CommunicationMixin:
     ) -> None:
         """Synchronize buffers after a dynamics step.
 
-        When an earlier send left graduates waiting, scan their status and
-        combine them with ``converged_indices``. A host count skips this scan
-        when no graduates are waiting, and final stages never need it.
+        Combine convergence indices with the device mask of graphs finished
+        by hooks in a plain pipeline step. If an earlier send left graduates
+        waiting, include their status too. Extract indices once for the combined
+        mask. Without hook graduates or waiting sends, skip the status scan.
 
         If a next rank exists with available capacity, graduated samples are
         copied into ``send_buffer`` via :meth:`_populate_send_buffer`. The send
@@ -1664,9 +1670,9 @@ class _CommunicationMixin:
         ----------
         converged_indices : torch.Tensor | None, optional
             Integer indices of converged samples in the active batch.
-            Typically obtained from ``BaseDynamics._check_convergence()``.
-            If ``None``, only graduates left waiting by an earlier send
-            are considered.
+            Returned by ``BaseDynamics.step()``. Hook graduates are supplied
+            separately through the pending device mask. If ``None``, only hook
+            graduates and graduates waiting after an earlier send are considered.
         """
         if self.next_rank is not None:
             # The send buffer is reused every iteration. A fully asynchronous
@@ -1676,15 +1682,23 @@ class _CommunicationMixin:
                 self._pending_send_handle = None
             self.send_buffer.zero()
 
-            if self._num_unsent_graduates:
-                batch = self.active_batch
-                exit_status = getattr(self, "exit_status", None)
-                status = getattr(batch, "status", None) if batch is not None else None
-                if status is not None and exit_status is not None:
-                    graduated = status.view(-1)[: batch.num_graphs] >= exit_status
-                    if converged_indices is not None:
-                        graduated[converged_indices] = True
-                    converged_indices = torch.where(graduated)[0]
+        # Consume the mask before sending or removing graphs changes its layout.
+        graduated = self._pending_hook_graduates
+        self._pending_hook_graduates = None
+        batch = self.active_batch
+        if batch is None:
+            graduated = None
+        elif self.next_rank is not None and self._num_unsent_graduates:
+            exit_status = getattr(self, "exit_status", None)
+            status = getattr(batch, "status", None)
+            if status is not None and exit_status is not None:
+                waiting = status.view(-1)[: batch.num_graphs] >= exit_status
+                graduated = waiting if graduated is None else graduated | waiting
+
+        if graduated is not None:
+            if converged_indices is not None:
+                graduated[converged_indices] = True
+            converged_indices = torch.where(graduated)[0]
 
         has_converged = converged_indices is not None and converged_indices.numel() > 0
 
@@ -3257,6 +3271,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         tuple[Batch, torch.Tensor | None]
             The updated batch after the step, and a 1-D integer tensor
             of converged sample indices (or ``None`` if nothing converged).
+            Plain pipeline stages retain hook graduates as a device mask for
+            buffer synchronization without changing these convergence results.
         """
         self._ensure_state_initialized(batch)
         self._ensure_admission_initialized(batch)
@@ -3379,6 +3395,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             )
 
         self.step_count += 1
+
+        self._pending_hook_graduates = None
+        if self.has_neighbor and active_graph_mask is not None and self.hooks:
+            # Keep graduation on the device. Only pipeline communication needs
+            # indices; standalone steps retain their convergence-only result.
+            still_active = self.active_graph_mask(batch, self.exit_status)
+            self._pending_hook_graduates = active_graph_mask & ~still_active
 
         return batch, converged
 

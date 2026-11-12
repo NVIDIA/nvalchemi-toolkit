@@ -21,6 +21,8 @@
 
 ### Fixed
 
+- Plain pipeline stages detect graphs finished by status-setting hooks and
+  send them downstream or write them to final result sinks.
 - `HostMemory`, `GPUBuffer`, and `ZarrData` omit temporary neighbor data so
   samples with different neighbor widths can be stored together. This covers
   stage sinks, direct writes, and DomainParallel snapshot hooks. Live batches
