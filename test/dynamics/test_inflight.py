@@ -1655,6 +1655,74 @@ class TestRefillCheck:
         self.model = DemoModelWrapper(DemoModel())
 
     @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("failure", ["full", "write"])
+    @pytest.mark.parametrize("all_graduated", [False, True])
+    def test_failed_sink_preserves_pending_samples_for_retry(
+        self, fused_stage: bool, failure: str, all_graduated: bool
+    ) -> None:
+        """A failed result write leaves replacements available for retry."""
+        sampler = SizeAwareSampler(MockDataset([(2, 0)] * 4), max_batch_size=2)
+        sink = HostMemory(capacity=2)
+        dynamics = BaseDynamics(model=self.model, device_type="cpu")
+        stage = (
+            FusedStage(
+                sub_stages=[(0, dynamics)],
+                sampler=sampler,
+                sinks=[sink],
+                device_type="cpu",
+            )
+            if fused_stage
+            else BaseDynamics(
+                model=self.model, sampler=sampler, sinks=[sink], device_type="cpu"
+            )
+        )
+        batch = sampler.build_initial_batch()
+        batch.status[1] = stage.exit_status
+        if all_graduated:
+            batch.status[0] = stage.exit_status
+        original = batch.clone()
+        if failure == "full":
+            sink.write(batch)
+
+        with patch.object(
+            sampler,
+            "request_replacements_budget",
+            wraps=sampler.request_replacements_budget,
+        ) as request:
+            if failure == "write":
+                with (
+                    patch.object(
+                        sink, "write", side_effect=RuntimeError("write failed")
+                    ),
+                    pytest.raises(RuntimeError, match="write failed"),
+                ):
+                    stage.refill_check(batch, stage.exit_status)
+            else:
+                with pytest.raises(RuntimeError, match="result"):
+                    stage.refill_check(batch, stage.exit_status)
+            request.assert_not_called()
+
+        assert len(sampler) == 2
+        assert not sampler.exhausted
+        assert torch.equal(batch.positions, original.positions)
+        assert torch.equal(batch.status, original.status)
+        assert torch.equal(batch.system_id, original.system_id)
+        assert not stage.done
+
+        sink.zero()
+        result = stage.refill_check(batch, stage.exit_status)
+
+        assert result is not None
+        assert result.system_id.view(-1).tolist() == (
+            [2, 3] if all_graduated else [0, 2]
+        )
+        assert (result.status == 0).all()
+        assert sink.read().system_id.view(-1).tolist() == (
+            [0, 1] if all_graduated else [1]
+        )
+        assert len(sampler) == (0 if all_graduated else 1)
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
     @pytest.mark.parametrize("limit", ["atoms", "samples"])
     def test_fill_full_batch_does_not_query_sampler(
         self, fused_stage: bool, limit: str

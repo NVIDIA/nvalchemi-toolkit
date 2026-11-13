@@ -3603,14 +3603,14 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             if self.sampler.max_batch_size is not None
             else None
         )
+        # Save results before consuming replacements so a failed write can retry.
+        if self.sinks:
+            self._write_to_sinks(batch, mask=graduated_mask)
         replacements = self.sampler.request_replacements_budget(
             atom_budget=atom_budget,
             edge_budget=edge_budget,
             max_count=max_new,
         )
-
-        if self.sinks:
-            self._write_to_sinks(batch, mask=graduated_mask)
         return self._apply_replacements(
             batch, remaining_indices, replacements, remaining_units
         )
