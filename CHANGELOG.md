@@ -22,6 +22,13 @@
   and extension). It replaces the 14 skills under `.claude/skills/`, which are
   removed from the repository.
 
+### Breaking Changes
+
+- Custom `DataSink.drain` overrides must accept `max_samples: int | None = None`.
+  Pipeline refills now pass `max_samples=`. Overrides using `drain(self)` must
+  update their signature and honor the limit, leaving remaining samples stored
+  in order.
+
 ### Fixed
 
 - `DistributedPipeline` sends that reach the send buffer's atom or edge
