@@ -216,14 +216,16 @@ Details: [dynamics.md][doc-dyn], example [01_distributed_pipeline.py][ex-pipe].
 
 When `send_buffer` has limited capacity (via `BufferConfig`):
 
-- Transfers select at most the available graph capacity, keeping complete
-  groups for grouped batches. A group larger than the buffer raises `ValueError`.
-- Every selected graph must fit the graph, atom, and edge capacities;
-  otherwise the transfer raises `ValueError` without removing graphs.
-- Graphs or groups beyond the selected graph-count limit remain in the
-  active batch as **no-ops**.
+- Transfers copy only selected graphs that fit all transported levels,
+  including graph, atom, and edge capacities. Grouped batches send a prefix
+  of complete selected groups in batch order.
+- Selected graphs or groups that are not copied remain in the active batch
+  for a later step as **no-ops**.
   Their positions and velocities are saved before the integrator and
   restored after it runs.
+- A mask selecting only part of a group raises `ValueError`. A nonempty
+  selection also raises if an empty send buffer cannot fit any selected
+  graph or group. In either case, the active batch is unchanged.
 - Without `BufferConfig`, all converged samples are sent without
   constraints (backward compatible).
 
@@ -239,7 +241,7 @@ the active batch, and drains `overflow_sinks` (never `sinks`).
 | --- | --- |
 | `_recv_to_batch(incoming)` | Route received data directly into active batch or overflow sinks |
 | `_buffer_to_batch(incoming)` | Append to active batch, overflow to `overflow_sinks` if full; admits complete groups |
-| `_batch_to_buffer(mask)` | Copy selected graduated samples into send buffer, trim active batch; raise if any do not fit |
+| `_batch_to_buffer(mask)` | Copy graduated samples that fit, trim only copied samples; retain the rest for a later step |
 | `_overflow_to_sinks(batch)` | Write pending samples to the first overflow sink with room for all of them |
 | `_write_to_sinks(batch)` | Write finished samples to the first result sink with room for all of them |
 | `_drain_sinks_to_batch()` | Pull from `overflow_sinks` back into active batch when room available |

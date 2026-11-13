@@ -240,15 +240,16 @@ Back-pressure
 
 When the ``send_buffer`` capacity is limited:
 
-- Transfers select at most the available graph capacity, keeping complete
-  groups for grouped batches. Excess graphs or groups wait for a later step.
-- A group larger than the buffer's graph capacity raises ``ValueError``.
-- Every selected graph must fit the graph, atom, and edge capacities.
-  Otherwise, ``ValueError`` is raised before removing graphs or sending.
+- Transfers copy only selected graphs that fit all transported levels,
+  including graph, atom, and edge capacities. Grouped batches send a prefix
+  of complete selected groups in batch order.
+- A mask selecting only part of a group raises ``ValueError``. A nonempty
+  selection also raises if an empty send buffer cannot fit any selected
+  graph or group. In either case, the active batch is unchanged.
 - The active batch is replaced by a tight copy (via ``trim()``) that
-  excludes the graduated samples.
-- Excess converged graphs or groups beyond the selected graph-count limit
-  remain in the active batch.
+  excludes only the copied samples.
+- Selected graphs or groups that are not copied remain in the active batch
+  for a later step.
 - ``step()`` treats them as no-ops: their positions and velocities are
   saved before the integrator and restored after (the ``active_mask``
   logic in :meth:`BaseDynamics.step() <nvalchemi.dynamics.BaseDynamics.step>`).
@@ -284,8 +285,11 @@ several helper methods for routing data between buffers:
   batch into the send buffer via :meth:`put()
   <nvalchemi.data.Batch.put>`, then replaces the active batch with a
   tight copy via :meth:`trim() <nvalchemi.data.Batch.trim>` (or sets
-  it to ``None`` if every graph was graduated). Raises ``ValueError``
-  if any selected graph cannot be copied, leaving the active batch unchanged.
+  it to ``None`` if every graph was copied). Selected samples that do not
+  fit stay in the active batch for a later step. Raises ``ValueError`` if
+  the mask selects only part of a group, or if a nonempty selection cannot
+  copy any graph or group into an empty send buffer. These errors leave
+  the active batch unchanged.
 
 - **_populate_send_buffer(converged_indices)**: Creates a boolean mask
   from converged indices and delegates to ``_batch_to_buffer``.  Does
