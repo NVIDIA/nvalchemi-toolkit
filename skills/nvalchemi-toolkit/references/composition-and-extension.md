@@ -226,8 +226,8 @@ When `send_buffer` has limited capacity (via `BufferConfig`):
 - A mask selecting only part of a group raises `ValueError`. A nonempty
   selection also raises if an empty send buffer cannot fit any selected
   graph or group. In either case, the active batch is unchanged.
-- Without `BufferConfig`, all converged samples are sent without
-  constraints (backward compatible).
+- Every stage in a `DistributedPipeline` must have `buffer_config` set.
+  Adjacent stages must use identical `BufferConfig` values.
 
 | Layer | Attribute | Purpose |
 | --- | --- | --- |
