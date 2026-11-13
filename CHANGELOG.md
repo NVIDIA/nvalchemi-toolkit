@@ -32,7 +32,9 @@
   per-step zeroing.
 - Distributed pipelines retain and retry graduates that do not fit the send
   buffer. `fill_available()` fills free batch capacity from the sampler without
-  removing unsent graduates.
+  removing unsent graduates. Plain pipeline stages initialize missing `status`
+  on hand-built batches so unsent graduates stay frozen. Standalone dynamics
+  behavior is unchanged.
 - Pipeline receive templates retain their field layout when stages add
   bookkeeping fields to incoming batches.
 - `DistributedPipeline` no longer drains finished results back into

@@ -1927,8 +1927,9 @@ class TestPoststepBackPressure:
 
     @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
     @pytest.mark.parametrize("send_capacity", [1, 2])
+    @pytest.mark.parametrize("has_status", [False, True])
     def test_default_convergence_freezes_unsent_graduates(
-        self, comm_mode: str, send_capacity: int, device: str
+        self, comm_mode: str, send_capacity: int, has_status: bool, device: str
     ) -> None:
         """Default convergence keeps unsent graduates frozen until transfer."""
         batch = _make_batch_with_system(num_graphs=4).to(device)
@@ -1936,7 +1937,10 @@ class TestPoststepBackPressure:
         batch["atomic_masses"] = torch.ones(batch.num_nodes, device=device)
         batch["forces"] = torch.zeros_like(batch.positions)
         batch["system_id"] = torch.arange(4, device=device).view(-1, 1)
-        batch["status"] = torch.zeros(4, 1, dtype=torch.long, device=device)
+        if has_status:
+            batch["status"] = torch.zeros(4, 1, dtype=torch.long, device=device)
+        else:
+            assert "status" not in batch
         stage = DemoDynamics(
             model=DemoModelWrapper(DemoModel()),
             n_steps=10,
@@ -1963,6 +1967,9 @@ class TestPoststepBackPressure:
         ):
             _, converged = stage.step(batch)
             assert converged.tolist() == [0, 1, 2]
+            assert batch.status.dtype == torch.long
+            assert batch.status.device == batch.positions.device
+            assert batch.status.view(-1).tolist() == [2, 2, 2, 0]
             stage._ensure_buffers(batch)
             stage._poststep_sync_buffers(converged)
             sent_ids = stage.send_buffer.system_id.view(-1)[
@@ -1988,6 +1995,32 @@ class TestPoststepBackPressure:
 
         assert sent_ids == [0, 1, 2]
         assert stage.active_batch.system_id.view(-1).tolist() == [3]
+
+    @pytest.mark.parametrize("next_rank", [None, -1])
+    def test_standalone_step_does_not_add_status_or_freeze_graduates(
+        self, next_rank: int | None
+    ) -> None:
+        """Standalone steps keep updating a hand-built batch after convergence."""
+        batch = _make_batch_with_system(num_graphs=2)
+        batch["velocities"] = torch.ones_like(batch.positions)
+        batch["atomic_masses"] = torch.ones(batch.num_nodes)
+        batch["forces"] = torch.zeros_like(batch.positions)
+        stage = DemoDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            n_steps=10,
+            convergence_hook=ConvergenceHook.from_fmax(),
+            next_rank=next_rank,
+            device_type="cpu",
+        )
+
+        with patch.object(stage, "compute"):
+            _, converged = stage.step(batch)
+            assert converged.tolist() == [0, 1]
+            positions = batch.positions.clone()
+            stage.step(batch)
+
+        assert "status" not in batch
+        assert not torch.equal(batch.positions, positions)
 
     def test_marked_graduates_are_admitted_at_entry_status(self, device: str) -> None:
         """Graduates sent with a raised status are reset when the next stage admits them."""

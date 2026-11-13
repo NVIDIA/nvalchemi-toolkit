@@ -3259,7 +3259,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         integrator (pre_update/post_update). Their positions and velocities
         are preserved through the step. This enables back-pressure handling
         in pipeline mode where converged samples may remain in the active
-        batch when the send buffer is full.
+        batch when the send buffer is full. A stage with a downstream rank
+        initializes missing ``status`` from its registered bookkeeping default.
+        Standalone execution does not add this field.
 
         Parameters
         ----------
@@ -3274,6 +3276,12 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             Plain pipeline stages retain hook graduates as a device mask for
             buffer synchronization without changing these convergence results.
         """
+        if self.next_rank not in (None, -1) and "status" not in batch:
+            # Pipeline graduates need status so they can wait for a later send.
+            num_systems = max(batch.num_graphs, batch.system_capacity)
+            batch["status"] = self._bookkeeping_keys["status"](
+                num_systems, batch.device
+            )
         self._ensure_state_initialized(batch)
         self._ensure_admission_initialized(batch)
         self._check_hook_compatibility()
@@ -3374,7 +3382,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             if status is not None and self.next_rank not in (None, -1):
                 # Default convergence reports indices without migrating status.
                 # Marking them keeps graduates frozen while they wait to send
-                # to the next pipeline stage. Hand-built batches need ``status``.
+                # to the next pipeline stage.
                 flat_status = status.view(-1)
                 flat_status[converged] = flat_status[converged].clamp_min(
                     self.exit_status
