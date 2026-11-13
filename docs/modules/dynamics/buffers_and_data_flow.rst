@@ -444,8 +444,8 @@ available:
   of :meth:`index_select() <nvalchemi.data.Batch.index_select>` due to
   Warp int32/int64 dtype incompatibility.
 
-- :class:`~nvalchemi.dynamics.HostMemory`: CPU-resident, decomposes
-  batches into :class:`~nvalchemi.data.AtomicData` lists.
+- :class:`~nvalchemi.dynamics.HostMemory`: CPU-resident, stores each write
+  as a CPU copy of the batch.
 
 - :class:`~nvalchemi.dynamics.ZarrData`: Disk-backed, delegates to
   :class:`~nvalchemi.data.AtomicDataZarrWriter`.

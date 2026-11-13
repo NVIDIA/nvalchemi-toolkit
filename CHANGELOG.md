@@ -4,6 +4,15 @@
 
 ### Added
 
+- Single-device in-flight NEB batching via `NEB.run(sampler=..., sinks=...)`
+  with `SizeAwareSampler(by_group=True)`. The updated
+  `examples/advanced/11_batched_neb.py` demonstrates path refilling and
+  compares energy barriers with the static run.
+- `SizeAwareSampler(field_defaults=...)` fills missing node, edge, or system
+  fields on loaded samples so optional fields survive packing. Samples are
+  now modified in place when loaded, including grouped samples, which are no
+  longer cloned.
+- `Batch.concatenate()` combines several batches in one pass.
 - Add the `nvalchemi-toolkit` agent skill under `skills/nvalchemi-toolkit/`: one
   `SKILL.md` that scopes a request and routes to six task notes (data, models,
   dynamics and optimization, training, generative workflows, and composition
@@ -11,6 +20,10 @@
   removed from the repository.
 
 ### Fixed
+
+- `Batch.append()` discards unused buffer rows. Pass `assume_compact=True` to
+  skip this for compact inputs. `HostMemory.write()` trims padding before
+  copying to CPU.
 
 - The fine-tuning guide now passes `--checkpoint-index` to
   `nvalchemi-training spec resume`, the flag the CLI accepts.
