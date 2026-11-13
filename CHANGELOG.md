@@ -27,6 +27,16 @@
 
 - The fine-tuning guide now passes `--checkpoint-index` to
   `nvalchemi-training spec resume`, the flag the CLI accepts.
+- Halo ghost selection for an owned atom that sits past a periodic face of a
+  split axis. `DomainParallel` leaves the split axes unwrapped, and the
+  receivers that share the owner's grid coordinate on that axis get no lattice
+  image there, so such an atom was never offered to them as a ghost and their
+  forces missed a neighbor inside the cutoff. This happens from the first
+  step, not only in long runs: a crystal built with atoms exactly on the
+  domain faces (the hexagonal SiO2 cells, for example) has atoms cross those
+  faces in the first integrator step. Ghost selection now canonicalizes
+  fractions around the owner's own domain instead of into [0, 1), so the atom
+  stays adjacent to its owner for every receiver.
 
 ## 0.3.0
 
