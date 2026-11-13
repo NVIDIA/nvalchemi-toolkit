@@ -1895,6 +1895,40 @@ class TestNEBDistributedPipeline:
         torch.testing.assert_close(batch.forces, expected.forces)
         prime.assert_called_once()
 
+    def test_mid_run_arrival_matches_fresh_engine(self, device: str) -> None:
+        """A path arriving beside a resident path starts with downstream forces."""
+        strategy = NEB(
+            model=_HarmonicModel().to(device),
+            spring=0.5,
+            climbing=ClimbingImageConfig(mode="immediate"),
+            fmax=1e-12,
+            optimizer_kwargs={"device_type": device},
+        )
+        resident, incoming = _BandDataset([(3, 1), (4, 1)], device).paths
+        downstream = strategy.build_engine()
+        downstream._recv_to_batch(resident)
+        for _ in range(3):
+            downstream.step(downstream.active_batch)
+
+        incoming["energy"] = torch.zeros(4, 1, device=device)
+        incoming["forces"] = torch.full_like(incoming.positions, 99.0)
+        reference = strategy.build_engine()
+        reference._recv_to_batch(incoming.clone())
+        expected = reference.active_batch
+        downstream._recv_to_batch(incoming)
+        batch = downstream.active_batch
+        assert batch.reprime_pending.view(-1).tolist() == [False] * 3 + [True] * 4
+
+        # Arrivals spend one shared compute priming while the resident continues.
+        downstream.step(batch)
+        torch.testing.assert_close(batch.positions[3:], expected.positions)
+        assert not batch.reprime_pending.any()
+        for _ in range(3):
+            downstream.step(batch)
+            reference.step(expected)
+            torch.testing.assert_close(batch.positions[3:], expected.positions)
+            torch.testing.assert_close(batch.forces[3:], expected.forces)
+
     @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
     def test_paths_finish_once_and_stay_complete(self, comm_mode: str) -> None:
         """Every path is stored once downstream, whole and in image order."""
