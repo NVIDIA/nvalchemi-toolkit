@@ -1287,6 +1287,52 @@ class TestFieldDefaults:
 class TestGroupedSampling:
     """Complete groups fit atom, edge, and group-count budgets without splitting."""
 
+    @pytest.mark.parametrize("replacement", [False, True])
+    @pytest.mark.parametrize("empty_first", [False, True])
+    @pytest.mark.parametrize("callable_default", [False, True])
+    def test_edge_defaults_allow_empty_levels(
+        self,
+        device: str,
+        replacement: bool,
+        empty_first: bool,
+        callable_default: bool,
+    ) -> None:
+        """Paths with empty edge tensors pack alongside paths with edges."""
+        dataset = MockGroupedDataset([(3, 2, 1)] * 2)
+        empty_index = 0 if empty_first else 1
+        graphs = dataset.groups[empty_index].to_data_list()
+        for graph in graphs:
+            graph.neighbor_list = torch.empty(0, 2, dtype=torch.long)
+        empty_group = Batch.from_data_list(graphs)
+        empty_group.set_group_layout(torch.zeros(3, dtype=torch.long))
+        dataset.groups[empty_index] = empty_group
+        dataset.groups = [group.to(device) for group in dataset.groups]
+        default = (
+            (lambda n, dev: torch.zeros(n, 3, device=dev))
+            if callable_default
+            else False
+        )
+        sampler = SizeAwareSampler(
+            dataset,
+            by_group=True,
+            max_batch_size=2,
+            field_defaults={"edge_flag": ("edge", default)},
+        )
+
+        if replacement:
+            samples = sampler.request_replacements_budget(max_count=2)
+            batch = sampler.assemble_samples(samples, device=device)
+        else:
+            batch = sampler.build_initial_batch()
+
+        payload_shape = (3,) if callable_default else ()
+        assert dataset.groups[empty_index].edge_flag.shape == (0, *payload_shape)
+        assert batch.edge_flag.shape == (3, *payload_shape)
+        assert not batch.edge_flag.any()
+        assert "edge_flag" in batch.keys["edge"]
+        assert batch.group_layout.num_graphs_per_group.tolist() == [3, 3]
+        assert sampler.exhausted
+
     def test_default_requires_existing_segmented_level(self) -> None:
         """Grouped defaults do not materialize a fieldless edge level."""
         dataset = MockGroupedDataset([(3, 2, 0)])

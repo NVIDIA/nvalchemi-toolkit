@@ -372,7 +372,7 @@ class SizeAwareSampler(Sampler[int]):
                 "system": data.num_graphs if isinstance(data, Batch) else 1,
             }
             num_rows = counts[level_name]
-            if isinstance(data, Batch) and num_rows == 0:
+            if isinstance(data, Batch) and not data.level_keys.get(level_name):
                 raise ValueError(
                     f"Field defaults require existing tensors at level '{level}'"
                 )
