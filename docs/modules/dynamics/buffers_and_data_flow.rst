@@ -26,13 +26,13 @@ The three buffer layers
      - Storage
      - Purpose
    * - Communication
-     - ``send_buffer`` / ``recv_buffer`` on :class:`~nvalchemi.dynamics.base._CommunicationMixin`
+     - ``send_buffer`` on :class:`~nvalchemi.dynamics.base._CommunicationMixin`
      - Pre-allocated :meth:`Batch.empty() <nvalchemi.data.Batch.empty>`
      - Zero-copy inter-rank transfer via ``isend`` / ``irecv``
    * - Overflow sinks
-     - :class:`~nvalchemi.dynamics.DataSink` (``GPUBuffer``, ``HostMemory``, ``ZarrData``)
-     - Varies
-     - Staging when active batch is full
+     - ``overflow_sinks``: :class:`~nvalchemi.dynamics.DataSink` (``GPUBuffer``, ``HostMemory``, ``ZarrData``)
+     - Private ``HostMemory`` by default
+     - Received samples waiting for room in the active batch
    * - Active batch
      - ``active_batch`` on :class:`~nvalchemi.dynamics.base._CommunicationMixin`
      - Live :class:`~nvalchemi.data.Batch`
@@ -70,17 +70,19 @@ The three buffer layers
            color="#999999"
 
            irecv [label="Batch.irecv" shape=ellipse fillcolor="#1a1a1a"]
-           recv  [label="Recv Buffer" fillcolor="#4a3315"]
        }
 
        conv -> send [label="_poststep_sync_buffers" style=bold]
        send -> isend [style=bold]
        isend -> irecv [label="prior rank ← → next rank" style=bold color="#ee9040" fontcolor="#ee9040" penwidth=2]
-       irecv -> recv [style=bold]
-       recv -> batch [label="_recv_to_batch" style=bold]
+       irecv -> batch [label="_recv_to_batch" style=bold]
 
-       sinks [label="Overflow Sinks" style="rounded,dashed" fillcolor=none]
-       send -> sinks [label="final rank:\nwrite to sinks" style=dashed color="#999999"]
+       overflow [label="Overflow Sinks" style="rounded,dashed" fillcolor=none]
+       irecv -> overflow [label="excess" style=dashed color="#999999"]
+       overflow -> batch [label="_drain_sinks_to_batch" style=dashed color="#999999"]
+
+       sinks [label="Result Sinks" style="rounded,dashed" fillcolor=none]
+       conv -> sinks [label="final rank:\nwrite results" style=dashed color="#999999"]
    }
 
 Data flows from samplers or upstream ranks into the active batch,
@@ -120,15 +122,15 @@ Communication buffers are configured via
        buffer_config=buffer_config,
    )
 
-**Lazy initialization.** Buffers are created on the first step via
+**Lazy initialization.** Send buffers are created on the first step via
 ``_ensure_buffers()``. The first concrete batch serves as a template
 for attribute keys, dtypes, and trailing shapes (e.g., hidden
 dimensions). This lazy approach is necessary because the attribute
 schema is not known until a real batch appears.
 
-**The buffer lifecycle.**  Communication buffers (``send_buffer`` and
-``recv_buffer``) follow a ``Batch.empty()`` → ``put()`` → ``zero()``
-cycle:
+**The buffer lifecycle.**  The ``send_buffer`` follows a
+``Batch.empty()`` → ``put()`` → ``zero()`` cycle. Received batches are
+routed into the active batch directly, without a separate staging buffer:
 
 1. :meth:`Batch.empty() <nvalchemi.data.Batch.empty>` allocates storage
    with zero graphs but full capacity.
@@ -178,7 +180,7 @@ to coordinate data flow between ranks:
    in async modes the handle is stored for later completion.
 
 2. **_complete_pending_recv()**: Waits on the deferred receive, routes
-   data through the recv buffer into the active batch, and drains
+   the received data into the active batch, and drains
    overflow sinks to backfill any available capacity.
 
 3. **step()**: The dynamics integration step (forward pass, pre_update,
@@ -257,19 +259,19 @@ Data routing helpers
 The :class:`~nvalchemi.dynamics.base._CommunicationMixin` provides
 several helper methods for routing data between buffers:
 
-- **_recv_to_batch(incoming)**: Stages data through the recv buffer
-  into the active batch via ``_buffer_to_batch``, then zeros the
-  recv buffer.
+- **_recv_to_batch(incoming)**: Routes received data into the active
+  batch via ``_buffer_to_batch``. It bypasses the recv buffer so that
+  output checks see only the fields the prior stage sent.
 
 - **_buffer_to_batch(incoming)**: Routes incoming data into the active
-  batch.  Admitted graphs are copied out of the buffer with
+  batch.  Admitted graphs are copied out of *incoming* with
   :meth:`index_select() <nvalchemi.data.Batch.index_select>`, which
   drops buffer padding, and added with :meth:`append()
   <nvalchemi.data.Batch.append>`.  Three cases:
 
   1. No active batch exists: adopt the incoming data directly.
   2. Room available: append to the existing active batch.
-  3. No room: overflow to sinks.
+  3. No room: write to ``overflow_sinks``.
 
 - **_batch_to_buffer(mask)**: Copies graduated samples from the active
   batch into the send buffer via :meth:`put()
@@ -283,16 +285,25 @@ several helper methods for routing data between buffers:
 
 - **_remove_converged_final_stage(converged_indices)**: On the final
   stage, extracts converged graphs via ``index_select``, removes them
-  from the active batch, and writes them to sinks.
+  from the active batch, and writes them to result sinks via
+  ``_write_to_sinks``.
 
 - **_manage_send_handle(handle)**: Stores the send handle for later
   draining (``fully_async``) or waits on it immediately (other modes).
 
-- **_overflow_to_sinks(batch, mask)**: Writes to the first non-full
-  sink in priority order.
+- **_overflow_to_sinks(batch, mask)**: Writes pending samples to the
+  first overflow sink with room for all of them.
 
-- **_drain_sinks_to_batch()**: Pulls samples from sinks back into the
-  active batch when room is available.
+- **_write_to_sinks(batch, mask)**: Writes finished results to the first
+  result sink with room for all of them.
+
+- **_drain_sinks_to_batch()**: Pulls samples from ``overflow_sinks``
+  back into the active batch when room is available. Result sinks are
+  never read.
+
+Built-in result and overflow sinks omit neighbor data to avoid shape mismatches
+between refills. When overflow samples return to the active batch,
+``NeighborListHook`` rebuilds their neighbor data before the model runs.
 
 Sample lifecycle
 ----------------
@@ -379,7 +390,7 @@ samples are continuously replaced from the sampler.
            r0_build  [label="build batch\nfrom sampler"]
            r0_step   [label="run step"]
            r0_send   [label="_poststep_sync_buffers\nsend converged downstream"]
-           r0_refill [label="refill from sampler"]
+           r0_refill [label="refill available capacity\nfrom sampler"]
 
            r0_build -> r0_step -> r0_send -> r0_refill [style=bold]
            r0_refill -> r0_step [label="loop" style=dashed color="#999999"]
@@ -438,17 +449,20 @@ Three :class:`~nvalchemi.dynamics.DataSink` implementations are
 available:
 
 - :class:`~nvalchemi.dynamics.GPUBuffer`: Pre-allocates on first write.
-  Uses :meth:`Batch.put() <nvalchemi.data.Batch.put>` internally. Has a
-  known performance limitation: ``read()`` falls back to
-  :meth:`to_data_list() <nvalchemi.data.Batch.to_data_list>` instead
-  of :meth:`index_select() <nvalchemi.data.Batch.index_select>` due to
-  Warp int32/int64 dtype incompatibility.
+  Writes with :meth:`Batch.put() <nvalchemi.data.Batch.put>` and reads
+  with :meth:`index_select() <nvalchemi.data.Batch.index_select>`.
 
-- :class:`~nvalchemi.dynamics.HostMemory`: CPU-resident, decomposes
-  batches into :class:`~nvalchemi.data.AtomicData` lists.
+- :class:`~nvalchemi.dynamics.HostMemory`: CPU-resident, stores each write
+  as a CPU copy of the batch.
 
 - :class:`~nvalchemi.dynamics.ZarrData`: Disk-backed, delegates to
   :class:`~nvalchemi.data.AtomicDataZarrWriter`.
+
+All three sinks omit temporary neighbor fields, including on direct writes
+and writes from ``DomainParallel`` snapshot hooks. This prevents changing
+neighbor widths from breaking buffer copies, disk appends, or result reads.
+The source batch retains its neighbor tensors, even if a write fails.
+Other fields, including custom edge fields, are preserved.
 
 Sinks are tried in priority order; the first non-full sink receives
 the data.

@@ -56,6 +56,18 @@ failure in tested scripts.
 6. **Record cheaply.** Store per-step results as detached tensors
    (`.detach().clone()`), and convert to Python or files after the run.
 
+### Preserve state when batch membership changes
+
+`BaseDynamics` and `FusedStage` pass a read-only
+`ctx.previous_graph_indices` at `ON_ADMISSION`: each current graph's index at
+its last admission, or `-1` for an arrival, regardless of status. This mapping
+composes membership changes since that admission. First admissions, new runs,
+and rebuilds after complete removal mark every graph new. Fused and sub-stage
+hooks receive the same full-batch mapping. Combine
+`previous_graph_indices < 0` with `active_graph_mask` to select a sub-stage's
+arrivals. Other stages receive `None`. Path hooks can recover previous paths
+using this mapping and their cached layout.
+
 ### Template
 
 This hook records a per-graph quantity every N steps and stops graphs that
@@ -201,6 +213,22 @@ rank. Every stage needs a `buffer_config=BufferConfig(...)` (from
 `n_steps` does not graduate systems in a pipeline; wrap fixed-length stages in
 a `FusedStage`. This `|` differs from the generative `gen | stage` pipeline.
 Details: [dynamics.md][doc-dyn], example [01_distributed_pipeline.py][ex-pipe].
+
+| Layer | Attribute | Purpose |
+| --- | --- | --- |
+| **Overflow sinks** | `overflow_sinks`: `DataSink` list (priority-ordered) | Received samples waiting for room; private `HostMemory` by default |
+| **Result sinks** | `sinks`: `DataSink` list (priority-ordered) | Finished samples; never drained back |
+
+`_complete_pending_recv()` waits on deferred receive, routes into
+the active batch, and drains `overflow_sinks` (never `sinks`).
+
+| Method | Purpose |
+| --- | --- |
+| `_recv_to_batch(incoming)` | Route received data directly into active batch or overflow sinks |
+| `_buffer_to_batch(incoming)` | Append to active batch, overflow to `overflow_sinks` if full |
+| `_overflow_to_sinks(batch)` | Write pending samples to the first overflow sink with room for all of them |
+| `_write_to_sinks(batch)` | Write finished samples to the first result sink with room for all of them |
+| `_drain_sinks_to_batch()` | Pull from `overflow_sinks` back into active batch when room available |
 
 ## Domain decomposition across GPUs
 

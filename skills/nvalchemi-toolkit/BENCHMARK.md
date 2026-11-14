@@ -10,7 +10,7 @@ Recommended for publication based on the completed evaluation evidence in this r
 
 - Skill: `nvalchemi-toolkit`
 - Validation status: `passed`
-- Evaluation date: 2026-11-07
+- Evaluation date: 2026-11-13
 - Evaluator version: `1.6.9`
 - Agents: Claude Code (`aws/anthropic/bedrock-claude-opus-5-5`), Codex (`openai/openai/gpt-6.1-sol`)
 - Tasks: 9 evaluation tasks (7 positive, 2 negative)
@@ -50,12 +50,12 @@ The three-tier evaluation checks whether the skill:
 
 | Measure | Claude Code (Baseline → Skill Uplift) | Codex (Baseline → Skill Uplift) |
 |---|---:|---:|
-| Overall | 93.1% — baseline ran, but no comparable score was available; uplift unavailable | 88.8% — baseline ran, but no comparable score was available; uplift unavailable |
-| Security | 94.4% → 100.0% (+5.6 points) | 94.4% → 100.0% (+5.6 points) |
-| Correctness | 88.9% → 95.6% (+6.7 points) | 82.2% → 97.8% (+15.6 points) |
-| Discoverability | 95.0% — baseline ran, but no comparable score was available; uplift unavailable | 82.9% — baseline ran, but no comparable score was available; uplift unavailable |
-| Effectiveness | 76.7% → 87.3% (+10.6 points) | 70.8% → 87.0% (+16.2 points) |
-| Efficiency | 87.6% — baseline ran, but no comparable score was available; uplift unavailable | 76.3% — baseline ran, but no comparable score was available; uplift unavailable |
+| Overall | 92.0% — baseline ran, but no comparable score was available; uplift unavailable | 88.8% — baseline ran, but no comparable score was available; uplift unavailable |
+| Security | 100.0% → 100.0% (±0.0 points) | 100.0% → 100.0% (±0.0 points) |
+| Correctness | 86.7% → 97.8% (+11.1 points) | 84.4% → 97.8% (+13.4 points) |
+| Discoverability | 92.9% — baseline ran, but no comparable score was available; uplift unavailable | 83.6% — baseline ran, but no comparable score was available; uplift unavailable |
+| Effectiveness | 74.7% → 84.5% (+9.8 points) | 75.2% → 91.7% (+16.5 points) |
+| Efficiency | 84.8% — baseline ran, but no comparable score was available; uplift unavailable | 71.0% — baseline ran, but no comparable score was available; uplift unavailable |
 
 **How to read this table:** baseline is the same task attempted without the target skill. Scores are rounded to one decimal; threshold-adjacent values use additional precision so their displayed band matches the verdict. Uplift is derived from those displayed scores and shown in percentage points.
 
@@ -70,9 +70,9 @@ Shared-source comparisons use the same signals and weights on both conditions. T
 | Agent | Dimension | Basis | Baseline → With skill (uplift) | Explanation |
 | --- | --- | --- | --- | --- |
 | claude-code | Discoverability | Dimension comparison | N/A | Discoverability is not applicable to the no-skill baseline; there is no installed skill to discover. |
-| claude-code | Efficiency | Token-only comparison | 80.9% → 85.3% (+4.4 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
+| claude-code | Efficiency | Token-only comparison | 80.9% → 84.7% (+3.8 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
 | codex | Discoverability | Dimension comparison | N/A | Discoverability is not applicable to the no-skill baseline; there is no installed skill to discover. |
-| codex | Efficiency | Token-only comparison | 81.3% → 84.1% (+2.8 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
+| codex | Efficiency | Token-only comparison | 81.7% → 84.0% (+2.3 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
 
 ## Token Usage
 
@@ -80,27 +80,27 @@ Actual Tier 3 execution usage is reported for every observed agent/case pair and
 
 | Agent | Dataset case | With skill | Without skill | Delta | Change | Coverage |
 |---|---|---:|---:|---:|---:|---|
-| claude-code | All cases | 3,767,299 | 8,028,455 | -4,261,156 | -53.08% | skill 9/9; base 9/9 |
-| claude-code | comp-01 | 490,723 | 1,713,327 | -1,222,604 | -71.36% | skill 1/1; base 1/1 |
-| claude-code | imp-01 | 659,070 | 1,273,754 | -614,684 | -48.26% | skill 1/1; base 1/1 |
-| claude-code | imp-02 | 1,104,796 | 2,855,151 | -1,750,355 | -61.31% | skill 1/1; base 1/1 |
-| claude-code | model-01 | 545,495 | 774,709 | -229,214 | -29.59% | skill 1/1; base 1/1 |
-| claude-code | neg-01 | 148,013 | 182,912 | -34,899 | -19.08% | skill 1/1; base 1/1 |
-| claude-code | neg-03 | 263,947 | 228,956 | +34,991 | +15.28% | skill 1/1; base 1/1 |
-| claude-code | scope-01 | 195,314 | 192,612 | +2,702 | +1.40% | skill 1/1; base 1/1 |
-| claude-code | scope-02 | 236,875 | 697,472 | -460,597 | -66.04% | skill 1/1; base 1/1 |
-| claude-code | scope-03 | 123,066 | 109,562 | +13,504 | +12.33% | skill 1/1; base 1/1 |
-| codex | All cases | 5,294,723 | 8,668,411 | -3,373,688 | -38.92% | skill 9/9; base 9/9 |
-| codex | comp-01 | 1,075,998 | 827,111 | +248,887 | +30.09% | skill 1/1; base 1/1 |
-| codex | imp-01 | 857,644 | 1,556,633 | -698,989 | -44.90% | skill 1/1; base 1/1 |
-| codex | imp-02 | 2,304,597 | 1,957,890 | +346,707 | +17.71% | skill 1/1; base 1/1 |
-| codex | model-01 | 328,780 | 657,059 | -328,279 | -49.96% | skill 1/1; base 1/1 |
-| codex | neg-01 | 76,398 | 73,345 | +3,053 | +4.16% | skill 1/1; base 1/1 |
-| codex | neg-03 | 454,227 | 414,425 | +39,802 | +9.60% | skill 1/1; base 1/1 |
-| codex | scope-01 | 48,978 | 502,825 | -453,847 | -90.26% | skill 1/1; base 1/1 |
-| codex | scope-02 | 79,241 | 2,635,925 | -2,556,684 | -96.99% | skill 1/1; base 1/1 |
-| codex | scope-03 | 68,860 | 43,198 | +25,662 | +59.41% | skill 1/1; base 1/1 |
-| ALL AGENTS | Dataset aggregate | 9,062,022 | 16,696,866 | -7,634,844 | -45.73% | skill 18/18; base 18/18 |
+| claude-code | All cases | 4,664,093 | 7,191,776 | -2,527,683 | -35.15% | skill 9/9; base 9/9 |
+| claude-code | comp-01 | 922,853 | 2,177,743 | -1,254,890 | -57.62% | skill 1/1; base 1/1 |
+| claude-code | imp-01 | 949,100 | 1,159,514 | -210,414 | -18.15% | skill 1/1; base 1/1 |
+| claude-code | imp-02 | 1,214,982 | 1,999,630 | -784,648 | -39.24% | skill 1/1; base 1/1 |
+| claude-code | model-01 | 635,063 | 638,979 | -3,916 | -0.61% | skill 1/1; base 1/1 |
+| claude-code | neg-01 | 189,210 | 145,607 | +43,603 | +29.95% | skill 1/1; base 1/1 |
+| claude-code | neg-03 | 225,348 | 273,409 | -48,061 | -17.58% | skill 1/1; base 1/1 |
+| claude-code | scope-01 | 166,239 | 275,233 | -108,994 | -39.60% | skill 1/1; base 1/1 |
+| claude-code | scope-02 | 238,491 | 411,655 | -173,164 | -42.07% | skill 1/1; base 1/1 |
+| claude-code | scope-03 | 122,807 | 110,006 | +12,801 | +11.64% | skill 1/1; base 1/1 |
+| codex | All cases | 7,278,080 | 10,267,828 | -2,989,748 | -29.12% | skill 9/9; base 9/9 |
+| codex | comp-01 | 1,723,962 | 2,332,757 | -608,795 | -26.10% | skill 1/1; base 1/1 |
+| codex | imp-01 | 2,000,488 | 1,735,287 | +265,201 | +15.28% | skill 1/1; base 1/1 |
+| codex | imp-02 | 2,133,548 | 3,086,852 | -953,304 | -30.88% | skill 1/1; base 1/1 |
+| codex | model-01 | 378,892 | 413,795 | -34,903 | -8.43% | skill 1/1; base 1/1 |
+| codex | neg-01 | 74,487 | 73,125 | +1,362 | +1.86% | skill 1/1; base 1/1 |
+| codex | neg-03 | 669,775 | 678,688 | -8,913 | -1.31% | skill 1/1; base 1/1 |
+| codex | scope-01 | 67,254 | 78,847 | -11,593 | -14.70% | skill 1/1; base 1/1 |
+| codex | scope-02 | 180,301 | 1,854,482 | -1,674,181 | -90.28% | skill 1/1; base 1/1 |
+| codex | scope-03 | 49,373 | 13,995 | +35,378 | +252.79% | skill 1/1; base 1/1 |
+| ALL AGENTS | Dataset aggregate | 11,942,173 | 17,459,604 | -5,517,431 | -31.60% | skill 18/18; base 18/18 |
 
 Prompt tokens include cached reads, so total tokens are `prompt + completion` (cached is not added twice). The Efficiency score uses `(prompt - cached) + completion`. Change is `100 * (with - without) / without`; negative means fewer tokens. N/A comparisons include their reason in the coverage column; coverage is never estimated.
 
@@ -119,7 +119,7 @@ Prompt tokens include cached reads, so total tokens are `prompt + completion` (c
 
 - **MEDIUM** SCHEMA/body_recommended_section: Missing recommended section: '## Examples' (`skills/nvalchemi-toolkit/SKILL.md`)
 - **MEDIUM** SECURITY/Unsafe Defaults (TM3): Tool Misuse: skip_validation (`references/data.md:86`)
-- **MEDIUM** SECURITY/Unsafe Defaults (TM3): Tool Misuse: skip_validation (`references/data.md:209`)
+- **MEDIUM** SECURITY/Unsafe Defaults (TM3): Tool Misuse: skip_validation (`references/data.md:218`)
 - **LOW** QUALITY/quality_discoverability: Description very long (703 chars, recommend 50-150) (`skills/nvalchemi-toolkit/SKILL.md`)
 - **LOW** QUALITY/quality_reliability: Inputs are used but no dedicated Inputs section is documented (`skills/nvalchemi-toolkit/SKILL.md`)
 - 1 additional finding(s) are available in the full evaluation artifacts.

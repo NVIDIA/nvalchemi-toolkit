@@ -4,6 +4,15 @@
 
 ### Added
 
+- Single-device in-flight NEB batching via `NEB.run(sampler=..., sinks=...)`
+  with `SizeAwareSampler(by_group=True)`. The updated
+  `examples/advanced/11_batched_neb.py` demonstrates path refilling and
+  compares energy barriers with the static run.
+- `SizeAwareSampler(field_defaults=...)` fills missing node, edge, or system
+  fields on loaded samples so optional fields survive packing. Samples are
+  now modified in place when loaded, including grouped samples, which are no
+  longer cloned.
+- `Batch.concatenate()` combines several batches in one pass.
 - Add the `nvalchemi-toolkit` agent skill under `skills/nvalchemi-toolkit/`: one
   `SKILL.md` that scopes a request and routes to six task notes (data, models,
   dynamics and optimization, training, generative workflows, and composition
@@ -12,12 +21,48 @@
 
 ### Fixed
 
+- Plain pipeline stages detect graphs finished by status-setting hooks and
+  send them downstream or write them to final result sinks.
+- `HostMemory`, `GPUBuffer`, and `ZarrData` omit temporary neighbor data so
+  samples with different neighbor widths can be stored together. This covers
+  stage sinks, direct writes, and DomainParallel snapshot hooks. Live batches
+  keep their neighbor tensors.
+- Received pipeline samples bypass template-buffer copies so missing outputs
+  trigger force priming. Remove the unused receive staging buffer and its
+  per-step zeroing.
+- Distributed pipelines retain and retry graduates that do not fit the send
+  buffer. `fill_available()` fills free batch capacity from the sampler without
+  removing unsent graduates. Plain pipeline stages initialize missing `status`
+  on hand-built batches so unsent graduates stay frozen. Standalone dynamics
+  behavior is unchanged.
+- Pipeline receive templates retain their field layout when stages add
+  bookkeeping fields to incoming batches.
+- `DistributedPipeline` no longer drains finished results back into
+  computation. Received samples that do not fit wait in a new
+  `overflow_sinks` list on the receiving stage, a private unbounded `HostMemory`
+  by default. Bounded host/GPU overflow storage raises when full rather than
+  making upstream stages wait. Pipeline setup warns about result `sinks` on
+  stages with a downstream rank.
+- `Batch.append()` discards unused buffer rows. Pass `assume_compact=True` to
+  skip this for compact inputs. `HostMemory.write()` trims padding before
+  copying to CPU.
+
 - The fine-tuning guide now passes `--checkpoint-index` to
   `nvalchemi-training spec resume`, the flag the CLI accepts.
 - Atom migration under `DomainParallel` no longer reshards neighbor-list arrays
   (`neighbor_matrix`, `neighbor_matrix_shifts`, `num_neighbors`). They are
   rebuilt after the move, and ranks that had grown `max_neighbors` to different
   widths stalled in the exchange.
+- Halo ghost selection for an owned atom that sits past a periodic face of a
+  split axis. `DomainParallel` leaves the split axes unwrapped, and the
+  receivers that share the owner's grid coordinate on that axis get no lattice
+  image there, so such an atom was never offered to them as a ghost and their
+  forces missed a neighbor inside the cutoff. This happens from the first
+  step, not only in long runs: a crystal built with atoms exactly on the
+  domain faces (the hexagonal SiO2 cells, for example) has atoms cross those
+  faces in the first integrator step. Ghost selection now canonicalizes
+  fractions around the owner's own domain instead of into [0, 1), so the atom
+  stays adjacent to its owner for every receiver.
 
 ## 0.3.0
 

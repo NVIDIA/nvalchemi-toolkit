@@ -128,6 +128,9 @@ the frequency continues to gate all other stages. In
 :class:`~nvalchemi.dynamics.FusedStage`, it runs outside the compiled
 ``_step_impl``, making it suitable for validation and shape-dependent setup.
 
+See the :ref:`dynamics guide <dynamics_guide>` for using
+``ctx.previous_graph_indices`` to preserve per-graph hook state during admission.
+
 ``ON_GRADUATE`` reports graduation. A graph is *active* while its ``status`` is
 below the engine's ``exit_status``, and it *graduates* on the step its status
 reaches ``exit_status``, whether a convergence criterion, a step budget, or

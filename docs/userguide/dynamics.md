@@ -213,10 +213,29 @@ Per-step hooks run inside the compiled `_step_impl` and must be compatible with
 hooks are not compatible with `fullgraph=True`. Use only torch-compatible per-step
 hooks when an unbroken graph is required.
 
-Use `DynamicsStage.ON_ADMISSION` for one-time validation, shape-dependent tensor
-allocation, and Python-side setup. `FusedStage` dispatches admission before force
-priming and outside compiled `_step_impl`, so this setup does not enter the
-steady-state graph.
+Set a custom hook's `stage` to `DynamicsStage.ON_ADMISSION` for one-time validation,
+shape-dependent tensor allocation, and Python-side setup. In its `__call__` method,
+use `ctx.previous_graph_indices` to preserve per-graph state when batch membership
+changes. `FusedStage` dispatches admission before force priming and outside compiled
+`_step_impl`, so this setup does not enter the steady-state graph.
+```
+
+For `BaseDynamics` and `FusedStage`, `ctx.previous_graph_indices[i]` at
+`ON_ADMISSION` gives current graph `i`'s index at the last admission dispatch,
+or `-1` for an arrival. Intersect `ctx.previous_graph_indices < 0` with
+`ctx.active_graph_mask` to find one stage's arrivals. Several membership changes
+before a dispatch compose back to the last admission. The first admission, each
+new `run()`, and a rebuild after complete removal map every graph to `-1`. Treat
+the tensor as read-only. It is `None` at other hook stages, and fused and
+sub-stage admission hooks share the same tensor.
+
+A hook can carry its own per-graph state across the change:
+
+```python
+indices = ctx.previous_graph_indices
+retained = indices >= 0
+new_state = old_state.new_zeros((ctx.batch.num_graphs, *old_state.shape[1:]))
+new_state[retained] = old_state[indices[retained]]
 ```
 
 ## Distributed pipelines
@@ -270,6 +289,11 @@ model evaluation gives them forces. Residents keep their forces and keep updatin
 so graphs arriving at different steps add no extra model evaluations. Sending,
 final-stage removal, and sampler refill do not refresh residents' forces.
 
+After sending, the first stage calls `fill_available(batch)` to fill sampler
+capacity without removing graduates still waiting to be sent. A batch at its
+atom or sample limit returns without querying the sampler. Normal graduation
+and replacement continue to use `refill_check(batch, exit_status)`.
+
 With either setting, initial sampler batches are primed locally. When received
 graphs need local forces, an empty or unprimed receiving stage primes the whole
 batch instead of skipping their update.
@@ -311,8 +335,8 @@ patterns are planned for a future release.
 
 ### Sizing the buffer
 
-NCCL point-to-point transfers require fixed-size tensors, so each communicating stage
-pre-allocates a send buffer and a receive buffer whose dimensions are set by
+NCCL point-to-point transfers require fixed-size tensors, so each stage with a
+downstream rank pre-allocates a send buffer whose dimensions are set by
 {py:class}`~nvalchemi.dynamics.base.BufferConfig`. The three fields control how much
 data a single transfer can carry:
 
@@ -333,6 +357,11 @@ When the upstream stage has more converged samples than `num_systems` allows in 
 single transfer, the excess stays in the active batch as a no-op until the next
 step --- this is the back-pressure mechanism described below.
 
+Atom and edge capacities must accommodate all graphs selected for a transfer.
+If the buffer cannot copy every selected graph, the pipeline raises `ValueError`
+before removing graphs from the active batch or sending the buffer. Increase the
+relevant `BufferConfig` capacities before rerunning.
+
 ```{important}
 Every pair of communicating stages **must** share an identical
 {py:class}`~nvalchemi.dynamics.base.BufferConfig`.
@@ -341,8 +370,8 @@ Every pair of communicating stages **must** share an identical
 
 ### Buffer synchronization
 
-The diagram below shows how two adjacent ranks exchange data through pre-allocated
-send and receive buffers during a single step. The upstream rank pushes converged
+The diagram below shows how two adjacent ranks exchange data through a pre-allocated
+send buffer during a single step. The upstream rank pushes converged
 samples; the downstream rank pulls them into its active batch.
 
 ```{graphviz}
@@ -360,10 +389,8 @@ digraph buffer_sync {
 
         u_batch [label="active_batch"]
         u_send  [label="send_buffer" fillcolor="#4a3315"]
-        u_sinks [label="sinks\n(overflow)" style=dashed]
 
         u_batch -> u_send [label="converged\nsamples" style=bold]
-        u_batch -> u_sinks [label="excess\n(back-pressure)" style=dotted]
     }
 
     subgraph cluster_downstream {
@@ -372,16 +399,16 @@ digraph buffer_sync {
         color="#76b900"
         fontcolor="#eeeeee"
 
-        d_recv  [label="recv_buffer" fillcolor="#4a3315"]
         d_batch [label="active_batch"]
+        d_overflow [label="overflow_sinks\n(pending)" style=dashed]
         d_sinks [label="sinks\n(results)" style=dashed]
 
-        d_recv -> d_batch [label="incoming\nsamples" style=bold]
+        d_batch -> d_overflow [label="excess" style=dotted]
+        d_overflow -> d_batch [label="drain when\ncapacity available" style=dotted]
         d_batch -> d_sinks [label="converged\nresults" style=bold]
-        d_sinks -> d_batch [label="drain when\ncapacity available" style=dotted]
     }
 
-    u_send -> d_recv [
+    u_send -> d_batch [
         label="isend / irecv\n(NCCL)";
         style=bold;
         color="#ee9040";
@@ -393,24 +420,54 @@ digraph buffer_sync {
 
 A step proceeds as follows:
 
-1. **Pre-step** --- The downstream rank zeros its receive buffer and posts an
+1. **Pre-step** --- The downstream rank posts an
    asynchronous `irecv` from its `prior_rank`. In `async_recv` mode (the default),
    the wait is deferred until later in the step; in `sync` mode it blocks
    immediately.
 2. **Complete receive** --- The downstream rank waits on the pending receive,
-   then routes incoming samples into its active batch (or overflow sinks if the
-   batch is full).
+   then routes incoming samples into its active batch. Samples that do not fit
+   wait in `overflow_sinks` and are drained into the batch as room frees up.
+   By default, each receiving stage keeps them in a private host-memory buffer.
 3. **Step** --- Both ranks execute their respective integrator or optimizer on their
    active batches.
 4. **Post-step** --- The upstream rank identifies converged samples, copies them into
    its send buffer (up to `BufferConfig` capacity), and issues an `isend`. An empty
    buffer is always sent to prevent deadlocks. The final stage routes converged
-   samples to its sinks instead.
+   samples to its `sinks` instead. Results are never drained back into the
+   active batch, and stored results do not keep a stage running.
 
 ```{tip}
 **Back-pressure**: when the send buffer is full, excess converged samples remain in
-the upstream active batch as no-ops until buffer capacity opens up. This naturally
-throttles fast producers without dropping data.
+the upstream active batch as no-ops and are retried on later steps. This limit
+applies to the sender's buffer. It does not check free space in downstream storage.
+```
+
+### Result sinks and overflow storage
+
+Both `sinks` and `overflow_sinks` belong to the stage on which they are configured
+and live on that stage's rank. In a two-stage pipeline, stage 2 uses
+`overflow_sinks` for arrivals that cannot yet enter its active batch and `sinks`
+for finished results. Pending samples return to computation; finished results do
+not. A stage with a downstream rank forwards graduates instead of writing them
+to `sinks`. Pipeline setup warns if such a stage has nonempty `sinks`.
+
+Receiving stages default to a private, effectively unbounded `HostMemory` overflow
+sink. Set `overflow_sinks=[HostMemory(capacity=128)]` on the **receiving stage** to
+limit the queue to 128 samples. This limits sample count, not bytes. To keep
+pending samples on the receiving GPU and avoid host transfers, use
+`overflow_sinks=[GPUBuffer(capacity=128, max_atoms=50, max_edges=0, device="cuda:1")]`
+on a stage running on `cuda:1`. Import these classes from `nvalchemi.dynamics.sinks`.
+Choose `max_atoms` and `max_edges` to cover each sample. GPU storage is allocated
+on the first write according to those capacities. A host sink uses less device
+memory but copies overflow to the host and admitted samples back to the device.
+
+```{warning}
+Bounded overflow storage does not make upstream stages wait. Each overflow write
+goes to the first sink with room for the entire write; it is not split across
+sinks. If none has room, the pipeline raises `RuntimeError`. A `GPUBuffer` also
+raises if a sample exceeds its atom or edge capacity. Size overflow storage for
+the expected backlog and incoming transfer size. A full queue stops the run
+instead of retaining the already-sent samples upstream.
 ```
 
 ### Communication modes
@@ -488,6 +545,68 @@ earlier run, whose exit statuses a propagator would otherwise read as finished,
 can therefore be propagated again without a manual cleanup pass. Any object
 satisfying the {py:class}`~nvalchemi.dynamics.StructureSource` protocol can
 stand in for the sampler; {doc}`/modules/dynamics/api` lists its members.
+
+### Size-aware complete-path sampling
+
+{py:class}`~nvalchemi.dynamics.SizeAwareSampler` supports sampling whole paths
+with `by_group=True`. Each dataset item returns `(batch, metadata)`, where
+`batch` contains exactly one group. Its `get_metadata(index)` returns total
+atom and edge counts for that path. The sampler's metadata prescan does not
+load paths, and `max_batch_size` counts paths, so packing never loads a path it
+then rejects.
+
+```python
+from nvalchemi.dynamics.sampler import SizeAwareSampler
+
+sampler = SizeAwareSampler(
+    prepared_paths,
+    by_group=True,
+    max_atoms=20_000,
+    max_edges=100_000,
+    max_batch_size=8,  # complete paths
+)
+batch = sampler.build_initial_batch()
+replacements = sampler.request_replacements_budget(
+    atom_budget=5_000,
+    edge_budget=25_000,
+    max_count=2,  # replacement paths
+)
+```
+
+Paths stay complete. A candidate that exceeds the remaining atom or edge budget
+stays unconsumed, and the sampler considers other candidates. With
+`max_batch_size=None`, atom and edge budgets alone limit packing.
+
+`group_idx` gives dense local group labels in the assembled batch. `group_id`
+identifies the original dataset item, and `system_id` identifies each image
+uniquely within the sampler. Loading adds these IDs to the dataset item in
+place. Assembly copies its data before simulation updates.
+The default `by_group=False` samples individual `AtomicData` graphs.
+
+For optional fields on graph or grouped inputs, `field_defaults` maps each
+field name to `(level, value)`, for example `{"fixed_mask": ("node", False)}`.
+A scalar value is expanded to the sample's size. Its Python type determines
+its dtype unless that sample's batch schema already declares one. Use `False`,
+not `0`, for Boolean masks. Grouped assembly keeps the first sample's dtype,
+so defaults should match the dtype of supplied fields. For an explicit dtype
+or another shape, use a callable accepting `(num_rows, device)` and returning
+a tensor, such as `lambda n, dev: torch.zeros(n, dtype=torch.bool, device=dev)`.
+Defaults support only built-in node, edge, and system levels. Grouped node
+and edge defaults require existing tensors at that level. Missing fields are
+added in place while loading, and supplied fields stay unchanged. Register
+defaults before loading any samples.
+
+For grouped replacement, use `request_replacements_budget()`. The singular
+`request_replacement()` and vectorized `request_replacements()` methods support
+individual graphs only.
+
+Single-device grouped dynamics supports whole-group refill with a matching
+`by_group=True` sampler. It works like ungrouped refill, with complete groups in
+place of graphs. Refill follows only the sampler's limits, not the engine's own
+`max_batch_size`. Partial-group graduation is rejected, and
+`DistributedPipeline` raises `NotImplementedError` for grouped stages. For
+prepared NEB paths, use `NEB.run(sampler=..., sinks=...)` as shown in
+[Reaction Paths and NEB](dynamics_mep.md#streaming-prepared-paths).
 
 ## What's next
 
