@@ -5,7 +5,9 @@
 ### Added
 
 - `langevin_half_step_device_seed`: the BAOAB half step with its RNG seed in a
-  one-element device tensor that the op advances after every launch.
+  one-element device tensor that the op advances after every launch (the
+  `nvalchemiops` Langevin kernels with a device seed; needs `nvalchemi-toolkit-ops`
+  with `langevin_baoab_half_step(random_seed=<int32 wp.array>)`, 0.6.0).
   `NVTLangevin` uses it, so a `dyn.step()` captured in a CUDA graph draws fresh
   noise on every replay instead of repeating the noise of the captured step;
   the noise stream is unchanged (`random_seed + step_count`, bitwise).
