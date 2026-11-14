@@ -49,6 +49,10 @@
 
 - The fine-tuning guide now passes `--checkpoint-index` to
   `nvalchemi-training spec resume`, the flag the CLI accepts.
+- Atom migration under `DomainParallel` no longer reshards neighbor-list arrays
+  (`neighbor_matrix`, `neighbor_matrix_shifts`, `num_neighbors`). They are
+  rebuilt after the move, and ranks that had grown `max_neighbors` to different
+  widths stalled in the exchange.
 - Halo ghost selection for an owned atom that sits past a periodic face of a
   split axis. `DomainParallel` leaves the split axes unwrapped, and the
   receivers that share the owner's grid coordinate on that axis get no lattice
