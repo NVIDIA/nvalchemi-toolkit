@@ -109,11 +109,41 @@ class TestFusedStageOnReceive:
         stage = _langevin_stage()
         incoming = Batch.from_data_list([_make_system(i) for i in range(2)])
         incoming["status"] = torch.full((2, 1), stage.exit_status, dtype=torch.long)
+        expected_keys = {
+            level: set(keys) for level, keys in incoming.level_keys.items()
+        }
 
         stage._recv_to_batch(incoming)
 
         mask = stage.active_graph_mask(stage.active_batch, stage.exit_status)
         assert mask.all()
+        assert stage._recv_template.level_keys == expected_keys
+
+    @pytest.mark.parametrize("n_graphs", [1, 2, 3, 4])
+    def test_receive_initializes_missing_bookkeeping(self, n_graphs: int) -> None:
+        """Received samples get fresh bookkeeping, including partial batches."""
+        stage = _langevin_stage(
+            prior_rank=0,
+            next_rank=None,
+            buffer_config=BufferConfig(num_systems=4, num_nodes=12, num_edges=0),
+        )
+        incoming = Batch.from_data_list([_make_system(i) for i in range(n_graphs)])
+        incoming["status"] = torch.full(
+            (n_graphs, 1), stage.exit_status, dtype=torch.long
+        )
+        incoming["system_id"] = torch.arange(n_graphs).view(-1, 1)
+        stage._ensure_buffers(Batch.empty_like(incoming))
+
+        stage._recv_to_batch(incoming)
+
+        batch = stage.active_batch
+        assert batch.num_graphs == n_graphs
+        assert (batch.status == stage.entry_status).all()
+        assert not batch.reprime_pending.any()
+        assert (batch.n_steps_counter_0 == 0).all()
+        torch.testing.assert_close(batch.system_id, incoming.system_id)
+        assert batch.reprime_pending.shape == (n_graphs, 1)
+        assert batch.n_steps_counter_0.shape == (n_graphs, 1)
 
 
 class TestPipelineExit:
@@ -164,7 +194,8 @@ def _fused_pipeline_worker(rank: int, world_size: int, queue) -> None:
             d = dataset[idx]
             return d.num_nodes, d.num_edges
 
-    buffer_cfg = BufferConfig(num_systems=_N_SYSTEMS, num_nodes=50, num_edges=0)
+    # Every receive is partial, including when all systems graduate together.
+    buffer_cfg = BufferConfig(num_systems=_N_SYSTEMS + 1, num_nodes=50, num_edges=0)
     optimizer = FIRE2(
         model=DemoModelWrapper(DemoModel()),
         dt=0.05,

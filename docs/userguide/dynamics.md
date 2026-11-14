@@ -289,6 +289,11 @@ model evaluation gives them forces. Residents keep their forces and keep updatin
 so graphs arriving at different steps add no extra model evaluations. Sending,
 final-stage removal, and sampler refill do not refresh residents' forces.
 
+After sending, the first stage calls `fill_available(batch)` to fill sampler
+capacity without removing graduates still waiting to be sent. A batch at its
+atom or sample limit returns without querying the sampler. Normal graduation
+and replacement continue to use `refill_check(batch, exit_status)`.
+
 With either setting, initial sampler batches are primed locally. When received
 graphs need local forces, an empty or unprimed receiving stage primes the whole
 batch instead of skipping their update.
@@ -330,8 +335,8 @@ patterns are planned for a future release.
 
 ### Sizing the buffer
 
-NCCL point-to-point transfers require fixed-size tensors, so each communicating stage
-pre-allocates a send buffer and a receive buffer whose dimensions are set by
+NCCL point-to-point transfers require fixed-size tensors, so each stage with a
+downstream rank pre-allocates a send buffer whose dimensions are set by
 {py:class}`~nvalchemi.dynamics.base.BufferConfig`. The three fields control how much
 data a single transfer can carry:
 
@@ -365,8 +370,8 @@ Every pair of communicating stages **must** share an identical
 
 ### Buffer synchronization
 
-The diagram below shows how two adjacent ranks exchange data through pre-allocated
-send and receive buffers during a single step. The upstream rank pushes converged
+The diagram below shows how two adjacent ranks exchange data through a pre-allocated
+send buffer during a single step. The upstream rank pushes converged
 samples; the downstream rank pulls them into its active batch.
 
 ```{graphviz}
@@ -384,10 +389,8 @@ digraph buffer_sync {
 
         u_batch [label="active_batch"]
         u_send  [label="send_buffer" fillcolor="#4a3315"]
-        u_sinks [label="sinks\n(overflow)" style=dashed]
 
         u_batch -> u_send [label="converged\nsamples" style=bold]
-        u_batch -> u_sinks [label="excess\n(back-pressure)" style=dotted]
     }
 
     subgraph cluster_downstream {
@@ -396,16 +399,16 @@ digraph buffer_sync {
         color="#76b900"
         fontcolor="#eeeeee"
 
-        d_recv  [label="recv_buffer" fillcolor="#4a3315"]
         d_batch [label="active_batch"]
+        d_overflow [label="overflow_sinks\n(pending)" style=dashed]
         d_sinks [label="sinks\n(results)" style=dashed]
 
-        d_recv -> d_batch [label="incoming\nsamples" style=bold]
+        d_batch -> d_overflow [label="excess" style=dotted]
+        d_overflow -> d_batch [label="drain when\ncapacity available" style=dotted]
         d_batch -> d_sinks [label="converged\nresults" style=bold]
-        d_sinks -> d_batch [label="drain when\ncapacity available" style=dotted]
     }
 
-    u_send -> d_recv [
+    u_send -> d_batch [
         label="isend / irecv\n(NCCL)";
         style=bold;
         color="#ee9040";
@@ -417,24 +420,54 @@ digraph buffer_sync {
 
 A step proceeds as follows:
 
-1. **Pre-step** --- The downstream rank zeros its receive buffer and posts an
+1. **Pre-step** --- The downstream rank posts an
    asynchronous `irecv` from its `prior_rank`. In `async_recv` mode (the default),
    the wait is deferred until later in the step; in `sync` mode it blocks
    immediately.
 2. **Complete receive** --- The downstream rank waits on the pending receive,
-   then routes incoming samples into its active batch (or overflow sinks if the
-   batch is full).
+   then routes incoming samples into its active batch. Samples that do not fit
+   wait in `overflow_sinks` and are drained into the batch as room frees up.
+   By default, each receiving stage keeps them in a private host-memory buffer.
 3. **Step** --- Both ranks execute their respective integrator or optimizer on their
    active batches.
 4. **Post-step** --- The upstream rank identifies converged samples, copies them into
    its send buffer (up to `BufferConfig` capacity), and issues an `isend`. An empty
    buffer is always sent to prevent deadlocks. The final stage routes converged
-   samples to its sinks instead.
+   samples to its `sinks` instead. Results are never drained back into the
+   active batch, and stored results do not keep a stage running.
 
 ```{tip}
 **Back-pressure**: when the send buffer is full, excess converged samples remain in
-the upstream active batch as no-ops until buffer capacity opens up. This naturally
-throttles fast producers without dropping data.
+the upstream active batch as no-ops and are retried on later steps. This limit
+applies to the sender's buffer. It does not check free space in downstream storage.
+```
+
+### Result sinks and overflow storage
+
+Both `sinks` and `overflow_sinks` belong to the stage on which they are configured
+and live on that stage's rank. In a two-stage pipeline, stage 2 uses
+`overflow_sinks` for arrivals that cannot yet enter its active batch and `sinks`
+for finished results. Pending samples return to computation; finished results do
+not. A stage with a downstream rank forwards graduates instead of writing them
+to `sinks`. Pipeline setup warns if such a stage has nonempty `sinks`.
+
+Receiving stages default to a private, effectively unbounded `HostMemory` overflow
+sink. Set `overflow_sinks=[HostMemory(capacity=128)]` on the **receiving stage** to
+limit the queue to 128 samples. This limits sample count, not bytes. To keep
+pending samples on the receiving GPU and avoid host transfers, use
+`overflow_sinks=[GPUBuffer(capacity=128, max_atoms=50, max_edges=0, device="cuda:1")]`
+on a stage running on `cuda:1`. Import these classes from `nvalchemi.dynamics.sinks`.
+Choose `max_atoms` and `max_edges` to cover each sample. GPU storage is allocated
+on the first write according to those capacities. A host sink uses less device
+memory but copies overflow to the host and admitted samples back to the device.
+
+```{warning}
+Bounded overflow storage does not make upstream stages wait. Each overflow write
+goes to the first sink with room for the entire write; it is not split across
+sinks. If none has room, the pipeline raises `RuntimeError`. A `GPUBuffer` also
+raises if a sample exceeds its atom or edge capacity. Size overflow storage for
+the expected backlog and incoming transfer size. A full queue stops the run
+instead of retaining the already-sent samples upstream.
 ```
 
 ### Communication modes

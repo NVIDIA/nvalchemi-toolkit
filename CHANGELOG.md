@@ -21,6 +21,28 @@
 
 ### Fixed
 
+- Plain pipeline stages detect graphs finished by status-setting hooks and
+  send them downstream or write them to final result sinks.
+- `HostMemory`, `GPUBuffer`, and `ZarrData` omit temporary neighbor data so
+  samples with different neighbor widths can be stored together. This covers
+  stage sinks, direct writes, and DomainParallel snapshot hooks. Live batches
+  keep their neighbor tensors.
+- Received pipeline samples bypass template-buffer copies so missing outputs
+  trigger force priming. Remove the unused receive staging buffer and its
+  per-step zeroing.
+- Distributed pipelines retain and retry graduates that do not fit the send
+  buffer. `fill_available()` fills free batch capacity from the sampler without
+  removing unsent graduates. Plain pipeline stages initialize missing `status`
+  on hand-built batches so unsent graduates stay frozen. Standalone dynamics
+  behavior is unchanged.
+- Pipeline receive templates retain their field layout when stages add
+  bookkeeping fields to incoming batches.
+- `DistributedPipeline` no longer drains finished results back into
+  computation. Received samples that do not fit wait in a new
+  `overflow_sinks` list on the receiving stage, a private unbounded `HostMemory`
+  by default. Bounded host/GPU overflow storage raises when full rather than
+  making upstream stages wait. Pipeline setup warns about result `sinks` on
+  stages with a downstream rank.
 - `Batch.append()` discards unused buffer rows. Pass `assume_compact=True` to
   skip this for compact inputs. `HostMemory.write()` trims padding before
   copying to CPU.
