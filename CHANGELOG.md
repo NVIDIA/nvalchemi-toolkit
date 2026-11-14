@@ -4,6 +4,9 @@
 
 ### Added
 
+- `DistributedPipeline` supports grouped dynamics, including NEB, with
+  complete-path transfers and preserved optimizer state. Transfer capacities
+  apply to complete paths.
 - Single-device in-flight NEB batching via `NEB.run(sampler=..., sinks=...)`
   with `SizeAwareSampler(by_group=True)`. The updated
   `examples/advanced/11_batched_neb.py` demonstrates path refilling and
@@ -19,8 +22,19 @@
   and extension). It replaces the 14 skills under `.claude/skills/`, which are
   removed from the repository.
 
+### Breaking Changes
+
+- Custom `DataSink.drain` overrides must accept `max_samples: int | None = None`.
+  Pipeline refills now pass `max_samples=`. Overrides using `drain(self)` must
+  update their signature and honor the limit, leaving remaining samples stored
+  in order.
+
 ### Fixed
 
+- `DistributedPipeline` sends that reach the send buffer's atom or edge
+  capacity send the graduates that fit and keep the rest for a later send.
+  Samples that cannot fit an empty buffer raise `ValueError` with their sizes
+  and the `BufferConfig` capacities.
 - Plain pipeline stages detect graphs finished by status-setting hooks and
   send them downstream or write them to final result sinks.
 - `HostMemory`, `GPUBuffer`, and `ZarrData` omit temporary neighbor data so
@@ -43,6 +57,9 @@
   by default. Bounded host/GPU overflow storage raises when full rather than
   making upstream stages wait. Pipeline setup warns about result `sinks` on
   stages with a downstream rank.
+- `DataSink.drain(max_samples=...)` limits refills to the oldest samples that
+  fit, and `HostMemory` leaves the remaining samples in place without copying
+  or rewriting them.
 - `Batch.append()` discards unused buffer rows. Pass `assume_compact=True` to
   skip this for compact inputs. `HostMemory.write()` trims padding before
   copying to CPU.

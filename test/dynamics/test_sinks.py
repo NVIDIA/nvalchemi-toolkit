@@ -913,6 +913,24 @@ class TestHostMemoryStorage:
             )
             torch.testing.assert_close(sink._batches[0].positions, first.positions)
 
+    def test_failed_partial_drain_keeps_remaining_samples(self) -> None:
+        """A failed merge loses neither a partly drained write nor later writes."""
+        sink = HostMemory(capacity=10)
+        first = create_test_batch(2)
+        first.energy = torch.ones(2, 1)
+        sink.write(first)
+        sink.write(create_test_batch(2))
+        sink.drain(max_samples=1)
+
+        for _ in range(2):
+            with pytest.raises(ValueError, match="energy.*missing"):
+                sink.drain(max_samples=2)
+            assert len(sink) == 3
+
+        remaining_first = sink.drain(max_samples=1)
+        torch.testing.assert_close(remaining_first.positions, first.positions[2:])
+        assert sink.drain().num_graphs == 2
+
     def test_zero_allows_a_different_mode(self) -> None:
         """After zero() the sink accepts ungrouped data and starts empty."""
         sink = HostMemory(capacity=10)
@@ -1130,6 +1148,71 @@ class TestZarrData:
         sink.zero()
         sink.write(create_grouped_batch([1, 2]))
         assert sink.read().group_idx.tolist() == [0, 1, 1]
+
+
+@pytest.mark.parametrize("kind", ["host", "zarr"])
+class TestPartialDrain:
+    """drain(max_samples) removes the oldest samples and keeps the rest."""
+
+    def test_takes_oldest_graphs_and_keeps_the_rest_in_order(
+        self, kind: str, tmp_path: Path
+    ) -> None:
+        """Ungrouped samples are graphs taken across writes in write order."""
+        sink = _make_sink(kind, tmp_path)
+        first = create_test_batch(num_graphs=2)
+        second = create_test_batch(num_graphs=3)
+        sink.write(first)
+        sink.write(second)
+        expected = torch.cat([first.positions, second.positions])
+
+        taken = sink.drain(max_samples=3)
+        assert taken.num_graphs == 3
+        assert torch.equal(taken.positions, expected[:6])
+        assert len(sink) == 2
+
+        rest = sink.drain()
+        assert torch.equal(rest.positions, expected[6:])
+        assert len(sink) == 0
+
+    def test_grouped_samples_are_complete_groups(
+        self, kind: str, tmp_path: Path
+    ) -> None:
+        """Grouped samples are whole groups, counted across writes."""
+        sink = _make_sink(kind, tmp_path)
+        sink.write(create_grouped_batch([3, 2]))
+        sink.write(create_grouped_batch([2, 1]))
+
+        assert sink.drain(max_samples=2).group_idx.tolist() == [0, 0, 0, 1, 1]
+        assert sink.drain(max_samples=1).group_idx.tolist() == [0, 0]
+        assert len(sink) == 1
+        assert sink.drain(max_samples=5).group_idx.tolist() == [0]
+        assert len(sink) == 0
+
+    def test_read_and_write_after_taking_part_of_a_write(
+        self, kind: str, tmp_path: Path
+    ) -> None:
+        """The untaken part of a write is read back and followed by new writes."""
+        sink = _make_sink(kind, tmp_path)
+        first = create_grouped_batch([1, 2, 3])
+        second = create_grouped_batch([2])
+        sink.write(first)
+        assert sink.drain(max_samples=1).num_graphs == 1
+        sink.write(second)
+
+        result = sink.read()
+        assert result.group_idx.tolist() == [0, 0, 1, 1, 1, 2, 2]
+        expected = torch.cat([first.positions[2:], second.positions])
+        assert torch.equal(result.positions, expected)
+        assert sink.drain(max_samples=2).group_idx.tolist() == [0, 0, 1, 1, 1]
+        assert len(sink) == 2
+
+    def test_max_samples_below_one_raises(self, kind: str, tmp_path: Path) -> None:
+        """A limit below one sample is rejected and nothing is removed."""
+        sink = _make_sink(kind, tmp_path)
+        sink.write(create_test_batch(num_graphs=2))
+        with pytest.raises(ValueError, match="max_samples"):
+            sink.drain(max_samples=0)
+        assert len(sink) == 2
 
 
 @pytest.mark.parametrize("kind", ["host", "zarr"])

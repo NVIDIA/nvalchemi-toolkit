@@ -124,6 +124,47 @@ class TestStateLazyInit:
     def _run_step(self, dynamics, batch):
         dynamics.step(batch)
 
+    @pytest.mark.parametrize(
+        "dynamics_cls",
+        [
+            cls
+            for cls in _discover_dynamics_implementations()
+            if cls.__name__
+            in {
+                "NVE",
+                "NVTLangevin",
+                "NVTNoseHoover",
+                "NPT",
+                "NPH",
+                "FIRE",
+                "FIREVariableCell",
+                "FIRE2VariableCell",
+                "LBFGSVariableCell",
+            }
+        ],
+        ids=lambda cls: cls.__name__,
+    )
+    @pytest.mark.parametrize("by_group", [False, True])
+    def test_graph_state_dynamics_reject_grouped_mode(self, dynamics_cls, by_group):
+        """Reject grouped mode at construction, before any state can be created."""
+        from inspect import signature
+
+        kwargs = {
+            name: value
+            for name, value in _STATE_INIT_ARGUMENTS.items()
+            if name in signature(dynamics_cls).parameters
+        }
+        model = _make_model(needs_stress="stress" in dynamics_cls.__needs_keys__)
+        if by_group:
+            with pytest.raises(
+                NotImplementedError,
+                match=f"{dynamics_cls.__name__} does not support by_group=True",
+            ):
+                dynamics_cls(model=model, by_group=True, **kwargs)
+        else:
+            dyn = dynamics_cls(model=model, by_group=False, **kwargs)
+            assert not dyn.by_group
+
     def test_nve_state_initialized_on_first_step(self):
         from nvalchemi.dynamics.integrators.nve import NVE
 
@@ -670,6 +711,55 @@ class TestPipelineStateMutation:
         # was the exact next-iteration crash when _last_converged still held 3.
         engine.step(engine.active_batch)
         assert dyn._state.num_graphs == engine.active_batch.num_graphs
+
+    @pytest.mark.parametrize("optimizer", ["fire2", "lbfgs"])
+    def test_grouped_transfers_keep_state_per_group(self, optimizer):
+        """Sends, receives, and final removal keep one state row per group."""
+        from nvalchemi.dynamics.optimizers.fire2 import FIRE2
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
+
+        if optimizer == "fire2":
+            dyn, tag = FIRE2(model=_make_model(), dt=0.1, by_group=True), "alpha"
+        else:
+            dyn, tag = LBFGS(model=_make_model(), by_group=True), "iteration"
+        batch = _make_batch(4)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1]))
+        dyn.active_batch = batch
+        dyn.step(batch)
+        getattr(dyn._state, tag).view(-1).copy_(torch.tensor([7, 9]))
+
+        def tags() -> list[float]:
+            return getattr(dyn._state, tag).view(-1).tolist()
+
+        # Send the first group. Only the second group's row remains.
+        dyn.send_buffer = Batch.empty(
+            num_systems=4,
+            num_nodes=batch.num_nodes,
+            num_edges=batch.num_edges,
+            template=batch,
+        )
+        dyn._batch_to_buffer(torch.tensor([True, True, False, False]))
+        assert tags() == [9]
+
+        # A three-image group arrives with fresh state appended after it.
+        arriving = _make_batch(3, seed=10)
+        arriving.set_group_layout(torch.zeros(3, dtype=torch.long))
+        dyn._buffer_to_batch(arriving)
+        fresh = getattr(dyn._make_new_state(1, dyn.active_batch), tag).view(-1)
+        assert tags() == [9, fresh.item()]
+        if optimizer == "lbfgs":
+            layout = dyn.active_batch.group_layout
+            dofs = dyn._state._storage.groups["lbfgs_dofs"]
+            torch.testing.assert_close(
+                dofs.segment_lengths.long(),
+                torch.bincount(layout.node_to_group, minlength=2),
+            )
+
+        # The final stage removes the resident group and keeps the arrival.
+        dyn._remove_converged_final_stage(torch.tensor([0, 1]))
+        assert tags() == [fresh.item()]
+        dyn.step(dyn.active_batch)
+        assert dyn._state.num_graphs == 1
 
 
 # ---------------------------------------------------------------------------

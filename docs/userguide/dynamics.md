@@ -343,7 +343,7 @@ data a single transfer can carry:
 | Field | What it controls |
 |-------|------------------|
 | `num_systems` | Maximum number of graphs (structures) per transfer. Determines throughput per step --- higher values move more data but consume more GPU memory. |
-| `num_nodes` | Total atom capacity across all graphs in the buffer. Must be large enough for the worst-case combination of systems. For example, transferring up to 4 structures of at most 50 atoms each requires `num_nodes=200`. |
+| `num_nodes` | Total atom capacity across all graphs in the buffer. Must hold at least the largest individual graph, or complete group in grouped dynamics. To transfer up to 4 structures of at most 50 atoms each together, use `num_nodes=200`. |
 | `num_edges` | Total edge capacity. Set to **0** when the downstream model recomputes edges via its neighbor list (the common case). Edges are omitted from transport, and arriving graphs have no edges until the neighbor-list hook rebuilds them. Only set a non-zero value if pre-computed edge attributes must be transferred. |
 
 ```python
@@ -357,10 +357,20 @@ When the upstream stage has more converged samples than `num_systems` allows in 
 single transfer, the excess stays in the active batch as a no-op until the next
 step --- this is the back-pressure mechanism described below.
 
-Atom and edge capacities must accommodate all graphs selected for a transfer.
-If the buffer cannot copy every selected graph, the pipeline raises `ValueError`
-before removing graphs from the active batch or sending the buffer. Increase the
-relevant `BufferConfig` capacities before rerunning.
+Converged samples that do not fit the remaining atom or edge capacity stay in the
+active batch the same way. A graph larger than the empty buffer can never be sent,
+so the pipeline raises `ValueError` before removing graphs from the active batch or
+sending the buffer. The message gives the largest atom and edge counts among the
+selected graphs and the `BufferConfig` capacities to increase.
+
+Grouped dynamics, including NEB, send a prefix of complete converged groups in
+batch order. A path is never split across messages, and later groups do not skip
+ahead of a group that does not fit in the remaining space. Each complete group
+must fit in an empty buffer across all transported dimensions. If the first
+waiting group cannot fit, the error reports its total graph, atom, and edge
+counts and the buffer capacities. Size the buffer for the largest expected path,
+rather than every path that might converge together. With `num_edges=0`, edges
+are omitted and do not limit transfers.
 
 ```{important}
 Every pair of communicating stages **must** share an identical
@@ -603,9 +613,12 @@ individual graphs only.
 Single-device grouped dynamics supports whole-group refill with a matching
 `by_group=True` sampler. It works like ungrouped refill, with complete groups in
 place of graphs. Refill follows only the sampler's limits, not the engine's own
-`max_batch_size`. Partial-group graduation is rejected, and
-`DistributedPipeline` raises `NotImplementedError` for grouped stages. For
-prepared NEB paths, use `NEB.run(sampler=..., sinks=...)` as shown in
+`max_batch_size`. Partial-group graduation is rejected.
+`DistributedPipeline` supports complete-group transfers when every stage uses
+`by_group=True`. MD integrators reject grouped mode, so grouped relaxation
+followed by MD is unsupported. Combining grouped stages with `mesh` raises
+`NotImplementedError`. For prepared NEB paths, use
+`NEB.run(sampler=..., sinks=...)` as shown in
 [Reaction Paths and NEB](dynamics_mep.md#streaming-prepared-paths).
 
 ## What's next
