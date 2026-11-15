@@ -78,12 +78,6 @@ def _warn_first(seen: set, key: object, message: str, *, stacklevel: int = 2) ->
 _FP_CAST_WARNED: set[tuple[str, str, str]] = set()
 
 
-def _state_dtype(cls: type, key: str, dtype: torch.dtype) -> torch.dtype:
-    """Dtype to build a dynamical-state field in: the (wider) source dtype
-    ``float64`` when ``key`` is precision-preserving, else ``dtype``."""
-    return torch.float64 if key in cls.precision_preserving_keys else dtype
-
-
 class AtomicNumberTable:
     """
     Atomic number table
@@ -216,14 +210,6 @@ class AtomicData(BaseModel, DataMixin):
       :func:`~nvalchemi.data.transforms.make_supercell`, which rebuild samples
       as plain :class:`AtomicData`; a subclass override only covers objects
       constructed through the subclass (including ``Batch.to_data_list``).
-    - ``precision_preserving_keys = frozenset({"positions", "velocities"})`` keeps the
-      dynamical state in its own (e.g. ``float64``) dtype for large or off-origin
-      systems, where a ``float32`` coordinate has an ulp of ~1e-4 A at |x| ~ 1000 A.
-      Positions are then no longer the cast target: every other floating field is
-      coerced to :attr:`fp_compute_dtype` (``float32`` by default), except
-      ``atomic_masses``, which the integrator kernels need in the positions dtype.
-      Model wrappers cast positions to their compute dtype at forward. Barostat
-      integrators also read ``cell``: add it to the set for NPT / NPH.
     - ``validate_assignment=True`` means re-assigning a field re-runs validation;
       use :meth:`add_node_property` and friends (not raw attribute assignment) to
       register new custom keys so they are tracked in the correct property group.
@@ -475,8 +461,6 @@ class AtomicData(BaseModel, DataMixin):
 
     # Floating fields exempt from check_fp_dtype_consistency; see class Notes.
     precision_preserving_keys: ClassVar[frozenset[str]] = frozenset()
-    # Cast target of the other floating fields when "positions" is preserved.
-    fp_compute_dtype: ClassVar[torch.dtype] = torch.float32
 
     # Pydantic configuration
     model_config: ClassVar[ConfigDict] = ConfigDict(
@@ -571,46 +555,31 @@ class AtomicData(BaseModel, DataMixin):
                     )
         return self
 
-    def _field_dtype(self) -> torch.dtype:
-        """Cast target of the non-preserved floating fields.
-
-        The positions dtype, unless ``positions`` is precision-preserving, in
-        which case the state may be wider than the rest and the target is
-        :attr:`fp_compute_dtype`.
-        """
-        if "positions" in self.precision_preserving_keys:
-            return self.fp_compute_dtype
-        return self.positions.dtype
-
     @model_validator(mode="after")
     def check_fp_dtype_consistency(self) -> AtomicData:
         """
-        Cast floating point tensors to the positions dtype (to
-        :attr:`fp_compute_dtype` when ``positions`` is precision-preserving;
-        ``atomic_masses`` always follows positions). Fields in
+        Cast floating point tensors to the positions dtype. Fields in
         ``precision_preserving_keys`` are exempt. Casting is unconditional, but
         each distinct ``(field, src, tgt)`` cast warns only once per process.
         """
-        dtype = self._field_dtype()
+        dtype = self.positions.dtype
         for key in self.model_dump().keys():
             if key in self.precision_preserving_keys:
                 continue
-            # integrator kernels take masses in the positions dtype
-            key_dtype = self.positions.dtype if key == "atomic_masses" else dtype
             value = getattr(self, key)
             if not (isinstance(value, torch.Tensor) and value.dtype.is_floating_point):
                 continue
-            if value.dtype != key_dtype:
+            if value.dtype != dtype:
                 # stacklevel=3 keeps the warning on the user's AtomicData(...) call
                 _warn_first(
                     _FP_CAST_WARNED,
-                    (key, str(value.dtype), str(key_dtype)),
+                    (key, str(value.dtype), str(dtype)),
                     f"AtomicData field '{key}' was cast from {value.dtype} to "
-                    f"{key_dtype} to match positions; pass a matching dtype to silence "
+                    f"{dtype} to match positions; pass a matching dtype to silence "
                     f"this (warned once per field/dtype).",
                     stacklevel=3,
                 )
-                self.__dict__[key] = value.to(key_dtype)  # __dict__ skips re-validation
+                self.__dict__[key] = value.to(dtype)  # __dict__ skips re-validation
         return self
 
     @model_validator(mode="after")
@@ -667,14 +636,7 @@ class AtomicData(BaseModel, DataMixin):
         """
         if self.velocities is None:
             # skip re-validation
-            vel_dtype = (
-                self.positions.dtype
-                if "velocities" in self.precision_preserving_keys
-                else self._field_dtype()
-            )
-            self.__dict__["velocities"] = torch.zeros_like(
-                self.positions, dtype=vel_dtype
-            )
+            self.__dict__["velocities"] = torch.zeros_like(self.positions)
         return self
 
     @model_validator(mode="after")
@@ -941,9 +903,7 @@ class AtomicData(BaseModel, DataMixin):
             atoms.arrays["numbers"], device=device, dtype=torch.int32
         )
         positions = torch.as_tensor(
-            atoms.arrays["positions"],
-            device=device,
-            dtype=_state_dtype(cls, "positions", dtype),
+            atoms.arrays["positions"], device=device, dtype=dtype
         )
         pbc_array = atoms.get_pbc()
         if not pbc_array.any():
@@ -1146,11 +1106,7 @@ class AtomicData(BaseModel, DataMixin):
         atomic_numbers = torch.as_tensor(
             structure.atomic_numbers, device=device, dtype=torch.int32
         )
-        positions = torch.as_tensor(
-            structure.cart_coords,
-            device=device,
-            dtype=_state_dtype(cls, "positions", dtype),
-        )
+        positions = torch.as_tensor(structure.cart_coords, device=device, dtype=dtype)
 
         # Cell and pbc handling
         if hasattr(structure, "lattice"):

@@ -2827,6 +2827,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         "forces": "forces",
         "stress": "stress",
     }
+    # Batch attributes of model outputs that are MD state: cast to positions.dtype.
+    _STATE_OUTPUT_ATTRS: frozenset[str] = frozenset({"forces", "stress"})
 
     def compute(
         self,
@@ -3040,19 +3042,28 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             value = detached.get(out_key)
             if value is not None:
                 target = getattr(batch, batch_attr, None)
+                # One rule: model outputs that are MD state (forces, stress) live
+                # in the state dtype = positions.dtype, whatever dtype the model
+                # computed in. Allocation and promotion of an existing buffer both
+                # go through it; labels (energy) keep the model's dtype.
+                state_out = (
+                    batch_attr in self._STATE_OUTPUT_ATTRS
+                    and value.dtype.is_floating_point
+                )
                 if target is None:
                     # Fresh or refilled batches may contain only model inputs, so
                     # allocate storage for model outputs lazily.
-                    # Forces feed the integrator kernels, which need them in the
-                    # state (positions) dtype, e.g. fp64 state with an fp32 model.
-                    alloc_dtype = (
-                        batch.positions.dtype
-                        if batch_attr == "forces" and value.dtype.is_floating_point
-                        else value.dtype
-                    )
                     setattr(
-                        batch, batch_attr, torch.empty_like(value, dtype=alloc_dtype)
+                        batch,
+                        batch_attr,
+                        torch.empty_like(
+                            value,
+                            dtype=batch.positions.dtype if state_out else value.dtype,
+                        ),
                     )
+                    target = getattr(batch, batch_attr)
+                elif state_out and target.dtype != batch.positions.dtype:
+                    setattr(batch, batch_attr, target.to(batch.positions.dtype))
                     target = getattr(batch, batch_attr)
                 self._publish_model_output(
                     batch,
