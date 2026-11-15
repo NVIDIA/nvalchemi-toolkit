@@ -177,6 +177,11 @@ class FIRE(BaseDynamics):
             convergence_hook=convergence_hook,
             **kwargs,
         )
+        if self.by_group:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support by_group=True; "
+                "optimizer state is indexed by graph."
+            )
         self._dt_init = dt
         self._dt_max_init = dt_max
         self._dt_min_init = dt_min
@@ -408,6 +413,11 @@ class FIREVariableCell(BaseDynamics):
             convergence_hook=convergence_hook,
             **kwargs,
         )
+        if self.by_group:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support by_group=True; "
+                "optimizer state is indexed by graph."
+            )
         self._dt_init = dt
         self._dt_max_init = dt_max
         self._dt_min_init = dt_min

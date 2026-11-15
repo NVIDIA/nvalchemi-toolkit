@@ -136,6 +136,11 @@ class NVTNoseHoover(BaseDynamics):
             convergence_hook=convergence_hook,
             **kwargs,
         )
+        if self.by_group:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support by_group=True; "
+                "integrator state is indexed by graph."
+            )
         self._dt_init = fs_to_internal_time(dt)
         self._temperature_init = temperature
         self._thermostat_time_init = fs_to_internal_time(thermostat_time)

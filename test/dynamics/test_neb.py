@@ -33,7 +33,7 @@ from nvalchemi.dynamics import (
     DynamicsStage,
     FusedStage,
 )
-from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.dynamics.base import BaseDynamics, BufferConfig, DistributedPipeline
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.dynamics.mep import (
     NEB,
@@ -67,6 +67,7 @@ from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import DynamicsContext, NeighborListHook
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+from test.distributed._gloo_harness import run_gloo
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -325,7 +326,7 @@ class TestNEBConfiguration:
             NEB.from_spec_dict(spec, model=strategy.model)
 
     def test_rejects_neb_managed_reprime_on_entry(self) -> None:
-        """NEB sets reprime_on_entry on its climbing optimizer itself."""
+        """NEB sets reprime_on_entry on its optimizers itself."""
         with pytest.raises(ValueError, match="NEB-managed keys: reprime_on_entry"):
             NEB(model=_model(), optimizer_kwargs={"reprime_on_entry": True})
 
@@ -763,7 +764,7 @@ class TestNEBConfiguration:
         assert engine.by_group is True
         assert engine.device_type == device
         assert engine.n_steps == 17
-        assert engine._reprime_status_codes == frozenset()
+        assert engine._reprime_status_codes == frozenset({0})
         assert len(engine.sub_stages) == 1
         stage = engine.sub_stages[0][1]
         assert stage.by_group is True
@@ -796,7 +797,7 @@ class TestNEBConfiguration:
         assert engine.device_type == device
         assert len(engine.sub_stages) == 2
         assert engine.n_steps == 500
-        assert engine._reprime_status_codes == frozenset({1})
+        assert engine._reprime_status_codes == frozenset({0, 1})
         regular = engine.sub_stages[0][1]
         climbing = engine.sub_stages[1][1]
         assert regular.n_steps == 11
@@ -1817,3 +1818,129 @@ class TestNEBStreaming:
         sampler = SizeAwareSampler(_BandDataset([(3, 1)]), by_group=True, max_atoms=10)
         with pytest.raises(ValueError, match="result sink"):
             NEB(model=_HarmonicModel()).run(sampler=sampler, sinks=[])
+
+
+def _neb_pipeline_worker(
+    rank: int, world_size: int, queue: Any, comm_mode: str, sizes: list[tuple[int, int]]
+) -> None:
+    """Stream NEB paths between two engines built by ``NEB.build_engine``."""
+    neb = NEB(model=_HarmonicModel(), fmax=1e3, optimizer_kwargs={"device_type": "cpu"})
+    # One atom per image: complete paths fit graph and atom budgets together.
+    config = BufferConfig(num_systems=5, num_nodes=5, num_edges=0)
+    sampler = SizeAwareSampler(
+        _BandDataset(sizes), by_group=True, max_atoms=12, max_batch_size=3
+    )
+    results = HostMemory(100)
+    stages = {
+        0: neb.build_engine(sampler=sampler),
+        1: neb.build_engine(sinks=[results]),
+    }
+    for stage in stages.values():
+        stage.buffer_config = config
+        stage.max_batch_size = 2  # paths
+        stage.comm_mode = comm_mode
+    DistributedPipeline(stages=stages, backend="gloo").run()
+    if rank == 1:
+        stored = results.read()
+        layout = stored.group_layout
+        queue.put(
+            [
+                (
+                    int(stored.group_id.view(-1)[start]),
+                    stored.system_id.view(-1)[start:end].tolist(),
+                )
+                for start, end in zip(
+                    layout.group_ptr[:-1].tolist(), layout.group_ptr[1:].tolist()
+                )
+            ]
+        )
+
+
+class TestNEBDistributedPipeline:
+    """Engines from ``NEB.build_engine`` can form a two-rank pipeline."""
+
+    @pytest.mark.parametrize("climbing_mode", [None, "immediate", "after_regular"])
+    def test_received_forces_are_recomputed_before_first_update(
+        self, climbing_mode: str | None
+    ) -> None:
+        """A downstream NEB engine uses its own forces on the first update."""
+        strategy = NEB(
+            model=_HarmonicModel(),
+            spring=0.5,
+            climbing=(
+                None
+                if climbing_mode is None
+                else ClimbingImageConfig(mode=climbing_mode)
+            ),
+            optimizer_kwargs={"device_type": "cpu"},
+        )
+        incoming = _bands()
+        incoming.forces.fill_(99.0)
+        downstream = strategy.build_engine()
+        downstream._ensure_bookkeeping_fields(incoming)
+        incoming.status.fill_(downstream.exit_status)
+        expected = incoming.clone()
+        reference = strategy.build_engine()
+        reference._on_receive(expected)
+        reference.step(expected)
+
+        downstream._recv_to_batch(incoming)
+        batch = downstream.active_batch
+        with patch.object(
+            downstream, "_prime_forces", wraps=downstream._prime_forces
+        ) as prime:
+            downstream.step(batch)
+
+        torch.testing.assert_close(batch.positions, expected.positions)
+        torch.testing.assert_close(batch.forces, expected.forces)
+        prime.assert_called_once()
+
+    def test_mid_run_arrival_matches_fresh_engine(self, device: str) -> None:
+        """A path arriving beside a resident path starts with downstream forces."""
+        strategy = NEB(
+            model=_HarmonicModel().to(device),
+            spring=0.5,
+            climbing=ClimbingImageConfig(mode="immediate"),
+            fmax=1e-12,
+            optimizer_kwargs={"device_type": device},
+        )
+        resident, incoming = _BandDataset([(3, 1), (4, 1)], device).paths
+        downstream = strategy.build_engine()
+        downstream._recv_to_batch(resident)
+        for _ in range(3):
+            downstream.step(downstream.active_batch)
+
+        incoming["energy"] = torch.zeros(4, 1, device=device)
+        incoming["forces"] = torch.full_like(incoming.positions, 99.0)
+        reference = strategy.build_engine()
+        reference._recv_to_batch(incoming.clone())
+        expected = reference.active_batch
+        downstream._recv_to_batch(incoming)
+        batch = downstream.active_batch
+        assert batch.reprime_pending.view(-1).tolist() == [False] * 3 + [True] * 4
+
+        # Arrivals spend one shared compute priming while the resident continues.
+        downstream.step(batch)
+        torch.testing.assert_close(batch.positions[3:], expected.positions)
+        assert not batch.reprime_pending.any()
+        for _ in range(3):
+            downstream.step(batch)
+            reference.step(expected)
+            torch.testing.assert_close(batch.positions[3:], expected.positions)
+            torch.testing.assert_close(batch.forces[3:], expected.forces)
+
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_paths_finish_once_and_stay_complete(self, comm_mode: str) -> None:
+        """Every path is stored once downstream, whole and in image order."""
+        sizes = [(3, 1), (4, 1), (3, 1), (5, 1), (3, 1)]
+        results = run_gloo(
+            world_size=2, fn=_neb_pipeline_worker, args=(comm_mode, sizes)
+        )
+        assert len(results) == 1
+        paths = results[0]
+        assert sorted(path for path, _ in paths) == list(range(len(sizes)))
+        for path, system_ids in paths:
+            assert len(system_ids) == sizes[path][0]
+            assert system_ids == list(
+                range(system_ids[0], system_ids[0] + len(system_ids))
+            )

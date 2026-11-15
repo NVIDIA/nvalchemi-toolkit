@@ -316,6 +316,14 @@ batch from the sampler and replaces graduated samples automatically:
 The second rank receives graduated samples via ``irecv`` and
 accumulates them in its ``active_batch``.
 
+The sampler's ``max_batch_size`` limits the first stage's batch. Each
+downstream stage's own ``max_batch_size`` limits how many received samples it
+admits. Both count graphs, or complete groups with ``by_group=True``.
+Transfers limit the selected graph count to the send-buffer capacity, keeping
+complete groups when grouped. Excess groups wait for a later step. A group that
+exceeds the graph capacity raises ``ValueError``. Atom and edge capacities must
+accommodate every selected graph, otherwise the transfer also raises.
+
 
 Data sinks for the final stage
 -------------------------------
@@ -345,8 +353,11 @@ Overflow of received samples
 ----------------------------
 
 When samples arrive while a stage's active batch is full, the excess waits in
-``overflow_sinks`` and is drained into the batch as room frees up. By default,
-each stage uses its own :class:`~nvalchemi.dynamics.HostMemory`. A downstream
+``overflow_sinks`` and is drained into the batch as room frees up. Each drain
+removes only the oldest samples that fit. By default, each stage uses its
+own :class:`~nvalchemi.dynamics.HostMemory`, whose drain cost follows the samples
+admitted rather than the length of the queue. Other sink implementations may
+read and rewrite the remaining queue. A downstream
 stage finishes once its upstream stage is done and both its active batch and
 its overflow sinks are empty.
 

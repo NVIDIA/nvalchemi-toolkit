@@ -29,8 +29,10 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import (
     FIRE2,
+    NVE,
     ConvergenceHook,
     DistributedPipeline,
+    DynamicsStage,
     FusedStage,
     HostMemory,
     NVTLangevin,
@@ -38,6 +40,7 @@ from nvalchemi.dynamics import (
 )
 from nvalchemi.dynamics.base import BufferConfig
 from nvalchemi.dynamics.hooks import SnapshotHook
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 from test.distributed._gloo_harness import run_gloo
 
@@ -324,3 +327,88 @@ def test_plain_stage_steps_systems_sent_by_fused_stage() -> None:
 
     assert seen == list(range(_N_SYSTEMS))
     assert moved == seen
+
+
+class _GraduationRecorder:
+    """Record the ``system_id`` of every graph that graduates."""
+
+    stage = DynamicsStage.ON_GRADUATE
+    frequency = 1
+
+    def __init__(self) -> None:
+        self.system_ids: list[int] = []
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
+        """Append the identifiers of this step's graduates."""
+        system_id = ctx.batch.system_id.view(-1)[: ctx.batch.num_graphs]
+        self.system_ids.extend(system_id[ctx.graduated_mask].tolist())
+
+
+def _bursts(every: int) -> ConvergenceHook:
+    """Converge every system at once on each ``every``-th evaluation."""
+    calls = 0
+
+    def converge_in_bursts(energy: torch.Tensor) -> torch.Tensor:
+        nonlocal calls
+        calls += 1
+        return torch.full((energy.shape[0],), calls % every == 0)
+
+    return ConvergenceHook(
+        criteria=[{"key": "energy", "threshold": 0.0, "custom_op": converge_in_bursts}]
+    )
+
+
+def _atom_capacity_worker(rank: int, world_size: int, queue) -> None:
+    """Run three stages whose sends carry one three-atom system at a time."""
+    torch.manual_seed(0)
+    model = DemoModelWrapper(DemoModel())
+    # Room for two systems but only four atoms, so sends copy part of a request.
+    config = BufferConfig(num_systems=2, num_nodes=4, num_edges=0)
+    recorder = _GraduationRecorder()
+    relax = FIRE2(model=model, dt=0.05, device_type="cpu", convergence_hook=_bursts(3))
+    stages = {
+        0: FusedStage(
+            sub_stages=[(0, FIRE2(model=model, dt=0.05, n_steps=2, device_type="cpu"))],
+            device_type="cpu",
+            sampler=SizeAwareSampler(
+                dataset=_SystemDataset(8), max_atoms=12, max_edges=0, max_batch_size=4
+            ),
+            prior_rank=None,
+            next_rank=1,
+            buffer_config=config,
+        ),
+        1: FusedStage(
+            sub_stages=[(0, relax)],
+            device_type="cpu",
+            prior_rank=0,
+            next_rank=2,
+            buffer_config=config,
+        ),
+        2: FusedStage(
+            sub_stages=[(0, NVE(model=model, dt=0.5, n_steps=2, device_type="cpu"))],
+            device_type="cpu",
+            hooks=[recorder],
+            prior_rank=1,
+            next_rank=None,
+            buffer_config=config,
+        ),
+    }
+    finished = False
+    with DistributedPipeline(stages=stages, backend="gloo") as pipeline:
+        for _ in range(200):
+            pipeline.step()
+            if pipeline._sync_done_flags():
+                finished = True
+                break
+    if rank == 2:
+        queue.put((finished, recorder.system_ids))
+
+
+def test_partial_sends_deliver_every_system_once() -> None:
+    """Graduates left by atom-limited sends leave later; the run then ends."""
+    [(finished, graduated)] = run_gloo(
+        world_size=3, fn=_atom_capacity_worker, timeout_sec=90.0
+    )
+
+    assert finished
+    assert sorted(graduated) == list(range(8))

@@ -335,14 +335,14 @@ class FIRE2VariableCell(BaseDynamics):
         self.tmax = tmax
         self.tmin = tmin
         self.maxstep = maxstep
-        self.cell_force_scale = cell_force_scale
-
-    def _init_state(self, batch: Batch) -> None:
         if self.by_group:
             raise NotImplementedError(
                 "FIRE2VariableCell does not support by_group=True because cell "
                 "degrees of freedom remain graph-level."
             )
+        self.cell_force_scale = cell_force_scale
+
+    def _init_state(self, batch: Batch) -> None:
         M = batch.num_graphs
         dev = batch.device
         dtype = batch.positions.dtype

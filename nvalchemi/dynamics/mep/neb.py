@@ -591,6 +591,9 @@ class NEB(DynamicsStrategy):
     ) -> FusedStage:
         """Construct a fresh fused optimizer.
 
+        Pipeline arrivals recompute NEB forces before their first update,
+        since upstream forces may use different springs or climbing images.
+
         Parameters
         ----------
         sampler : SizeAwareSampler or None, optional
@@ -609,6 +612,7 @@ class NEB(DynamicsStrategy):
             **self.optimizer_kwargs,
             "model": self.model,
             "by_group": True,
+            "reprime_on_entry": True,
         }
         if self.climbing is not None and self.climbing.mode == "after_regular":
             climbing_status = 1
@@ -638,7 +642,6 @@ class NEB(DynamicsStrategy):
                             fmax=self.fmax,
                             regular_stage=False,
                         ),
-                        reprime_on_entry=True,
                     ),
                 ),
             ]

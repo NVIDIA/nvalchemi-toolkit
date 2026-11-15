@@ -240,12 +240,16 @@ Back-pressure
 
 When the ``send_buffer`` capacity is limited:
 
-- Only ``min(converged_count, remaining_capacity)`` samples are
-  extracted via ``_populate_send_buffer``.
+- Transfers copy only selected graphs that fit all transported levels,
+  including graph, atom, and edge capacities. Grouped batches send a prefix
+  of complete selected groups in batch order.
+- A mask selecting only part of a group raises ``ValueError``. A nonempty
+  selection also raises if an empty send buffer cannot fit any selected
+  graph or group. In either case, the active batch is unchanged.
 - The active batch is replaced by a tight copy (via ``trim()``) that
-  excludes the graduated samples.
-- Excess converged samples that did not fit in the send buffer remain
-  in the active batch.
+  excludes only the copied samples.
+- Selected graphs or groups that are not copied remain in the active batch
+  for a later step.
 - ``step()`` treats them as no-ops: their positions and velocities are
   saved before the integrator and restored after (the ``active_mask``
   logic in :meth:`BaseDynamics.step() <nvalchemi.dynamics.BaseDynamics.step>`).
@@ -273,11 +277,19 @@ several helper methods for routing data between buffers:
   2. Room available: append to the existing active batch.
   3. No room: write to ``overflow_sinks``.
 
+  Grouped data is admitted as complete groups, and ``max_batch_size``
+  counts groups. Groups that do not fit the free room go to
+  ``overflow_sinks``.
+
 - **_batch_to_buffer(mask)**: Copies graduated samples from the active
   batch into the send buffer via :meth:`put()
   <nvalchemi.data.Batch.put>`, then replaces the active batch with a
   tight copy via :meth:`trim() <nvalchemi.data.Batch.trim>` (or sets
-  it to ``None`` if every graph was graduated).
+  it to ``None`` if every graph was copied). Selected samples that do not
+  fit stay in the active batch for a later step. Raises ``ValueError`` if
+  the mask selects only part of a group, or if a nonempty selection cannot
+  copy any graph or group into an empty send buffer. These errors leave
+  the active batch unchanged.
 
 - **_populate_send_buffer(converged_indices)**: Creates a boolean mask
   from converged indices and delegates to ``_batch_to_buffer``.  Does
@@ -298,8 +310,10 @@ several helper methods for routing data between buffers:
   result sink with room for all of them.
 
 - **_drain_sinks_to_batch()**: Pulls samples from ``overflow_sinks``
-  back into the active batch when room is available. Result sinks are
-  never read.
+  back into the active batch when room is available. Each sink gives up
+  only as many of its oldest samples as fit, via
+  ``DataSink.drain(max_samples=...)``, and the rest stay in place. Result
+  sinks are never read.
 
 Built-in result and overflow sinks omit neighbor data to avoid shape mismatches
 between refills. When overflow samples return to the active batch,
