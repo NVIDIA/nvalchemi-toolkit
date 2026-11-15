@@ -3043,7 +3043,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 if target is None:
                     # Fresh or refilled batches may contain only model inputs, so
                     # allocate storage for model outputs lazily.
-                    setattr(batch, batch_attr, torch.empty_like(value))
+                    # Forces feed the integrator kernels, which need them in the
+                    # state (positions) dtype, e.g. fp64 state with an fp32 model.
+                    alloc_dtype = (
+                        batch.positions.dtype
+                        if batch_attr == "forces" and value.dtype.is_floating_point
+                        else value.dtype
+                    )
+                    setattr(
+                        batch, batch_attr, torch.empty_like(value, dtype=alloc_dtype)
+                    )
                     target = getattr(batch, batch_attr)
                 self._publish_model_output(
                     batch,
