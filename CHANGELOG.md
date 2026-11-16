@@ -22,6 +22,12 @@
   and extension). It replaces the 14 skills under `.claude/skills/`, which are
   removed from the repository.
 
+### Changed
+
+- Update `README.md` and `docs/userguide/agent_skills.md` to recommend installing
+  agent skills via the NVIDIA skills catalog (`npx skills add nvidia/skills --skill nvalchemi-toolkit`),
+  with an interactive installation selector for Codex, Claude Code, and Pi.
+
 ### Breaking Changes
 
 - Custom `DataSink.drain` overrides must accept `max_samples: int | None = None`.
