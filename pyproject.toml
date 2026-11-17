@@ -12,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.15"
 license = {file="LICENSE"}
 dependencies = [
-    "nvalchemi-toolkit-ops>=0.5.0",
+    "nvalchemi-toolkit-ops>=0.6.0",
     "torch>=2.8",
     "click",
     "loguru",
@@ -68,7 +68,7 @@ ase = [
     "ase>=3.27.0",
 ]
 cu12 = [
-    "nvalchemi-toolkit-ops[torch-cu12]>=0.5.0; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu12]>=0.6.0; sys_platform != 'darwin'",
     # PhysicsNeMo core only: its [cuXX] extras pin cupy<14 (no cp314 wheels),
     # and nothing in nvalchemi imports the RAPIDS stack (cuml/cupy/DALI).
     # Users needing RAPIDS should install it directly.
@@ -78,7 +78,7 @@ cu12 = [
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
 ]
 cu13 = [
-    "nvalchemi-toolkit-ops[torch-cu13]>=0.5.0; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu13]>=0.6.0; sys_platform != 'darwin'",
     # PhysicsNeMo core only — see the cu12 extra note.
     "nvidia-physicsnemo>=2.2.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
@@ -106,7 +106,7 @@ uma = [
 uma-cu12 = [
     "fairchem-core>=2.22.0",
     "setuptools>=70.0.0,<81",
-    "nvalchemi-toolkit-ops[torch-cu12]>=0.5.0; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu12]>=0.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
@@ -114,7 +114,7 @@ uma-cu12 = [
 uma-cu13 = [
     "fairchem-core>=2.22.0",
     "setuptools>=70.0.0,<81",
-    "nvalchemi-toolkit-ops[torch-cu13]>=0.5.0; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu13]>=0.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
@@ -221,6 +221,21 @@ override-dependencies = [
   "lmdb>=1.6.2,<=1.7.3; python_version < '3.14'",
   "lmdb>=2.0.0; python_version >= '3.14'",
 ]
+# Static metadata for the temporary ops 0.6.0-rc git pin. Without it, uv reads
+# the ops tool.uv.sources torch indexes, which conflict with ours. Copied from
+# nvalchemi-toolkit-ops 0.6.0-rc (0724b370). Remove together with the pin.
+dependency-metadata = [
+  { name = "nvalchemi-toolkit-ops", version = "0.6.0", requires-dist = [
+    "warp-lang >= 1.16.0",
+    "numpy",
+    "torch>=2.10.0 ; extra == 'torch'",
+    "torch>=2.10.0,<2.15.0 ; extra == 'torch-cu12'",
+    "torch>=2.10.0 ; extra == 'torch-cu13'",
+    "jax[cuda13]>=0.10.0,<0.10.2 ; extra == 'jax'",
+    "jax[cuda12]>=0.10.0,<0.10.2 ; extra == 'jax-cu12'",
+    "jax[cuda13]>=0.10.0,<0.10.2 ; extra == 'jax-cu13'",
+  ], provides-extras = ["torch", "torch-cu12", "torch-cu13", "jax", "jax-cu12", "jax-cu13"] },
+]
 
 [tool.uv.sources]
 torch = [
@@ -235,6 +250,11 @@ torchvision = [
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "uma-cu13", marker = "sys_platform != 'darwin'" },
 ]
+# Temporary dogfood pin: resolve nvalchemi-toolkit-ops from its 0.6.0-rc
+# branch instead of PyPI. tool.uv.sources affects only uv in this workspace,
+# so published metadata is unchanged. Remove this entry before the 0.4.0
+# release, once ops 0.6.0 is on PyPI.
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", branch = "0.6.0-rc" }
 
 # these are intended to be developer facing
 [dependency-groups]
