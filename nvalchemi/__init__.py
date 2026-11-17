@@ -15,6 +15,6 @@
 
 from nvalchemi._optional import OptionalDependency, OptionalDependencyError
 
-version = "0.3.0"
+version = "0.4.0"
 # aliased as this is more common
 __version__ = version
