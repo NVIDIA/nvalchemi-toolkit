@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# NVSkills CI writes these files into each skill and signs them. Editing them
+# (even a newline at the end) breaks the signature, so no hook may touch them.
+exclude: ^skills/[^/]+/(BENCHMARK\.md|skill-card\.md|skill\.oms\.sig)$
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0

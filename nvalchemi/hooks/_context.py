@@ -80,12 +80,19 @@ class DynamicsContext(HookContext):
         that graduated during the current step, meaning their status reached
         the engine's ``exit_status``. Set only for ``ON_GRADUATE`` dispatches,
         where it may be all ``False``; ``None`` at every other stage.
+    previous_graph_indices : torch.Tensor | None
+        Read-only long tensor on the batch's device, with one entry per current
+        graph. Maps to its index at the last admission dispatch, or ``-1`` for
+        arrivals. Populated only at ``ON_ADMISSION`` for initial batches and
+        refill/pipeline membership changes. ``None`` at other stages.
     """
 
     step_count: int = 0
     converged_mask: Bool[torch.Tensor, "B"] | None = None  # noqa: F722, F821
     active_graph_mask: Bool[torch.Tensor, "B"] | None = None  # noqa: F722, F821
     graduated_mask: Bool[torch.Tensor, "B"] | None = None  # noqa: F722, F821
+    # ON_ADMISSION setup only: initial batch, refill, or pipeline membership change.
+    previous_graph_indices: torch.Tensor | None = None
 
 
 @dataclass(kw_only=True)

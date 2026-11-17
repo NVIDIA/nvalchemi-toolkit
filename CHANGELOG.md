@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0
+## 0.4.0 — 2026-XX-XX
 
 ### Added
 
@@ -24,6 +24,87 @@
 - `AtomicData` / `Batch` gain per-atom `dipoles` `[N, 3]` and `quadrupoles`
   `[N, 3, 3]` fields. `PipelineModelWrapper` now wires upstream outputs into a
   consumer's `optional_inputs` as well as its `required_inputs`.
+- `DistributedPipeline` supports grouped dynamics, including NEB, with
+  complete-path transfers and preserved optimizer state. Transfer capacities
+  apply to complete paths.
+- Single-device in-flight NEB batching via `NEB.run(sampler=..., sinks=...)`
+  with `SizeAwareSampler(by_group=True)`. The updated
+  `examples/advanced/11_batched_neb.py` demonstrates path refilling and
+  compares energy barriers with the static run.
+- `SizeAwareSampler(field_defaults=...)` fills missing node, edge, or system
+  fields on loaded samples so optional fields survive packing. Samples are
+  now modified in place when loaded, including grouped samples, which are no
+  longer cloned.
+- `Batch.concatenate()` combines several batches in one pass.
+- Add the `nvalchemi-toolkit` agent skill under `skills/nvalchemi-toolkit/`: one
+  `SKILL.md` that scopes a request and routes to six task notes (data, models,
+  dynamics and optimization, training, generative workflows, and composition
+  and extension). It replaces the 14 skills under `.claude/skills/`, which are
+  removed from the repository.
+
+### Breaking Changes
+
+- Custom `DataSink.drain` overrides must accept `max_samples: int | None = None`.
+  Pipeline refills now pass `max_samples=`. Overrides using `drain(self)` must
+  update their signature and honor the limit, leaving remaining samples stored
+  in order.
+
+### Fixed
+
+- `DistributedPipeline` sends that reach the send buffer's atom or edge
+  capacity send the graduates that fit and keep the rest for a later send.
+  Samples that cannot fit an empty buffer raise `ValueError` with their sizes
+  and the `BufferConfig` capacities.
+- Plain pipeline stages detect graphs finished by status-setting hooks and
+  send them downstream or write them to final result sinks.
+- `HostMemory`, `GPUBuffer`, and `ZarrData` omit temporary neighbor data so
+  samples with different neighbor widths can be stored together. This covers
+  stage sinks, direct writes, and DomainParallel snapshot hooks. Live batches
+  keep their neighbor tensors.
+- Received pipeline samples bypass template-buffer copies so missing outputs
+  trigger force priming. Remove the unused receive staging buffer and its
+  per-step zeroing.
+- Distributed pipelines retain and retry graduates that do not fit the send
+  buffer. `fill_available()` fills free batch capacity from the sampler without
+  removing unsent graduates. Plain pipeline stages initialize missing `status`
+  on hand-built batches so unsent graduates stay frozen. Standalone dynamics
+  behavior is unchanged.
+- Pipeline receive templates retain their field layout when stages add
+  bookkeeping fields to incoming batches.
+- `DistributedPipeline` no longer drains finished results back into
+  computation. Received samples that do not fit wait in a new
+  `overflow_sinks` list on the receiving stage, a private unbounded `HostMemory`
+  by default. Bounded host/GPU overflow storage raises when full rather than
+  making upstream stages wait. Pipeline setup warns about result `sinks` on
+  stages with a downstream rank.
+- `DataSink.drain(max_samples=...)` limits refills to the oldest samples that
+  fit, and `HostMemory` leaves the remaining samples in place without copying
+  or rewriting them.
+- `Batch.append()` discards unused buffer rows. Pass `assume_compact=True` to
+  skip this for compact inputs. `HostMemory.write()` trims padding before
+  copying to CPU.
+
+- The fine-tuning guide now passes `--checkpoint-index` to
+  `nvalchemi-training spec resume`, the flag the CLI accepts.
+- Atom migration under `DomainParallel` no longer reshards neighbor-list arrays
+  (`neighbor_matrix`, `neighbor_matrix_shifts`, `num_neighbors`). They are
+  rebuilt after the move, and ranks that had grown `max_neighbors` to different
+  widths stalled in the exchange.
+- Halo ghost selection for an owned atom that sits past a periodic face of a
+  split axis. `DomainParallel` leaves the split axes unwrapped, and the
+  receivers that share the owner's grid coordinate on that axis get no lattice
+  image there, so such an atom was never offered to them as a ghost and their
+  forces missed a neighbor inside the cutoff. This happens from the first
+  step, not only in long runs: a crystal built with atoms exactly on the
+  domain faces (the hexagonal SiO2 cells, for example) has atoms cross those
+  faces in the first integrator step. Ghost selection now canonicalizes
+  fractions around the owner's own domain instead of into [0, 1), so the atom
+  stays adjacent to its owner for every receiver.
+
+## 0.3.0
+
+### Added
+
 - Add `nvalchemi.csp` modules for molecular crystal-structure prediction
   applications, including random rigid-molecule packing, atom-bounded radial
   matching, and greedy de-duplication for `Batch` and loader-backed pools,
@@ -589,6 +670,18 @@
 
 ### Fixed
 
+- `MLIPSpec.with_adapters`, `with_compile` and `merge` no longer reset
+  `gp_replicate_geometry` to its default, so a spec that runs the wrapper on the
+  replicated geometry keeps doing so. `merge` raises `ValueError` when the two
+  specs disagree on it.
+- `DomainParallel.partition` now closes the model from a previous `partition`
+  before building the new one. The old model's adapter restore could otherwise
+  run after the new model had installed its own and put the stock functions back
+  over them, so a compiled run on a second system silently lost its decomposition
+  adapters.
+- AIMNet2's domain-decomposition adapters (`mol_sum` and the Coulomb heads) no
+  longer break a plain forward made while a decomposed AIMNet2 model is open.
+  Outside a decomposed forward they now give the stock result.
 - `Batch.put` now copies selected graphs from sources larger than the buffer's
   remaining graph capacity and marks the indices of copied source graphs in
   `copied_mask`. A source that is itself a pre-allocated buffer no longer
@@ -621,6 +714,11 @@
   Large single systems were therefore given a coarse grid, which made
   neighbor-list builds considerably slower. The single-system cap is now used
   when the hook builds a cell list for one system.
+- `NVTNoseHoover`, `NPT`, and `NPH` now size the thermostat and barostat state
+  of systems admitted mid-run (inflight refill or pipeline receive) from each
+  system's own atom count, as for the first batch, instead of the batch
+  average. Arrivals far from the average size were thermostatted to the wrong
+  temperature and given the wrong barostat mass.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
@@ -664,6 +762,18 @@
   retired on-policy frame carrying the flag, so an evicting buffer write
   chained the resident frames to one graph node and the second training step
   failed with "backward through the graph a second time".
+- **`FusedStage` step budgets** — a non-final sub-stage without a
+  `convergence_hook` is now ended by its `n_steps` alone. It was given the
+  default `fmax < 0.05` criterion before, so in
+  `FIRE2 + NVTLangevin(n_steps=...) + NVE(n_steps=...)` the NVT stage ran
+  0 steps (#238). A non-final sub-stage with neither raises a `UserWarning`.
+- `NeighborListHook` also runs at `DynamicsStage.ON_ADMISSION` and re-derives
+  its neighbor width, buffers, and skin reference for the admitted systems. An
+  inflight refill or pipeline receive that kept the atom and graph counts left
+  them sized for the old systems, so MATRIX models silently lost neighbors
+  and computed wrong energies and forces. A change in graph count alone now
+  re-derives them too, and multi-source pipeline neighbor hooks reset every
+  source.
 
 ### Deprecated
 

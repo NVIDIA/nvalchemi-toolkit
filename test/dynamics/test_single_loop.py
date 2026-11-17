@@ -22,6 +22,7 @@ model where multiple dynamics engines share a batch.
 from __future__ import annotations
 
 import secrets
+import warnings
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -182,6 +183,8 @@ class _RandomSizeAllocationHook:
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         """Allocate and retain a randomly sized tensor on the batch device."""
+        if stage == DynamicsStage.ON_ADMISSION:
+            assert ctx.previous_graph_indices.tolist() == [-1] * ctx.batch.num_graphs
         size = secrets.randbelow(8) + 1
         self.allocations.append(torch.empty(size, device=ctx.batch.device))
 
@@ -638,6 +641,75 @@ class TestFusedStage:
         assert batch.n_steps_counter_1.view(-1).tolist() == [1, 0, 0]
         assert batch.status.tolist() == [1, 0, fused.exit_status]
 
+    @pytest.mark.parametrize("position", [0.0, 10.0], ids=["zero_force", "large_force"])
+    def test_n_steps_sub_stages_run_full_budget(self, position: float) -> None:
+        """Sub-stages with ``n_steps`` and no convergence hook run exactly
+        ``n_steps`` steps per system, at every position in the fused stage.
+
+        Zero forces satisfy the default ``fmax`` criterion, which must not
+        end a sub-stage that declares no convergence criterion.
+        """
+        budgets = [3, 2, 4]
+        stages = [
+            TrackingDynamics(model=CompilerFriendlyModel(), n_steps=n) for n in budgets
+        ]
+        fused = FusedStage(sub_stages=list(enumerate(stages)))
+        batch = create_batch_with_status(n_graphs=3)
+        batch.positions.fill_(position)  # CompilerFriendlyModel: forces = -2 * r
+        batch.status = torch.tensor([0, 1, 2])
+
+        for _ in range(2 * sum(budgets)):
+            fused.step(batch)
+        steps_per_stage = torch.stack(
+            [torch.stack(stage.updated_masks).sum(dim=0) for stage in stages], dim=1
+        )
+
+        assert steps_per_stage.tolist() == [[3, 2, 4], [0, 2, 4], [0, 0, 4]]
+        assert batch.status.tolist() == [fused.exit_status] * 3
+
+    @pytest.mark.parametrize(
+        ("first_kwargs", "warns"),
+        [
+            ({}, True),
+            ({"n_steps": 5}, False),
+            ({"convergence_hook": ConvergenceHook.from_fmax(0.05)}, False),
+            (
+                {
+                    "hooks": [
+                        ConvergenceHook.from_fmax(
+                            0.05, source_status=0, target_status=1
+                        )
+                    ]
+                },
+                False,
+            ),
+            (
+                {"hooks": [ConvergenceHook.from_fmax(0.05, source_status=0)]},
+                True,
+            ),
+        ],
+        ids=[
+            "nothing",
+            "n_steps",
+            "convergence_hook",
+            "own_migration_hook",
+            "hook_without_target",
+        ],
+    )
+    def test_warns_when_sub_stage_cannot_hand_over(
+        self, first_kwargs: dict[str, Any], warns: bool
+    ) -> None:
+        """A non-final sub-stage with no way to move systems on is reported."""
+        first = BaseDynamics(model=self.model, **first_kwargs)
+        last = BaseDynamics(model=self.model)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            FusedStage(sub_stages=[(0, first), (1, last)])
+
+        messages = [str(w.message) for w in caught]
+        assert any("never move to the next sub-stage" in m for m in messages) == warns
+
     @pytest.mark.parametrize("invalid", [None, 0, 1, {1}, "false"])
     def test_dynamics_reprime_on_entry_requires_bool(self, invalid) -> None:
         """A dynamics rejects a non-bool reprime_on_entry."""
@@ -834,7 +906,8 @@ class TestFusedStage:
         torch.compiler.reset()
         try:
             model = model_cls()
-            sampler = MagicMock()
+            sampler = MagicMock(by_group=False)
+            del sampler.assemble_samples
             sampler.max_atoms = sampler.max_edges = sampler.max_batch_size = None
             sampler.request_replacements_budget.return_value = [
                 AtomicData(atomic_numbers=torch.tensor([6]), positions=torch.ones(1, 3))
@@ -2258,10 +2331,14 @@ class _TrackingHook:
         self.call_step_counts: list[int] = []
         self.converged_masks: list[torch.Tensor | None] = []
         self.active_masks: list[torch.Tensor | None] = []
+        self.contexts: list[DynamicsContext] = []
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         """Record the call, step count, and context masks."""
         self.call_count += 1
+        self.contexts.append(ctx)
+        if stage != DynamicsStage.ON_ADMISSION:
+            assert ctx.previous_graph_indices is None
         self.call_step_counts.append(ctx.step_count)
         self.converged_masks.append(ctx.converged_mask)
         self.active_masks.append(
@@ -2465,7 +2542,19 @@ class TestFusedStageSubstageHooks:
         batch.status = torch.tensor([0, 1])
 
         fused.run(batch, n_steps=1)
+        fused._record_batch_change(batch, torch.arange(batch.num_graphs))
+        dynamics0._record_batch_change(batch, torch.arange(batch.num_graphs))
         fused.run(batch, n_steps=1)
+
+        for index in range(2):
+            indices = hooks[0].contexts[index].previous_graph_indices
+            assert indices.tolist() == [-1, -1]
+            assert hooks[1].contexts[index].previous_graph_indices is indices
+            assert hooks[2].contexts[index].previous_graph_indices is indices
+        # Status migration changes ownership, not batch membership.
+        batch.status[:] = 1
+        fused.step(batch)
+        assert [hook.call_count for hook in hooks] == [2, 2, 2]
 
         assert hooks[0].call_step_counts == [0, 1]
         assert hooks[0].active_masks[0].tolist() == [True, True]

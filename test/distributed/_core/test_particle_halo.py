@@ -192,7 +192,9 @@ class TestIdentifyGhostsSplit:
         assert direct_mask.tolist() == [True]
         assert pbc_list == []
 
-    def test_sender_owned_atom_wrapped_into_receiver_core_is_direct_ghost(self):
+    def test_sender_owned_atom_past_periodic_face_reaches_receiver_once_through_image(
+        self,
+    ):
         config = _make_halo_config(
             box_length=30.0,
             ghost_width=3.0,
@@ -200,14 +202,41 @@ class TestIdentifyGhostsSplit:
             rank=1,
         )
         # Rank 1 retains an atom just beyond the periodic z boundary. Rank 0
-        # needs it as a ghost until ownership migrates. Halo routing uses the
-        # canonical z=0.1 position to select rank 0 but transmits raw z=30.1;
-        # the receiver's neighbor list supplies the -cell image.
+        # needs it as a ghost until ownership migrates. Since fractions are
+        # canonicalized around the owner's centre (drift fix), an atom that
+        # drifted past a periodic face reaches a receiver on the other side
+        # through the periodic image rather than directly with its raw
+        # position; the receiver sees the same neighbour.
         positions = torch.tensor([[15.0, 15.0, 30.1]])
         direct_mask, pbc_list = _identify_ghosts_split(positions, 0, config)
 
-        assert direct_mask.tolist() == [True]
-        assert pbc_list == []
+        # Invariant: delivered to rank 0 exactly once (direct XOR image), at a
+        # position equal to 30.1 modulo the cell length, inside rank 0's ghost
+        # region ([0, 15) widened by the ghost width on both sides).
+        image_hits = [(mask, shift) for mask, shift in pbc_list if bool(mask[0])]
+        assert int(direct_mask[0]) + len(image_hits) == 1
+        if bool(direct_mask[0]):
+            delivered = positions[0]
+        else:
+            delivered = positions[0] + image_hits[0][1]
+        torch.testing.assert_close(
+            torch.remainder(delivered[2:3], 30.0),
+            torch.tensor([0.1]),
+            atol=1e-4,
+            rtol=0.0,
+        )
+        assert -3.0 <= float(delivered[2]) < 18.0
+
+        # Mechanism: not direct; one image with the -cell shift; z = 0.1.
+        assert direct_mask.tolist() == [False]
+        assert len(pbc_list) == 1
+        pbc_mask, shift = pbc_list[0]
+        assert pbc_mask.tolist() == [True]
+        torch.testing.assert_close(shift, torch.tensor([0.0, 0.0, -30.0]))
+        torch.testing.assert_close(
+            positions[pbc_mask] + shift,
+            torch.tensor([[15.0, 15.0, 0.1]]),
+        )
 
     def test_primary_cell_atom_uses_pbc_image_for_periodic_neighbor(self):
         config = _make_halo_config(

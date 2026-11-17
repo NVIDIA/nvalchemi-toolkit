@@ -93,6 +93,57 @@ def test_halo_no_partitioner_or_dist_is_noop():
     assert halo.apply_migration(state, sentinel, MigrationPlan.none()) is sentinel
 
 
+def test_migration_does_not_reshard_neighbor_list_arrays(monkeypatch):
+    """Neighbor-list arrays are rebuilt after a move and sized per rank.
+
+    Each rank grows ``max_neighbors`` on its own, so resharding ``neighbor_matrix``
+    sends rows of different widths from different ranks in one collective, which
+    stalls every rank. Only the per-atom state that must travel is resharded.
+    """
+    from unittest.mock import Mock, patch
+
+    from nvalchemi.data import AtomicData, Batch
+
+    n = 4
+    data = AtomicData(
+        positions=torch.rand(n, 3),
+        atomic_numbers=torch.ones(n, dtype=torch.long),
+        cell=torch.eye(3).unsqueeze(0) * 10.0,
+        pbc=torch.ones(1, 3, dtype=torch.bool),
+    )
+    data.add_node_property("neighbor_matrix", torch.zeros(n, 5, dtype=torch.int32))
+    data.add_node_property("num_neighbors", torch.zeros(n, dtype=torch.int32))
+    data.add_node_property("velocities", torch.zeros(n, 3))
+    batch = Batch.from_data_list([data])
+
+    state = Mock()
+    state.partitioner.keeps_owner.return_value = torch.ones(n, dtype=torch.bool)
+    state.partitioner.assign_atoms_to_ranks.return_value = torch.zeros(
+        n, dtype=torch.int64
+    )
+    plan = MigrationPlan(work=Mock(), flag=torch.ones(1, dtype=torch.int32))
+
+    sent: list[torch.Tensor] = []
+
+    def _record(tensor, destinations, mesh):
+        sent.append(tensor)
+        return tensor
+
+    monkeypatch.setattr(
+        "nvalchemi.distributed._core.reshard.reshard_by_destination", _record
+    )
+    halo = strategy_for_policy(HaloStoragePolicy(), CFG, 0)
+    with patch.object(halo, "on_cell_change"):
+        migrated = halo.apply_migration(state, batch, plan)
+
+    shapes = {tuple(t.shape) for t in sent}
+    assert (n, 3) in shapes, "positions and velocities must still migrate"
+    assert (n, 5) not in shapes, "neighbor_matrix was resharded"
+    assert not hasattr(migrated, "neighbor_matrix")
+    assert not hasattr(migrated, "num_neighbors")
+    torch.testing.assert_close(migrated.velocities, batch.velocities)
+
+
 def test_reduce_semantics_single_process():
     halo = strategy_for_policy(HaloStoragePolicy(), CFG, 0)
     gpp = strategy_for_policy(GraphParallelPolicy(), CFG, 0)

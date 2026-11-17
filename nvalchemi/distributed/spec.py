@@ -496,7 +496,14 @@ class MLIPSpec:
         ``system_reductions``: logical OR. ``compile``: kept only when both sides
         declare a compatible :class:`CompilePolicy` (see
         :func:`_merge_compile_policies`), else ``None`` with a warning.
+        ``gp_replicate_geometry`` must agree: it selects how the framework runs
+        the wrapper, so specs that disagree cannot describe one composed model.
         """
+        if self.gp_replicate_geometry != other.gp_replicate_geometry:
+            raise ValueError(
+                "cannot merge specs that disagree on gp_replicate_geometry "
+                f"({self.gp_replicate_geometry} vs {other.gp_replicate_geometry})"
+            )
         merged_policy = _merge_policies(
             self.distribution.policy, other.distribution.policy
         )
@@ -524,6 +531,7 @@ class MLIPSpec:
             halo_receiver_edge_filter=_merge_edge_filters(
                 self.halo_receiver_edge_filter, other.halo_receiver_edge_filter
             ),
+            gp_replicate_geometry=self.gp_replicate_geometry,
             compile=_merge_compile_policies(self.compile, other.compile),
         )
 
@@ -575,6 +583,7 @@ class MLIPSpec:
             node_energy_key=self.node_energy_key,
             node_virial_key=self.node_virial_key,
             halo_receiver_edge_filter=self.halo_receiver_edge_filter,
+            gp_replicate_geometry=self.gp_replicate_geometry,
             compile=self.compile,
         )
 
@@ -590,6 +599,7 @@ class MLIPSpec:
             node_energy_key=self.node_energy_key,
             node_virial_key=self.node_virial_key,
             halo_receiver_edge_filter=self.halo_receiver_edge_filter,
+            gp_replicate_geometry=self.gp_replicate_geometry,
             compile=policy,
         )
 

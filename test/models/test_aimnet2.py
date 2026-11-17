@@ -787,3 +787,38 @@ class TestAIMNet2Integration:
         assert path.exists()
         state = torch.load(path, weights_only=True)
         assert isinstance(state, dict)
+
+
+class TestDecompositionAdaptersOutsideADecomposedRun:
+    """A plain call while a decomposed model has the adapters installed.
+
+    Domain decomposition replaces ``aimnet`` helpers for the life of the
+    decomposed model, so a plain AIMNet2 forward in the same process meets the
+    replacements. Outside a decomposed forward they must give the stock result.
+    """
+
+    def test_mol_sum_matches_stock(self):
+        pytest.importorskip("aimnet")
+        from aimnet import nbops
+
+        from nvalchemi.models.aimnet2 import _aimnet2_halo_spec, _distributed_mol_sum
+
+        _aimnet2_halo_spec()  # captures the stock helper before any install
+        x = torch.arange(6, dtype=torch.float64)
+        data = {
+            "_nb_mode": torch.tensor(1),
+            "mol_idx": torch.tensor([0, 0, 0, 1, 1, 1]),
+        }
+
+        torch.testing.assert_close(
+            _distributed_mol_sum(x, data), nbops.mol_sum(x, data)
+        )
+
+    def test_coulomb_head_defers_to_the_stock_forward(self):
+        from nvalchemi.models.aimnet2 import _distributed_coulomb_forward
+
+        original = MagicMock(return_value="stock output")
+        head, data = object(), {"charges": torch.zeros(3)}
+
+        assert _distributed_coulomb_forward(original, head, data) == "stock output"
+        original.assert_called_once_with(head, data)

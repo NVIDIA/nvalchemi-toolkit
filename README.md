@@ -43,7 +43,7 @@ workflows from one GPU to multi-GPU systems.
   stages with `+` or `|`, compile fused steps, and attach logging, safety,
   sampling, profiling or convergence logic throughout each step and on system
   admission or graduation.
-- **Agent-ready guidance**: task-specific skills and `AGENTS.md` teach coding
+- **Agent-ready guidance**: an agent skill and `AGENTS.md` teach coding
   agents the toolkit APIs and repository conventions.
 
 Built on [`nvalchemi-toolkit-ops`](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
@@ -51,10 +51,11 @@ for GPU-optimized neighbor lists and interaction kernels via NVIDIA `warp-lang`.
 
 ### Using with AI coding agents
 
-  **Skills** — task-specific API guides under .claude/skills/. Claude Code discovers
-  them automatically when working inside a clone; for other platforms (e.g. Cursor,
-  OpenCode), or to use them outside this repository, copy the folder contents into your
-  project's or home skills directory.
+  **Skills** — one agent skill, `skills/nvalchemi-toolkit/`, that scopes a request and
+  routes to task notes for data, models, dynamics, training, generative workflows, and
+  extensions. Agents that read `AGENTS.md` find it inside a clone; to use it elsewhere,
+  copy the folder into your agent's skills directory (see the
+  [Agent skills user guide](docs/userguide/agent_skills.md)).
 
   **AGENTS.md** — repository-wide guidance (setup, conventions, gotchas). Agents that
   follow the AGENTS.md convention (e.g. Codex, Cursor, OpenCode) load it natively.

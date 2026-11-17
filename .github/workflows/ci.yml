@@ -227,7 +227,7 @@ jobs:
     runs-on: linux-amd64-gpu-h100-latest-1
     # Headroom for the extra UMA environment install (a second torch + the
     # fairchem stack) when the UMA steps run; well under this otherwise.
-    timeout-minutes: 45
+    timeout-minutes: 60
     container:
       image: nvcr.io/nvidia/cuda:13.1.0-runtime-ubuntu24.04
       options: --gpus all

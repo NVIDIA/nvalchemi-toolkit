@@ -220,6 +220,12 @@ class DomainParallel(BaseDynamics):
 
         mesh = self._config.mesh
 
+        # A repeated partition replaces the model. Close the previous one first: its
+        # adapters sit on module-level targets, and restoring them after the new
+        # model installs would put the stock functions back over its replacements.
+        if self._dist_model is not None:
+            self._dist_model.close()
+
         # Adapter around the inner dynamics' model. Owns halo exchange, NL rebuild,
         # and output consolidation. An atomic model rides ``DistributedModel``; a
         # composite (``PipelineModelWrapper``, e.g. MACE+DFTD3 / AIMNet2+PME) can't

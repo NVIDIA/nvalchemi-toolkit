@@ -252,7 +252,7 @@ class TestNPHIntegrator:
 
     def test_make_new_state_returns_batch(self, nph):
         """_make_new_state returns a Batch-like object with the required attrs."""
-        template = _make_barostat_batch()
+        template = _make_barostat_batch(n_atoms=8, n_graphs=2)
         new_state = nph._make_new_state(2, template)
         assert new_state is not None
         assert hasattr(new_state, "W")
@@ -467,7 +467,7 @@ class TestNPTIntegrator:
 
     def test_make_new_state_returns_batch(self, npt):
         """_make_new_state returns a Batch-like object with NHC attributes."""
-        template = _make_barostat_batch()
+        template = _make_barostat_batch(n_atoms=8, n_graphs=2)
         new_state = npt._make_new_state(2, template)
         assert new_state is not None
         assert hasattr(new_state, "nhc_Q")

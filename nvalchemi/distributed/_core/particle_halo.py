@@ -159,8 +159,26 @@ def _identify_ghosts_split(
     # Use canonical fractional coordinates only when deciding which receiver
     # needs each atom. Keep the original Cartesian positions for transmission;
     # the receiver's neighbor list applies the required integer cell image.
+    #
+    # Canonicalize relative to the centre of the owner's own domain rather than
+    # into [0, 1). The split axes are not wrapped by ``DomainParallel``, so an
+    # owned atom that drifted a little past a periodic face of a split axis has
+    # a [0, 1) image on the far side of the cell. Lattice images are only offered
+    # to receivers whose grid coordinate differs on that axis, so the receivers
+    # that share the owner's coordinate (edge and corner neighbors) would never
+    # see such an atom and would miss a ghost inside their cutoff. Centred on the
+    # owner, the drifted atom stays adjacent to its own domain and passes the
+    # direct test for those receivers; the image vectors cover the others.
     pbc = partitioner.pbc.to(device=positions.device)
-    frac_pos = torch.where(pbc.unsqueeze(0), frac_pos - torch.floor(frac_pos), frac_pos)
+    own_lo, own_hi = _rank_fractional_bounds(partitioner, config.rank)
+    own_centre = (0.5 * (own_lo + own_hi)).to(
+        device=positions.device, dtype=frac_pos.dtype
+    )
+    frac_pos = torch.where(
+        pbc.unsqueeze(0),
+        frac_pos - torch.floor(frac_pos - own_centre + 0.5),
+        frac_pos,
+    )
 
     gw_frac = _ghost_width_fractional(partitioner, config.ghost_width).to(
         device=positions.device

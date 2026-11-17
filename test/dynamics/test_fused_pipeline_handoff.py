@@ -29,8 +29,10 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import (
     FIRE2,
+    NVE,
     ConvergenceHook,
     DistributedPipeline,
+    DynamicsStage,
     FusedStage,
     HostMemory,
     NVTLangevin,
@@ -38,6 +40,7 @@ from nvalchemi.dynamics import (
 )
 from nvalchemi.dynamics.base import BufferConfig
 from nvalchemi.dynamics.hooks import SnapshotHook
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 from test.distributed._gloo_harness import run_gloo
 
@@ -109,11 +112,41 @@ class TestFusedStageOnReceive:
         stage = _langevin_stage()
         incoming = Batch.from_data_list([_make_system(i) for i in range(2)])
         incoming["status"] = torch.full((2, 1), stage.exit_status, dtype=torch.long)
+        expected_keys = {
+            level: set(keys) for level, keys in incoming.level_keys.items()
+        }
 
         stage._recv_to_batch(incoming)
 
         mask = stage.active_graph_mask(stage.active_batch, stage.exit_status)
         assert mask.all()
+        assert stage._recv_template.level_keys == expected_keys
+
+    @pytest.mark.parametrize("n_graphs", [1, 2, 3, 4])
+    def test_receive_initializes_missing_bookkeeping(self, n_graphs: int) -> None:
+        """Received samples get fresh bookkeeping, including partial batches."""
+        stage = _langevin_stage(
+            prior_rank=0,
+            next_rank=None,
+            buffer_config=BufferConfig(num_systems=4, num_nodes=12, num_edges=0),
+        )
+        incoming = Batch.from_data_list([_make_system(i) for i in range(n_graphs)])
+        incoming["status"] = torch.full(
+            (n_graphs, 1), stage.exit_status, dtype=torch.long
+        )
+        incoming["system_id"] = torch.arange(n_graphs).view(-1, 1)
+        stage._ensure_buffers(Batch.empty_like(incoming))
+
+        stage._recv_to_batch(incoming)
+
+        batch = stage.active_batch
+        assert batch.num_graphs == n_graphs
+        assert (batch.status == stage.entry_status).all()
+        assert not batch.reprime_pending.any()
+        assert (batch.n_steps_counter_0 == 0).all()
+        torch.testing.assert_close(batch.system_id, incoming.system_id)
+        assert batch.reprime_pending.shape == (n_graphs, 1)
+        assert batch.n_steps_counter_0.shape == (n_graphs, 1)
 
 
 class TestPipelineExit:
@@ -164,7 +197,8 @@ def _fused_pipeline_worker(rank: int, world_size: int, queue) -> None:
             d = dataset[idx]
             return d.num_nodes, d.num_edges
 
-    buffer_cfg = BufferConfig(num_systems=_N_SYSTEMS, num_nodes=50, num_edges=0)
+    # Every receive is partial, including when all systems graduate together.
+    buffer_cfg = BufferConfig(num_systems=_N_SYSTEMS + 1, num_nodes=50, num_edges=0)
     optimizer = FIRE2(
         model=DemoModelWrapper(DemoModel()),
         dt=0.05,
@@ -215,3 +249,166 @@ def test_fused_stage_pipeline_graduates_and_terminates() -> None:
     results = dict(run_gloo(world_size=2, fn=_fused_pipeline_worker, timeout_sec=120.0))
 
     assert results[1] == _N_SYSTEMS * _LANGEVIN_STEPS
+
+
+class _SystemDataset:
+    """``_make_system`` molecules in the form ``SizeAwareSampler`` reads."""
+
+    def __init__(self, num_systems: int) -> None:
+        self.systems = [_make_system(i) for i in range(num_systems)]
+
+    def __len__(self) -> int:
+        return len(self.systems)
+
+    def __getitem__(self, idx: int) -> tuple[AtomicData, dict[str, int]]:
+        data = self.systems[idx]
+        return data, {"num_atoms": data.num_nodes, "num_edges": data.num_edges}
+
+    def get_metadata(self, idx: int) -> tuple[int, int]:
+        data = self.systems[idx]
+        return data.num_nodes, data.num_edges
+
+
+def _plain_receiver_worker(rank: int, world_size: int, queue) -> None:
+    """Relax on a fused stage, then on a plain one; report what moves on rank 1."""
+    torch.manual_seed(0)
+    model = DemoModelWrapper(DemoModel())
+    buffer_cfg = BufferConfig(num_systems=_N_SYSTEMS, num_nodes=50, num_edges=0)
+    stages = {
+        0: FusedStage(
+            sub_stages=[(0, FIRE2(model=model, dt=0.05, n_steps=3, device_type="cpu"))],
+            device_type="cpu",
+            sampler=SizeAwareSampler(
+                dataset=_SystemDataset(_N_SYSTEMS),
+                max_atoms=50,
+                max_edges=0,
+                max_batch_size=_N_SYSTEMS,
+            ),
+            prior_rank=None,
+            next_rank=1,
+            buffer_config=buffer_cfg,
+        ),
+        # A tight fmax keeps every arrival relaxing on the plain stage.
+        1: FIRE2(
+            model=model,
+            dt=0.05,
+            convergence_hook=ConvergenceHook.from_fmax(1e-7),
+            device_type="cpu",
+            prior_rank=0,
+            next_rank=None,
+            buffer_config=buffer_cfg,
+        ),
+    }
+    first_positions: dict[int, torch.Tensor] = {}
+    moved: set[int] = set()
+    with DistributedPipeline(stages=stages, backend="gloo") as pipeline:
+        stage = pipeline.local_stage
+        for _ in range(20):
+            pipeline.step()
+            batch = stage.active_batch
+            if rank == 0 or batch is None:
+                continue
+            positions = batch.positions.detach().split(
+                batch.num_nodes_per_graph.tolist()
+            )
+            for system_id, pos in zip(batch.system_id.view(-1).tolist(), positions):
+                first = first_positions.setdefault(system_id, pos.clone())
+                if not torch.equal(first, pos):
+                    moved.add(system_id)
+    if rank == 1:
+        queue.put((sorted(first_positions), sorted(moved)))
+
+
+def test_plain_stage_steps_systems_sent_by_fused_stage() -> None:
+    """Systems that leave a fused stage at its exit status move on a plain stage."""
+    [(seen, moved)] = run_gloo(
+        world_size=2, fn=_plain_receiver_worker, timeout_sec=90.0
+    )
+
+    assert seen == list(range(_N_SYSTEMS))
+    assert moved == seen
+
+
+class _GraduationRecorder:
+    """Record the ``system_id`` of every graph that graduates."""
+
+    stage = DynamicsStage.ON_GRADUATE
+    frequency = 1
+
+    def __init__(self) -> None:
+        self.system_ids: list[int] = []
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
+        """Append the identifiers of this step's graduates."""
+        system_id = ctx.batch.system_id.view(-1)[: ctx.batch.num_graphs]
+        self.system_ids.extend(system_id[ctx.graduated_mask].tolist())
+
+
+def _bursts(every: int) -> ConvergenceHook:
+    """Converge every system at once on each ``every``-th evaluation."""
+    calls = 0
+
+    def converge_in_bursts(energy: torch.Tensor) -> torch.Tensor:
+        nonlocal calls
+        calls += 1
+        return torch.full((energy.shape[0],), calls % every == 0)
+
+    return ConvergenceHook(
+        criteria=[{"key": "energy", "threshold": 0.0, "custom_op": converge_in_bursts}]
+    )
+
+
+def _atom_capacity_worker(rank: int, world_size: int, queue) -> None:
+    """Run three stages whose sends carry one three-atom system at a time."""
+    torch.manual_seed(0)
+    model = DemoModelWrapper(DemoModel())
+    # Room for two systems but only four atoms, so sends copy part of a request.
+    config = BufferConfig(num_systems=2, num_nodes=4, num_edges=0)
+    recorder = _GraduationRecorder()
+    relax = FIRE2(model=model, dt=0.05, device_type="cpu", convergence_hook=_bursts(3))
+    stages = {
+        0: FusedStage(
+            sub_stages=[(0, FIRE2(model=model, dt=0.05, n_steps=2, device_type="cpu"))],
+            device_type="cpu",
+            sampler=SizeAwareSampler(
+                dataset=_SystemDataset(8), max_atoms=12, max_edges=0, max_batch_size=4
+            ),
+            prior_rank=None,
+            next_rank=1,
+            buffer_config=config,
+        ),
+        1: FusedStage(
+            sub_stages=[(0, relax)],
+            device_type="cpu",
+            prior_rank=0,
+            next_rank=2,
+            buffer_config=config,
+        ),
+        2: FusedStage(
+            sub_stages=[(0, NVE(model=model, dt=0.5, n_steps=2, device_type="cpu"))],
+            device_type="cpu",
+            hooks=[recorder],
+            prior_rank=1,
+            next_rank=None,
+            buffer_config=config,
+        ),
+    }
+    finished = False
+    with DistributedPipeline(stages=stages, backend="gloo") as pipeline:
+        for _ in range(200):
+            pipeline.step()
+            if pipeline._sync_done_flags():
+                finished = True
+                break
+    if rank == 2:
+        queue.put((finished, recorder.system_ids))
+
+
+def test_partial_sends_deliver_every_system_once() -> None:
+    """Graduates left by atom-limited sends leave later; the run then ends."""
+    [(finished, graduated)] = run_gloo(
+        world_size=3, fn=_atom_capacity_worker, timeout_sec=90.0
+    )
+
+    assert finished
+    assert sorted(graduated) == list(range(8))

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import socket
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -1949,6 +1949,649 @@ class TestBatchEmptyFieldInsertion:
 # -----------------------------------------------------------------------------
 # Mutation and add_key
 # -----------------------------------------------------------------------------
+class TestBatchConcatenate:
+    """Bulk concatenation preserves field policies and independent ownership."""
+
+    @pytest.mark.parametrize("supplied_index", [0, 2])
+    def test_fill_system_defaults(self, device, supplied_index):
+        """Factories fill missing system rows without adding fields or changing inputs."""
+        batches = [
+            Batch.from_data_list(
+                [_minimal_atomic_data(2, device=device) for _ in range(count)]
+            )
+            for count in (1, 2, 1)
+        ]
+        batches[supplied_index]["system_id"] = torch.tensor([[42]], device=device)
+        batches[supplied_index].forces = torch.ones(2, 3, device=device)
+        batches[1].energy = torch.ones(2, 1, device=device)
+        factory = Mock(
+            side_effect=lambda n, dev: torch.full(
+                (n, 1), -1, dtype=torch.long, device=dev
+            )
+        )
+        unused = Mock(side_effect=AssertionError("Absent field default called"))
+
+        result = Batch.concatenate(
+            batches,
+            missing_fields="fill",
+            field_defaults={"system_id": factory, "unused_default": unused},
+        )
+
+        expected = [42, -1, -1, -1] if supplied_index == 0 else [-1, -1, -1, 42]
+        assert result.system_id.flatten().tolist() == expected
+        assert [call.args[0] for call in factory.call_args_list] == (
+            [2, 1] if supplied_index == 0 else [1, 2]
+        )
+        assert all(call.args[1] == result.device for call in factory.call_args_list)
+        unused.assert_not_called()
+        assert "unused_default" not in result
+        assert result.energy.flatten().tolist() == [0, 1, 1, 0]
+        assert result.forces.sum().item() == 6
+        result.system_id.zero_()
+        assert batches[supplied_index].system_id.tolist() == [[42]]
+        for index, batch in enumerate(batches):
+            if index != supplied_index:
+                assert "system_id" not in batch
+
+    @pytest.mark.parametrize("bad_default", ["not_tensor", "rows", "shape", "dtype"])
+    def test_fill_invalid_defaults_leave_inputs_unchanged(self, bad_default):
+        """Factory results must match the retained field's shape and dtype."""
+        batches = [Batch.from_data_list([_minimal_atomic_data(2)]) for _ in range(2)]
+        batches[1]["system_id"] = torch.tensor([[42]])
+        values = {
+            "not_tensor": None,
+            "rows": torch.zeros(2, 1, dtype=torch.long),
+            "shape": torch.zeros(1, 2, dtype=torch.long),
+            "dtype": torch.zeros(1, 1),
+        }
+        with pytest.raises((TypeError, ValueError), match="Default for 'system_id'"):
+            Batch.concatenate(
+                batches,
+                missing_fields="fill",
+                field_defaults={"system_id": lambda n, dev: values[bad_default]},
+            )
+        assert "system_id" not in batches[0]
+        assert batches[1].system_id.tolist() == [[42]]
+
+    def test_defaults_require_fill(self):
+        """Defaults cannot be used with the drop policy, even for one input."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        with pytest.raises(ValueError, match="field_defaults requires"):
+            Batch.concatenate([batch], field_defaults={})
+
+    @pytest.mark.parametrize("key", ["positions", "neighbor_list"])
+    def test_defaults_reject_non_system_fields(self, key):
+        """Factories cannot fill node or edge fields."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2, num_edges=1)])
+        factory = Mock()
+        with pytest.raises(ValueError, match="must be system-level"):
+            Batch.concatenate(
+                [batch], missing_fields="fill", field_defaults={key: factory}
+            )
+        factory.assert_not_called()
+
+    @pytest.mark.parametrize("grouped", [False, True])
+    def test_combines_payloads_offsets_and_groups(self, device, grouped):
+        """Variable graph sizes keep connectivity and distinct group boundaries."""
+        batches = [
+            Batch.from_data_list(
+                [
+                    _atomic_data_with_edges_and_system(nodes, nodes, device)
+                    for nodes in sizes
+                ]
+            )
+            for sizes in ([2, 3], [4], [1, 2, 3])
+        ]
+        if grouped:
+            for batch in batches:
+                batch.set_group_layout(
+                    torch.arange(batch.num_graphs, device=device) // 2
+                )
+        positions = [batch.positions.clone() for batch in batches]
+        edges = [batch.neighbor_list.clone() for batch in batches]
+        result = Batch.concatenate(batches)
+
+        assert result.num_nodes_list == [2, 3, 4, 1, 2, 3]
+        torch.testing.assert_close(result.positions, torch.cat(positions))
+        torch.testing.assert_close(
+            result.neighbor_list, torch.cat([edges[0], edges[1] + 5, edges[2] + 9])
+        )
+        if grouped:
+            assert result.group_idx.tolist() == [0, 0, 1, 2, 2, 3]
+            assert result.group_layout.group_ptr.tolist() == [0, 2, 3, 5, 6]
+        result.positions.zero_()
+        for batch, expected_positions, expected_edges in zip(
+            batches, positions, edges, strict=True
+        ):
+            torch.testing.assert_close(batch.positions, expected_positions)
+            torch.testing.assert_close(batch.neighbor_list, expected_edges)
+
+    def test_concatenate_skips_padding_checks(self):
+        """Concatenation skips padding checks when inputs are assumed compact."""
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(2, 2)])
+        second = first.clone()
+        with patch.object(
+            Batch, "_without_padding", side_effect=AssertionError("Already compact")
+        ):
+            result = Batch.concatenate([first, second], assume_compact=True)
+        assert result.num_nodes_list == [2, 2]
+        torch.testing.assert_close(
+            result.positions, torch.cat([first.positions, second.positions])
+        )
+        torch.testing.assert_close(
+            result.neighbor_list,
+            torch.cat([first.neighbor_list, second.neighbor_list + 2]),
+        )
+
+    @pytest.mark.parametrize("grouped", [False, True])
+    @pytest.mark.parametrize("kind", ["single", "padded", "empty"])
+    def test_trims_padding_and_keeps_inputs(self, device, grouped, kind):
+        """Singletons, empty buffers, and occupied buffers keep logical counts."""
+        source = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 2, device)]
+        )
+        if grouped:
+            source.set_group_layout(torch.zeros(1, dtype=torch.long, device=device))
+        empty = Batch.empty(
+            num_systems=4, num_nodes=20, num_edges=24, template=source, device=device
+        )
+        occupied = empty.clone()
+        occupied.put(source, torch.ones(1, dtype=torch.bool, device=device))
+        inputs = {
+            "single": [occupied],
+            "padded": [empty, occupied, empty],
+            "empty": [empty, empty],
+        }[kind]
+        result = Batch.concatenate(inputs)
+        expected_graphs = 0 if kind == "empty" else 1
+        assert result.num_graphs == result.system_capacity == expected_graphs
+        assert result.num_nodes == result.num_edges == expected_graphs * 2
+        assert empty.system_capacity == occupied.system_capacity == 4
+        assert empty.num_graphs == 0
+        assert occupied.num_graphs == 1
+        if expected_graphs:
+            result.positions.zero_()
+            torch.testing.assert_close(occupied.positions[:2], source.positions)
+
+    @pytest.mark.parametrize("fieldless_parent", [False, True])
+    def test_custom_segmented_product_and_uniform_levels(
+        self, device, fieldless_parent
+    ):
+        """Custom cardinalities, including fieldless parents, stay aligned."""
+        schema = _custom_buffer_schema(fieldless_parent=fieldless_parent)
+        schema.add_level("metadata", segmented=False)
+        schema.set("metadata_values", "metadata")
+        batches = []
+        for nodes, molecules in ((2, 3), (3, 1)):
+            data = _custom_buffer_data(
+                nodes, molecules, fieldless_parent=fieldless_parent
+            )
+            data.metadata_values = torch.tensor([[float(nodes)]])
+            batches.append(Batch.from_data_list([data], attr_map=schema, device=device))
+        result = Batch.concatenate(batches)
+        assert result.level_ptr("molecules").tolist() == [0, 3, 4]
+        assert result.level_ptr("pairs").tolist() == [0, 6, 9]
+        torch.testing.assert_close(
+            result.pair_values, torch.cat([batch.pair_values for batch in batches])
+        )
+        assert result.metadata_values.flatten().tolist() == [2.0, 3.0]
+
+    def test_drop_ignores_later_shapes_for_discarded_fields(self):
+        """A field discarded by drop does not constrain other inputs' shapes."""
+        batches = [Batch.from_data_list([_minimal_atomic_data(2)]) for _ in range(3)]
+        batches[0].forces = torch.ones(2, 3)
+        batches[2].forces = torch.ones(2, 4)
+        result = Batch.concatenate(batches)
+        assert result.num_graphs == 3
+        assert "forces" not in result
+        assert batches[0].forces.shape == (2, 3)
+        assert batches[2].forces.shape == (2, 4)
+
+    @pytest.mark.parametrize("grouped", [False, True])
+    @pytest.mark.parametrize("masked_first", [False, True])
+    def test_fill_preserves_union_in_either_order(self, device, grouped, masked_first):
+        """Node, edge, and system fields get correctly sized and typed zero rows."""
+        batches = [
+            Batch.from_data_list([_atomic_data_with_edges_and_system(n, n, device)])
+            for n in (2, 3)
+        ]
+        if grouped:
+            for batch in batches:
+                batch.set_group_layout(torch.zeros(1, dtype=torch.long, device=device))
+        masked = 0 if masked_first else 1
+        other = 1 - masked
+        mask = torch.ones(batches[masked].num_nodes, dtype=torch.bool, device=device)
+        batches[masked].add_key("neb_fixed_node_mask", [mask], level="node")
+        batches[masked].add_key(
+            "edge_flag",
+            [torch.ones(batches[masked].num_edges, dtype=torch.int64, device=device)],
+            level="edge",
+        )
+        batches[other].add_key(
+            "label",
+            [torch.tensor([[7]], dtype=torch.int64, device=device)],
+            level="system",
+        )
+        positions = [batch.positions.clone() for batch in batches]
+        edges = [batch.neighbor_list.clone() for batch in batches]
+        result = Batch.concatenate(batches, missing_fields="fill")
+        expected_mask = torch.zeros(5, dtype=torch.bool, device=device)
+        expected_mask[:2] = masked == 0
+        expected_mask[2:] = masked == 1
+        torch.testing.assert_close(result.neb_fixed_node_mask, expected_mask)
+        torch.testing.assert_close(result.edge_flag, expected_mask.long())
+        assert result.label.flatten().tolist() == ([0, 7] if masked == 0 else [7, 0])
+        assert "neb_fixed_node_mask" in result.to_data_list()[0].model_dump()
+        torch.testing.assert_close(
+            result.neighbor_list, torch.cat([edges[0], edges[1] + 2])
+        )
+        assert result.num_nodes_list == result.num_edges_list == [2, 3]
+        if grouped:
+            assert result.group_idx.tolist() == [0, 1]
+        assert "neb_fixed_node_mask" not in batches[other]
+        assert "label" not in batches[masked]
+        result.positions.zero_()
+        for batch, position, edge in zip(batches, positions, edges, strict=True):
+            torch.testing.assert_close(batch.positions, position)
+            torch.testing.assert_close(batch.neighbor_list, edge)
+
+    @pytest.mark.parametrize("missing_first", [False, True])
+    def test_fill_materializes_union_levels(self, device, missing_first):
+        """Levels first encountered in later batches are filled in either order."""
+        first = Batch.from_data_list([_minimal_atomic_data(2, device=device)])
+        second = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(3, 2, device)]
+        )
+        second.energy.fill_(4.0)
+        second.neighbor_list.fill_(1)
+        batches = [first, second] if missing_first else [second, first]
+        result = Batch.concatenate(batches, missing_fields="fill")
+        assert result.energy.flatten().tolist() == (
+            [0.0, 4.0] if missing_first else [4.0, 0.0]
+        )
+        assert result.num_edges_list == ([0, 2] if missing_first else [2, 0])
+        torch.testing.assert_close(
+            result.neighbor_list,
+            torch.full(
+                (2, 2), 3 if missing_first else 1, dtype=torch.long, device=device
+            ),
+        )
+        assert "energy" not in first and "neighbor_list" not in first
+
+    def test_fill_preserves_dtype_and_gradients(self):
+        """Zero rows retain the supplied field's dtype and gradient flow."""
+        batches = [Batch.from_data_list([_minimal_atomic_data(2)]) for _ in range(3)]
+        values = [
+            torch.ones(2, 1, dtype=dtype, requires_grad=True)
+            for dtype in (torch.float64, torch.float64)
+        ]
+        for batch, value in zip(batches[::2], values, strict=True):
+            batch.add_key("weights", [value], level="node")
+        result = Batch.concatenate(batches, missing_fields="fill")
+        assert result.weights.dtype == torch.float64
+        torch.testing.assert_close(
+            result.weights.flatten(),
+            torch.tensor([1, 1, 0, 0, 1, 1], dtype=torch.float64),
+        )
+        result.weights.sum().backward()
+        for value in values:
+            torch.testing.assert_close(value.grad, torch.ones_like(value))
+
+    @pytest.mark.parametrize("grouped", [False, True])
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_mixed_fields_keep_cardinalities_and_offsets(
+        self, device, grouped, missing_fields
+    ):
+        """Field policies preserve every graph slot and correct connectivity."""
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(2, 2, device)])
+        first.forces = torch.ones(2, 3, device=device)
+        first.energy.fill_(3.0)
+        second = Batch.from_data_list(
+            [_minimal_atomic_data(3, num_edges=1, device=device)]
+        )
+        second.add_key(
+            "edge_flag", [torch.ones(1, dtype=torch.bool, device=device)], level="edge"
+        )
+        third = first.clone()
+        third.forces.fill_(2.0)
+        third.energy.fill_(7.0)
+        fourth = Batch.from_data_list([_minimal_atomic_data(1, device=device)])
+        batches = [first, second, third, fourth]
+        if grouped:
+            for batch in batches:
+                batch.set_group_layout(torch.zeros(1, dtype=torch.long, device=device))
+        original_edges = second.neighbor_list.clone()
+        result = Batch.concatenate(batches, missing_fields=missing_fields)
+        assert result.num_nodes_list == [2, 3, 2, 1]
+        assert result.num_edges_list == [2, 1, 2, 0]
+        if grouped:
+            assert result.group_idx.tolist() == [0, 1, 2, 3]
+        if missing_fields == "fill":
+            expected_forces = torch.zeros(8, 3, device=device)
+            expected_forces[:2] = 1
+            expected_forces[5:7] = 2
+            torch.testing.assert_close(result.forces, expected_forces)
+            assert result.energy.flatten().tolist() == [3.0, 0.0, 7.0, 0.0]
+            assert result.edge_flag.tolist() == [False, False, True, False, False]
+            torch.testing.assert_close(
+                result.neighbor_list,
+                torch.cat(
+                    [
+                        first.neighbor_list,
+                        second.neighbor_list + 2,
+                        third.neighbor_list + 5,
+                    ]
+                ),
+            )
+        else:
+            assert "energy" not in result and "forces" not in result
+            assert result.level_keys["edges"] == set()
+        assert "forces" not in second
+        torch.testing.assert_close(second.neighbor_list, original_edges)
+
+    @pytest.mark.parametrize("present_first", [False, True])
+    def test_fill_validates_all_union_shapes(self, present_first):
+        """Later-only fields must have compatible shapes across their sources."""
+        batches = [Batch.from_data_list([_minimal_atomic_data(2)]) for _ in range(3)]
+        batches[0 if present_first else 1].forces = torch.ones(2, 3)
+        batches[2].forces = torch.ones(2, 4)
+        with pytest.raises(ValueError, match="incompatible trailing shapes"):
+            Batch.concatenate(batches, missing_fields="fill")
+        assert batches[0 if present_first else 1].forces.shape == (2, 3)
+        assert batches[2].forces.shape == (2, 4)
+
+    def test_fill_keeps_custom_schema_checks(self):
+        """Custom fields must retain identical schemas in fill mode."""
+        schema = _custom_buffer_schema()
+        first = Batch.from_data_list([_custom_buffer_data(2, 3)], attr_map=schema)
+        second = first.clone()
+        del second._storage.groups["pairs"]["pair_values"]
+        with pytest.raises(ValueError, match="incompatible field sets"):
+            Batch.concatenate([first, second], missing_fields="fill")
+
+    def test_rejects_unknown_missing_fields_policy(self):
+        """Invalid policies fail for singleton inputs too."""
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        with pytest.raises(ValueError, match="Unknown missing_fields policy"):
+            Batch.concatenate([first], missing_fields="unknown")
+
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    @pytest.mark.parametrize(
+        "dtypes",
+        [(torch.float32, torch.float64), (torch.int64, torch.float64)],
+    )
+    def test_rejects_retained_dtype_mismatch(self, missing_fields, dtypes):
+        """A retained field with different dtypes raises instead of casting."""
+        first = Batch.from_data_list([_atomic_data_with_system(2)])
+        second = first.clone()
+        first.energy = torch.tensor([[1]], dtype=dtypes[0])
+        second.energy = torch.tensor([[1.9]], dtype=dtypes[1])
+        with pytest.raises(ValueError, match="energy.*incompatible dtypes"):
+            Batch.concatenate([first, second], missing_fields=missing_fields)
+        assert first.energy.dtype == dtypes[0]
+        assert second.energy.dtype == dtypes[1]
+        assert second.energy.item() == pytest.approx(1.9)
+
+    def test_dropped_fields_leave_no_stale_keys(self):
+        """Tracked keys match actual storage after fields are dropped."""
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = first.clone()
+        first.add_key("forces", [torch.ones(2, 3)], level="node")
+        result = Batch.concatenate([first, second])
+        assert "forces" not in result
+        assert "forces" not in result.keys["node"]
+        assert result.keys["node"] == set(result._atoms_group.keys())
+        assert "forces" in first.keys["node"]
+        restored = Batch.from_data_list(result.to_data_list())
+        assert restored.level_keys == result.level_keys
+
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    @pytest.mark.parametrize("key", ["energy", "forces"])
+    @pytest.mark.parametrize("missing_index", [0, 1, 2])
+    def test_dtype_checks_only_retained_fields(
+        self, device, missing_fields, key, missing_index
+    ):
+        """Discarded fields may differ in dtype; retained union fields may not."""
+        batches = [
+            Batch.from_data_list([_minimal_atomic_data(2, device=device)])
+            for _ in range(3)
+        ]
+        indices = [index for index in range(3) if index != missing_index]
+        shape = (1, 1) if key == "energy" else (2, 3)
+        for index, dtype in zip(indices, (torch.float32, torch.float64), strict=True):
+            setattr(batches[index], key, torch.ones(shape, dtype=dtype, device=device))
+        if missing_fields == "drop":
+            result = Batch.concatenate(batches, missing_fields=missing_fields)
+            assert key not in result
+            assert result.num_graphs == 3
+        else:
+            with pytest.raises(ValueError, match=f"{key}.*incompatible dtypes"):
+                Batch.concatenate(batches, missing_fields=missing_fields)
+        assert key not in batches[missing_index]
+        assert getattr(batches[indices[0]], key).dtype == torch.float32
+        assert getattr(batches[indices[1]], key).dtype == torch.float64
+
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_rejects_inconsistent_field_levels(self, missing_fields):
+        """A field cannot name node data in one input and system data in another."""
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = first.clone()
+        first.add_key("tag", [torch.ones(2, 1)], level="node")
+        second.add_key("tag", [torch.ones(1, 1)], level="system")
+        with pytest.raises(ValueError, match="tag.*incompatible storage levels"):
+            Batch.concatenate([first, second], missing_fields=missing_fields)
+
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_field_level_conflicts_only_matter_when_retained(self, missing_fields):
+        """Drop ignores level conflicts on discarded fields, while fill rejects them."""
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = first.clone()
+        third = first.clone()
+        first.add_key("tag", [torch.ones(2, 1)], level="node")
+        second.add_key("tag", [torch.ones(1, 1)], level="system")
+        batches = [first, second, third]
+        if missing_fields == "drop":
+            result = Batch.concatenate(batches, missing_fields=missing_fields)
+            assert "tag" not in result
+            assert result.num_graphs == 3
+        else:
+            with pytest.raises(ValueError, match="tag.*incompatible storage levels"):
+                Batch.concatenate(batches, missing_fields=missing_fields)
+
+    def test_disjoint_edge_fields_keep_empty_graph_segments(self, device):
+        """Dropping disjoint fields retains cardinalities for selection and put."""
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(2, 2, device)])
+        second = Batch.from_data_list(
+            [_minimal_atomic_data(3, num_edges=1, device=device)]
+        )
+        second.add_key(
+            "edge_flag", [torch.ones(1, dtype=torch.bool, device=device)], level="edge"
+        )
+        del second._edges_group["neighbor_list"]
+        result = Batch.concatenate([first, second])
+        assert result.num_graphs == 2
+        assert result.level_keys["edges"] == set()
+        assert result.num_edges_list == [2, 1]
+        assert result.level_ptr("edges").tolist() == [0, 2, 3]
+        selected = result.index_select([1])
+        assert selected.num_nodes_list == [3]
+        assert selected.num_edges_list == [1]
+        buffer = Batch.empty(
+            num_systems=3, num_nodes=10, num_edges=4, template=result, device=device
+        )
+        # Reserve edge metadata explicitly because the template has no edge payloads.
+        buffer.set_level(
+            "edges",
+            SegmentedLevelStorage(
+                data=None,
+                segment_lengths=torch.empty(0, dtype=torch.int32, device=device),
+                batch_ptr_capacity=4,
+                attr_map=buffer._storage.attr_map,
+                device=device,
+            ),
+        )
+        mask = torch.ones(2, dtype=torch.bool, device=device)
+        buffer.put(result, mask)
+        assert buffer.num_graphs == 2
+        assert buffer.index_select([1]).num_edges_list == [1]
+        torch.testing.assert_close(buffer.positions[:5], result.positions)
+        assert second._edges_group.segment_lengths.tolist() == [1]
+
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_disjoint_uniform_fields_follow_policy(self, missing_fields):
+        """Uniform fields use the intersection or union with full graph rows."""
+        first = Batch.from_data_list([_atomic_data_with_system(2)])
+        first.energy.fill_(5.0)
+        second = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        )
+        second.add_key("label", [torch.ones(1, 1)] * 2, level="system")
+        result = Batch.concatenate([first, second], missing_fields=missing_fields)
+        assert result.num_graphs == 3
+        if missing_fields == "fill":
+            assert result.energy.flatten().tolist() == [5.0, 0.0, 0.0]
+            assert result.label.flatten().tolist() == [0.0, 1.0, 1.0]
+        else:
+            assert "energy" not in result and "label" not in result
+        assert len(result._system_group) == 3
+
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_rejects_uniform_cardinality_mismatch(self, missing_fields):
+        """Malformed uniform input cannot create an output with misaligned rows."""
+        first = Batch.from_data_list([_atomic_data_with_system(2)])
+        second = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        )
+        second._storage.groups["system"] = UniformLevelStorage(
+            data={"energy": torch.ones(1, 1)}, validate=False
+        )
+        with pytest.raises(ValueError, match="Level 'system'.*expected 2"):
+            Batch.concatenate([first, second], missing_fields=missing_fields)
+        assert first.num_graphs == 1
+        assert second.num_graphs == 2
+        assert len(second._system_group) == 1
+
+    def test_missing_levels_need_no_tensor_scalar_reads(self, device):
+        """Missing segmented levels have known zero rows without a host read."""
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(2, 2, device)])
+        second = Batch.from_data_list([_minimal_atomic_data(3, device=device)])
+        with patch.object(
+            torch.Tensor, "__int__", side_effect=AssertionError("Scalar read")
+        ):
+            result = Batch.concatenate(
+                [first, second], missing_fields="fill", assume_compact=True
+            )
+        assert result.num_edges_list == [2, 0]
+        assert result.energy.flatten().tolist() == [0.0, 0.0]
+
+    def test_fill_materializes_fieldless_rows_and_offsets(self, device):
+        """Fieldless cardinalities determine zero rows and later neighbor offsets."""
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(3, 1, device)])
+        second = _fieldless_builtin_batch([2], [3]).to(device)
+        third = Batch.from_data_list([_atomic_data_with_edges_and_system(1, 2, device)])
+        result = Batch.concatenate([first, second, third], missing_fields="fill")
+        assert result.num_nodes_list == [3, 2, 1]
+        assert result.num_edges_list == [1, 3, 2]
+        torch.testing.assert_close(
+            result.positions[3:5], torch.zeros(2, 3, device=device)
+        )
+        torch.testing.assert_close(
+            result.neighbor_list[-2:],
+            torch.full((2, 2), 5, dtype=torch.long, device=device),
+        )
+        assert second._atoms_group._data.is_empty()
+        assert second._edges_group._data.is_empty()
+
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_missing_builtin_level_follows_policy(self, missing_fields):
+        """Fields on absent levels are dropped or filled without losing graphs."""
+        first = Batch.from_data_list([_atomic_data_with_system(2)])
+        first.energy.fill_(1.0)
+        second = first.clone()
+        second._storage.groups.pop("system")
+        result = Batch.concatenate(
+            [first, second, first], missing_fields=missing_fields
+        )
+        assert result.num_graphs == 3
+        if missing_fields == "fill":
+            assert result.energy.flatten().tolist() == [1.0, 0.0, 1.0]
+        else:
+            assert "energy" not in result
+        assert "system" not in second._storage.groups
+
+    def test_cross_device_inputs(self, device):
+        """Mixed devices need an explicit target, which every payload follows."""
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required for mixed-device concatenation")
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(2, 2, device)])
+        other_device = "cuda" if device == "cpu" else "cpu"
+        second = first.to(other_device)
+        original_device = second.device
+        with pytest.raises(ValueError, match="different devices"):
+            Batch.concatenate([first, second])
+        result = Batch.concatenate([first, second], device=other_device)
+        assert result.device == second.device
+        assert result._storage.device == second.device
+        assert result.neighbor_list.device == second.device
+        assert result.edge_ptr.device == second.device
+        assert result.num_nodes_list == [2, 2]
+        torch.testing.assert_close(
+            result.neighbor_list,
+            torch.cat([second.neighbor_list, second.neighbor_list + 2]),
+        )
+        assert first.device.type == device
+        assert second.device == original_device
+
+    def test_explicit_device_matches_default(self):
+        """An explicit device equal to the inputs' device changes nothing."""
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = Batch.from_data_list([_minimal_atomic_data(3)])
+        result = Batch.concatenate([first, second], device="cpu")
+        expected = Batch.concatenate([first, second])
+        assert result.device == torch.device("cpu")
+        torch.testing.assert_close(result.positions, expected.positions)
+
+    def test_single_input_moves_to_explicit_device(self, device):
+        """A single input is copied to the requested device."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        result = Batch.concatenate([batch], device=device)
+        assert result.device.type == device
+        assert result is not batch
+        assert batch.device == torch.device("cpu")
+
+    def test_invalid_shapes_leave_inputs_unchanged(self):
+        """Invalid paired shapes fail without changing either input."""
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = first.clone()
+        second.positions = torch.ones(2, 4)
+        before = first.positions.clone()
+        with pytest.raises(ValueError, match="incompatible trailing shapes"):
+            Batch.concatenate([first, second])
+        torch.testing.assert_close(first.positions, before)
+        assert second.positions.shape == (2, 4)
+
+    def test_rejects_invalid_inputs_and_grouping(self):
+        """Empty sequences, non-batches, and mixed grouping fail precisely."""
+        with pytest.raises(ValueError, match="At least one batch"):
+            Batch.concatenate([])
+        with pytest.raises(TypeError, match="Batch objects"):
+            Batch.concatenate([None])
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = first.clone()
+        second.set_group_layout(torch.zeros(1, dtype=torch.long))
+        with pytest.raises(ValueError, match="grouped and ungrouped"):
+            Batch.concatenate([first, second])
+
+    def test_prevalidates_pointer_overflow(self):
+        """Fieldless custom metadata cannot overflow the combined pointer."""
+        first = _custom_boundary_batch(torch.iinfo(torch.int32).max, 1.0)
+        second = _custom_boundary_batch(1, 2.0)
+        with pytest.raises(OverflowError):
+            Batch.concatenate([first, second])
+        assert first.energy.item() == 1.0
+        assert second.energy.item() == 2.0
+
+
 class TestBatchMutation:
     """Tests for append, append_data, add_key, __setitem__."""
 
@@ -1959,6 +2602,195 @@ class TestBatchMutation:
         assert b1.num_graphs == 3
         assert b1.num_nodes_list == [2, 3, 4]
         assert b1.num_nodes == 9
+
+    def test_append_skips_padding_checks(self):
+        """Trusted compact inputs retain payloads and neighbor offsets."""
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(2, 2)])
+        second = first.clone()
+        positions = torch.cat([first.positions, second.positions])
+        edges = torch.cat([first.neighbor_list, second.neighbor_list + 2])
+        with patch.object(
+            Batch, "_without_padding", side_effect=AssertionError("Already compact")
+        ):
+            first.append(second, assume_compact=True)
+        assert first.num_nodes_list == [2, 2]
+        torch.testing.assert_close(first.positions, positions)
+        torch.testing.assert_close(first.neighbor_list, edges)
+
+    @pytest.mark.parametrize(
+        "padded_left,padded_right", [(True, False), (False, True), (True, True)]
+    )
+    @pytest.mark.parametrize("grouped", [False, True])
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_append_ignores_padding_in_either_input(
+        self, device, padded_left, padded_right, grouped, missing_fields
+    ):
+        """Append real rows, rebase edges, and leave the incoming buffer unchanged."""
+        sources = [
+            Batch.from_data_list(
+                [
+                    _atomic_data_with_edges_and_system(2, 2, device),
+                    _atomic_data_with_edges_and_system(3, 4, device),
+                ]
+            )
+            for _ in range(2)
+        ]
+        sources[0].forces = torch.full((5, 3), 7.0, device=device)
+        if grouped:
+            for source in sources:
+                source.set_group_layout(torch.zeros(2, dtype=torch.long, device=device))
+        inputs = []
+        for source, padded in zip(sources, (padded_left, padded_right)):
+            if padded:
+                buffer = Batch.empty(
+                    num_systems=4,
+                    num_nodes=20,
+                    num_edges=24,
+                    template=source,
+                    device=device,
+                )
+                buffer.put(source, torch.ones(2, dtype=torch.bool, device=device))
+                inputs.append(buffer)
+            else:
+                inputs.append(source.clone())
+        left, right = inputs
+        right_before = right.clone()
+        left.append(right, missing_fields=missing_fields)
+
+        assert left.num_graphs == left.system_capacity == 4
+        assert left.num_nodes == 10
+        assert left.num_edges == 12
+        assert left.num_nodes_list == [2, 3, 2, 3]
+        torch.testing.assert_close(
+            left.positions, torch.cat([b.positions for b in sources])
+        )
+        torch.testing.assert_close(
+            left.atomic_numbers, torch.cat([b.atomic_numbers for b in sources])
+        )
+        torch.testing.assert_close(left.energy, torch.cat([b.energy for b in sources]))
+        torch.testing.assert_close(
+            left.neighbor_list,
+            torch.cat([sources[0].neighbor_list, sources[1].neighbor_list + 5]),
+        )
+        if grouped:
+            assert left.group_idx.tolist() == [0, 0, 1, 1]
+        if missing_fields == "fill":
+            torch.testing.assert_close(
+                left.forces,
+                torch.cat([sources[0].forces, torch.zeros(5, 3, device=device)]),
+            )
+        else:
+            assert "forces" not in left
+        assert right.num_graphs == right_before.num_graphs
+        assert right.system_capacity == right_before.system_capacity
+        for name, storage in right._storage.groups.items():
+            for key in storage.keys():
+                torch.testing.assert_close(
+                    storage[key], right_before._storage.groups[name][key]
+                )
+            if storage.is_segmented():
+                torch.testing.assert_close(
+                    storage.segment_lengths,
+                    right_before._storage.groups[name].segment_lengths,
+                )
+
+    @pytest.mark.parametrize("empty_left", [False, True])
+    @pytest.mark.parametrize("grouped", [False, True])
+    def test_append_empty_padded_input(self, device, empty_left, grouped):
+        """Empty allocated buffers contribute no graphs, atoms, or edges."""
+        source = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 2, device)]
+        )
+        if grouped:
+            source.set_group_layout(torch.zeros(1, dtype=torch.long, device=device))
+        empty = Batch.empty(
+            num_systems=4, num_nodes=20, num_edges=24, template=source, device=device
+        )
+        left, right = (empty, source) if empty_left else (source.clone(), empty)
+        left.append(right)
+        assert left.num_graphs == left.system_capacity == 1
+        assert left.num_nodes == left.num_edges == 2
+        torch.testing.assert_close(left.positions, source.positions)
+        torch.testing.assert_close(left.neighbor_list, source.neighbor_list)
+        if empty_left:
+            assert right.num_graphs == 1
+        else:
+            assert right.num_graphs == 0
+            assert right.system_capacity == 4
+
+    @pytest.mark.parametrize("fieldless_parent", [False, True])
+    def test_append_padded_custom_levels(self, device, fieldless_parent):
+        """Custom segmented/product payloads and fieldless lengths stay aligned."""
+        schema = _custom_buffer_schema(fieldless_parent=fieldless_parent)
+        sources = [
+            Batch.from_data_list(
+                [
+                    _custom_buffer_data(
+                        nodes, molecules, fieldless_parent=fieldless_parent
+                    )
+                ],
+                attr_map=schema,
+                device=device,
+            )
+            for nodes, molecules in ((2, 3), (3, 1))
+        ]
+        buffers = []
+        for source in sources:
+            buffer = Batch.empty(
+                num_systems=4,
+                num_nodes=20,
+                num_edges=0,
+                template=source,
+                device=device,
+                level_capacities={"molecules": 10, "pairs": 40},
+            )
+            buffer.put(source, torch.ones(1, dtype=torch.bool, device=device))
+            buffers.append(buffer)
+        left, right = buffers
+        right_values = right.pair_values.clone()
+        left.append(right)
+
+        assert left.num_graphs == 2
+        assert left.num_nodes == 5
+        assert left.level_ptr("molecules").tolist() == [0, 3, 4]
+        assert left.level_ptr("pairs").tolist() == [0, 6, 9]
+        torch.testing.assert_close(
+            left.pair_values, torch.cat([b.pair_values for b in sources])
+        )
+        torch.testing.assert_close(right.pair_values, right_values)
+        assert right.num_graphs == 1
+        assert right.pair_values.shape == (40, 1)
+
+    @pytest.mark.parametrize("invalid", ["group_mode", "default"])
+    def test_append_invalid_input_preserves_padded_receiver(self, invalid):
+        """Failed append must not commit padding removal or change buffer capacity."""
+        source = Batch.from_data_list([_atomic_data_with_system(2)])
+        source.add_key("resident_id", [torch.tensor([[7]])], level="system")
+        if invalid == "group_mode":
+            source.set_group_layout(torch.zeros(1, dtype=torch.long))
+        left = Batch.empty(num_systems=4, num_nodes=20, num_edges=0, template=source)
+        left.put(source, torch.ones(1, dtype=torch.bool))
+        right = Batch.from_data_list([_atomic_data_with_system(3)])
+        storage = left._storage
+        positions = left.positions.clone()
+        kwargs = (
+            {
+                "missing_fields": "fill",
+                "field_defaults": {
+                    "resident_id": lambda n, d: torch.zeros(
+                        2, 1, dtype=torch.long, device=d
+                    )
+                },
+            }
+            if invalid == "default"
+            else {}
+        )
+        with pytest.raises(ValueError):
+            left.append(right, **kwargs)
+        assert left._storage is storage
+        assert left.system_capacity == 4
+        assert left.num_graphs == 1
+        torch.testing.assert_close(left.positions, positions)
 
     @pytest.mark.parametrize("device", ["cpu", "cuda"])
     def test_append_fill_preserves_receiver_fields_without_mutating_other(self, device):
@@ -3429,6 +4261,93 @@ class TestBatchPutDefrag:
         torch.testing.assert_close(
             buffer.positions[: buffer.num_nodes], source.positions[: buffer.num_nodes]
         )
+
+    @pytest.mark.parametrize("grouped", [False, True])
+    def test_put_updates_caller_mask_after_dtype_or_device_conversion(
+        self, grouped: bool, device: str
+    ) -> None:
+        """A converted output mask still reports copied graphs to the caller."""
+        source = Batch.from_data_list([_minimal_atomic_data(2)] * 2).to(device)
+        if grouped:
+            source.set_group_layout(torch.zeros(2, dtype=torch.long, device=device))
+        buffer = Batch.empty(
+            num_systems=2, num_nodes=4, num_edges=0, template=source, device=device
+        )
+        copied = torch.zeros(2, dtype=torch.int32)
+
+        buffer.put(source, torch.ones(2, dtype=torch.int32), copied_mask=copied)
+
+        assert copied.tolist() == [1, 1]
+        assert buffer.num_graphs == 2
+        torch.testing.assert_close(buffer.positions, source.positions)
+
+    @pytest.mark.parametrize(
+        "limiting_level,fieldless_parent",
+        [
+            ("system", False),
+            ("atoms", False),
+            ("edges", False),
+            ("molecules", False),
+            ("pairs", False),
+            ("pairs", True),
+        ],
+    )
+    def test_grouped_put_copies_only_fitting_selected_prefix(
+        self, limiting_level: str, fieldless_parent: bool, device: str
+    ) -> None:
+        """Use remaining capacities, skip unselected costs, and stop at a blocked group."""
+        data = []
+        for nodes, molecules in [(2, 2)] * 2 + [(4, 4)] * 2 + [(3, 3)] * 2 + [(1, 0)]:
+            graph = _custom_buffer_data(
+                nodes, molecules, fieldless_parent=fieldless_parent
+            )
+            graph.neighbor_list = torch.zeros(nodes, 2, dtype=torch.long)
+            data.append(graph)
+        source = Batch.from_data_list(
+            data, attr_map=_custom_buffer_schema(fieldless_parent=fieldless_parent)
+        ).to(device)
+        source.set_group_layout(torch.tensor([0, 0, 1, 1, 2, 2, 3], device=device))
+        capacities = {
+            "system": 10,
+            "atoms": 40,
+            "edges": 40,
+            "molecules": 40,
+            "pairs": 100,
+        }
+        # Two copies of group 0 fit, but adding group 2 exceeds this capacity.
+        capacities[limiting_level] = {"system": 5, "pairs": 17}.get(limiting_level, 9)
+        custom_capacities = {"pairs": capacities["pairs"]}
+        if not fieldless_parent:
+            custom_capacities["molecules"] = capacities["molecules"]
+        buffer = Batch.empty(
+            num_systems=capacities["system"],
+            num_nodes=capacities["atoms"],
+            num_edges=capacities["edges"],
+            level_capacities=custom_capacities,
+            template=source,
+            device=device,
+        )
+        # Prefill the buffer so the next put must account for occupied space.
+        first = source.index_select([0, 1])
+        buffer.put(first, torch.ones(2, dtype=torch.bool, device=device))
+        copied = torch.zeros(7, dtype=torch.bool, device=device)
+        # Select groups 0, 2, and 3; unselected group 1 must consume no capacity.
+        mask = torch.tensor([True, True, False, False, True, True, True], device=device)
+
+        buffer.put(source, mask, copied_mask=copied)
+
+        # Group 2 blocks the prefix: group 3 stays uncopied despite fitting alone.
+        assert copied.tolist() == [True, True, False, False, False, False, False]
+        assert buffer.num_graphs == 4
+        assert buffer.group_layout.num_graphs_per_group.tolist() == [2, 2]
+        torch.testing.assert_close(buffer.positions[:8], first.positions.repeat(2, 1))
+        for index in range(4):
+            actual, expected = buffer.get_data(index), first.get_data(index % 2)
+            torch.testing.assert_close(actual.pair_values, expected.pair_values)
+            if not fieldless_parent:
+                torch.testing.assert_close(
+                    actual.molecule_values, expected.molecule_values
+                )
 
     def test_put_copied_mask_when_same_size_buffer_no_room(self):
         """When buffer and src have same size, fixed storage has no room to append; copied_mask all False."""
