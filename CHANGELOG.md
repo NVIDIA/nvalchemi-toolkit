@@ -4,13 +4,15 @@
 
 ### Added
 
-- `langevin_half_step_device_seed`: the BAOAB half step with its RNG seed in a
-  one-element device tensor that the op advances after every launch (the
-  `nvalchemiops` Langevin kernels with a device seed; needs `nvalchemi-toolkit-ops`
-  with `langevin_baoab_half_step(random_seed=<int32 wp.array>)`, 0.6.0).
-  `NVTLangevin` uses it, so a `dyn.step()` captured in a CUDA graph draws fresh
-  noise on every replay instead of repeating the noise of the captured step;
-  the noise stream is unchanged (`random_seed + step_count`, bitwise).
+- `langevin_half_step` takes an optional read-only `step_offset` (one-element
+  int32 device tensor) next to `random_seed`; the `nvalchemiops` kernel draws from
+  `random_seed + step_offset[0]` read when it runs (needs `nvalchemi-toolkit-ops`
+  with `langevin_baoab_half_step(step_offset=...)`, 0.6.0). `NVTLangevin` owns the
+  tensor and advances it with `add_(1)` after every half step, so a `dyn.step()`
+  captured in a CUDA graph draws fresh noise on every replay instead of repeating
+  the noise of the captured step; the noise stream is unchanged
+  (`random_seed + step_count`, bitwise). `random_seed` keeps its full range
+  (`2**31 + 7` works).
 - Add the `nvalchemi-toolkit` agent skill under `skills/nvalchemi-toolkit/`: one
   `SKILL.md` that scopes a request and routes to six task notes (data, models,
   dynamics and optimization, training, generative workflows, and composition

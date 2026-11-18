@@ -30,13 +30,10 @@ The BAOAB splitting scheme applies:
 Functions
 ---------
 langevin_half_step
-    Pre-force half: B-A-O-A sequence.  The random seed is a Python ``int``
-    launch argument.
-langevin_half_step_device_seed
-    The same half step with the seed held in a one-element device tensor
-    that the op advances by one after every launch, so a replayed CUDA graph
-    draws fresh noise on every replay (a Python ``int`` seed is a constant of
-    the captured kernel node and repeats the same noise each replay).
+    Pre-force half: B-A-O-A sequence.  The noise stream is ``random_seed +
+    step_offset[0]`` (``step_offset``: optional read-only int32 device tensor,
+    read when the kernel runs, so a replayed CUDA graph draws fresh noise once
+    the caller advances the counter).
 langevin_finalize
     Post-force half: final B step.
 """
@@ -55,11 +52,7 @@ from nvalchemiops.dynamics.integrators import (
 
 from nvalchemi.dynamics._ops._bridge import _scalar_type, _vec_type
 
-__all__ = [
-    "langevin_half_step",
-    "langevin_half_step_device_seed",
-    "langevin_finalize",
-]
+__all__ = ["langevin_half_step", "langevin_finalize"]
 
 
 @torch.library.custom_op(
@@ -76,6 +69,7 @@ def langevin_half_step(
     friction: torch.Tensor,
     random_seed: int,
     batch_idx: torch.Tensor,
+    step_offset: torch.Tensor | None = None,
 ) -> None:
     r"""BAOAB Langevin pre-force half-step (B-A-O-A).
 
@@ -106,6 +100,12 @@ def langevin_half_step(
         to produce unique random numbers per atom per step.
     batch_idx : torch.Tensor
         Per-atom system index ``[N]``, int32, non-decreasing.
+    step_offset : torch.Tensor, optional
+        One-element ``int32`` tensor on the same device, added to *random_seed*
+        when the kernel runs (``None``: offset 0).  The op only reads it; the
+        caller advances it (``step_offset.add_(1)``), and the advance recorded
+        in a CUDA graph makes every replay draw fresh noise, where a Python
+        ``int`` seed is baked into the captured launch.
     """
     dtype = positions.dtype
     vec_t = _vec_type(dtype)
@@ -120,6 +120,9 @@ def langevin_half_step(
         wp.from_torch(friction, dtype=scl_t),
         random_seed,
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
+        step_offset=(
+            None if step_offset is None else wp.from_torch(step_offset, dtype=wp.int32)
+        ),
     )
 
 
@@ -134,84 +137,7 @@ def _langevin_half_step_fake(
     friction,
     random_seed,
     batch_idx,
-) -> None:
-    pass
-
-
-@torch.library.custom_op(
-    "nvalchemi::langevin_half_step_device_seed",
-    mutates_args={"positions", "velocities", "seed"},
-)
-def langevin_half_step_device_seed(
-    positions: torch.Tensor,
-    velocities: torch.Tensor,
-    forces: torch.Tensor,
-    masses: torch.Tensor,
-    dt: torch.Tensor,
-    temperature: torch.Tensor,
-    friction: torch.Tensor,
-    seed: torch.Tensor,
-    batch_idx: torch.Tensor,
-) -> None:
-    """BAOAB Langevin pre-force half-step (B-A-O-A) with a device-side seed.
-
-    Identical to :func:`langevin_half_step` except that the RNG seed is
-    ``seed[0]`` (read by the ``nvalchemiops`` kernel at run time) and
-    ``seed[0]`` is advanced by one after the launch.  Because nothing about the seed is baked into the
-    launch, capturing the op in a CUDA graph and replaying it draws a new
-    noise sample per replay, exactly like calling the eager op with
-    ``random_seed + step``.  Modifies *positions*, *velocities* and *seed*
-    in-place.
-
-    Parameters
-    ----------
-    positions : torch.Tensor
-        Atomic positions ``[N, 3]``, float32 or float64.
-    velocities : torch.Tensor
-        Atomic velocities ``[N, 3]``, same dtype.
-    forces : torch.Tensor
-        Atomic forces ``[N, 3]``, same dtype.
-    masses : torch.Tensor
-        Atomic masses ``[N]``, same dtype.
-    dt : torch.Tensor
-        Per-system timestep ``[M]``, same dtype.
-    temperature : torch.Tensor
-        Per-system kT in energy units ``[M]``, same dtype.
-    friction : torch.Tensor
-        Per-system friction ``[M]``, same dtype.
-    seed : torch.Tensor
-        One-element ``int32`` tensor on the same device: the seed of THIS
-        call, advanced by one afterwards.
-    batch_idx : torch.Tensor
-        Per-atom system index ``[N]``, int32, non-decreasing.
-    """
-    dtype = positions.dtype
-    vec_t = _vec_type(dtype)
-    scl_t = _scalar_type(dtype)
-    _lang_half(
-        wp.from_torch(positions, dtype=vec_t),
-        wp.from_torch(velocities, dtype=vec_t),
-        wp.from_torch(forces, dtype=vec_t),
-        wp.from_torch(masses, dtype=scl_t),
-        wp.from_torch(dt, dtype=scl_t),
-        wp.from_torch(temperature, dtype=scl_t),
-        wp.from_torch(friction, dtype=scl_t),
-        wp.from_torch(seed, dtype=wp.int32),
-        batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
-    )
-
-
-@langevin_half_step_device_seed.register_fake
-def _langevin_half_step_device_seed_fake(
-    positions,
-    velocities,
-    forces,
-    masses,
-    dt,
-    temperature,
-    friction,
-    seed,
-    batch_idx,
+    step_offset=None,
 ) -> None:
     pass
 

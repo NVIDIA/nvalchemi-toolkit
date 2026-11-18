@@ -13,13 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Device-seed Langevin half step and CUDA-graph replay of ``NVTLangevin.step``.
+Device step offset of the Langevin half step and CUDA-graph replay of ``NVTLangevin.step``.
 
 Tests verify:
-- ``langevin_half_step_device_seed`` reproduces the Python-int-seed op bit for
-  bit, advances its seed by one per call, and follows the int-seed sequence
+- ``langevin_half_step`` with ``step_offset=None`` is the Python-int-seed op bit
+  for bit; an int32 ``step_offset`` equals the shifted int seed (also for seeds
+  of ``2**31`` and above) and is never written by the op
 - ``NVTLangevin`` keeps its noise stream at ``random_seed + step_count``, also
-  after ``step_count`` is set from outside
+  after ``step_count`` is set from outside, and takes ``random_seed >= 2**31``
 - a ``dyn.step()`` captured on the engine's stream (``with dyn:`` and
   ``torch.cuda.graph(g, stream=dyn.torch_stream)``, the sanctioned path)
   draws fresh noise on every replay, equals the eager run bitwise, and
@@ -36,10 +37,7 @@ from torch import nn
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics._ops.langevin import (
-    langevin_half_step,
-    langevin_half_step_device_seed,
-)
+from nvalchemi.dynamics._ops.langevin import langevin_finalize, langevin_half_step
 from nvalchemi.dynamics._units import KB_EV
 from nvalchemi.models.base import BaseModelMixin, ModelConfig
 
@@ -112,35 +110,31 @@ def _op_system(device: str, dtype: torch.dtype = torch.float32):
     return pos, vel, frc, mass, dt, kT, gamma, bidx
 
 
-class TestDeviceSeedOp:
+def _offset(value: int, device: str) -> torch.Tensor:
+    return torch.tensor([value], dtype=torch.int32, device=device)
+
+
+class TestStepOffsetOp:
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-    def test_matches_int_seed_op_bitwise(self, device, dtype):
+    def test_none_equals_int_seed_op_bitwise(self, device, dtype):
         pos, vel, frc, mass, dt, kT, gamma, bidx = _op_system(device, dtype)
         p1, v1 = pos.clone(), vel.clone()
         langevin_half_step(p1, v1, frc, mass, dt, kT, gamma, 123, bidx)
         p2, v2 = pos.clone(), vel.clone()
-        seed = torch.tensor([123], dtype=torch.int32, device=device)
-        langevin_half_step_device_seed(p2, v2, frc, mass, dt, kT, gamma, seed, bidx)
+        langevin_half_step(p2, v2, frc, mass, dt, kT, gamma, 123, bidx, None)
         assert torch.equal(p1, p2) and torch.equal(v1, v2)
 
-    def test_seed_advances_by_one_per_call(self, device):
-        pos, vel, frc, mass, dt, kT, gamma, bidx = _op_system(device)
-        seed = torch.tensor([40], dtype=torch.int32, device=device)
-        for expected in (41, 42, 43):
-            langevin_half_step_device_seed(
-                pos, vel, frc, mass, dt, kT, gamma, seed, bidx
-            )
-            assert int(seed.item()) == expected
-
-    def test_consecutive_calls_follow_the_int_seed_sequence(self, device):
+    @pytest.mark.parametrize("seed", [9, 2**31 + 7])
+    def test_offsets_follow_the_shifted_int_seed_and_stay_untouched(self, device, seed):
+        """Eager offsets 0..4 with seed s equal the int seeds s .. s + 4, bitwise."""
         pos, vel, frc, mass, dt, kT, gamma, bidx = _op_system(device)
         pe, ve = pos.clone(), vel.clone()
-        for s in (7, 8, 9):
-            langevin_half_step(pe, ve, frc, mass, dt, kT, gamma, s, bidx)
         pd, vd = pos.clone(), vel.clone()
-        seed = torch.tensor([7], dtype=torch.int32, device=device)
-        for _ in range(3):
-            langevin_half_step_device_seed(pd, vd, frc, mass, dt, kT, gamma, seed, bidx)
+        for k in range(5):
+            off = _offset(k, device)
+            langevin_half_step(pe, ve, frc, mass, dt, kT, gamma, seed + k, bidx)
+            langevin_half_step(pd, vd, frc, mass, dt, kT, gamma, seed, bidx, off)
+            assert int(off.item()) == k
         assert torch.equal(pe, pd) and torch.equal(ve, vd)
 
 
@@ -168,8 +162,6 @@ class TestNVTLangevinSeed:
                 9 + s,
                 ref.batch_idx.int(),
             )
-            from nvalchemi.dynamics._ops.langevin import langevin_finalize
-
             langevin_finalize(
                 vr, torch.zeros_like(pr), masses, st.dt, ref.batch_idx.int()
             )
@@ -218,7 +210,7 @@ class TestNVTLangevinSeed:
         ref.pre_update(bref)
         assert torch.equal(ba.positions, bref.positions)
         assert torch.equal(ba.velocities, bref.velocities)
-        assert int(a._rng_seed.item()) == 1009 + 3 + 1
+        assert int(a._step_offset.item()) == 3 + 1
 
     def test_sync_rng_is_public_and_eager(self, device):
         dyn, b = _langevin(seed=9), _batch(device)
@@ -228,10 +220,34 @@ class TestNVTLangevinSeed:
         dyn.step_count = 17
         dyn.random_seed = 100
         dyn.sync_rng()
-        assert int(dyn._rng_seed.item()) == 117
-        # in sync now: a step must not resync (the seed only advances by the op's own +1)
+        assert int(dyn._step_offset.item()) == 17
+        # in sync now: a step must not resync (the counter only advances by pre_update's own +1)
         dyn.pre_update(b)
-        assert int(dyn._rng_seed.item()) == 118
+        assert int(dyn._step_offset.item()) == 18
+
+    def test_seed_of_2_pow_31_and_above_works(self, device):
+        """random_seed >= 2**31 is a host launch argument (it overflowed the int32 seed tensor)."""
+        seed = 2**31 + 7
+        dyn, b = _langevin(seed=seed), _batch(device)
+        ref = _batch(device)
+        dyn._ensure_state_initialized(b)
+        masses = b.atomic_masses.clone()
+        for _ in range(3):
+            dyn.pre_update(b)
+            dyn.post_update(b)
+            dyn.step_count += 1
+        assert torch.isfinite(b.positions).all() and torch.isfinite(b.velocities).all()
+        pr, vr = ref.positions.clone(), ref.velocities.clone()
+        st = dyn._state
+        zeros = torch.zeros_like(pr)
+        for s in range(3):
+            langevin_half_step(
+                pr, vr, zeros, masses, st.dt, st.temperature, st.friction,
+                seed + s, ref.batch_idx.int(),
+            )  # fmt: skip
+            langevin_finalize(vr, zeros, masses, st.dt, ref.batch_idx.int())
+        assert torch.allclose(b.positions, pr, atol=1e-6)
+        assert torch.allclose(b.velocities, vr, atol=1e-6)
 
 
 @pytest.mark.usefixtures("gpu_device")
@@ -257,7 +273,7 @@ class TestCapturedStep:
                     dyn.step(b)
             # the documented remedy: resync eagerly, then capture
             dyn.sync_rng()
-            assert int(dyn._rng_seed.item()) == 9 + 50
+            assert int(dyn._step_offset.item()) == 50
             graph = torch.cuda.CUDAGraph()
             with torch.cuda.graph(graph, stream=dyn.torch_stream):
                 dyn.step(b)
@@ -273,7 +289,7 @@ class TestCapturedStep:
         assert not torch.equal(
             outs[0], outs[1]
         )  # fresh noise per replay, no recorded reset
-        assert int(dyn._rng_seed.item()) == 9 + 50 + 2
+        assert int(dyn._step_offset.item()) == 50 + 2
 
     def test_replays_draw_fresh_noise(self, gpu_device):
         dyn, b = _langevin(), _batch(gpu_device)
