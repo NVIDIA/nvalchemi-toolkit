@@ -10,7 +10,7 @@
     auto: "Auto-detects active coding agents in your project.",
     codex: "Installs into the Codex skills directory (.agents/skills/ or ~/.agents/skills/).",
     "claude-code": "Installs into the Claude Code skills directory (.claude/skills/ or ~/.claude/skills/). In Claude Code, run /reload-skills to refresh.",
-    pi: "Installs into the Pi skills directory (.pi/agent/skills/ or ~/.pi/agent/skills/).",
+    pi: "Installs into the Pi skills directory (.agents/skills/ or ~/.agents/skills/).",
   };
 
   function selected(name) {
@@ -22,7 +22,7 @@
     const agent = selected("agent");
     const scope = selected("scope");
 
-    const parts = ["npx", "skills", "add", "nvidia/skills", "--skill", "nvalchemi-toolkit"];
+    const parts = ["npx", "skills@latest", "add", "nvidia/skills", "--skill", "nvalchemi-toolkit"];
 
     if (agent && agent !== "auto") {
       parts.push("--agent", agent);

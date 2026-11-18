@@ -24,9 +24,11 @@
 
 ### Changed
 
-- Update `README.md` and `docs/userguide/agent_skills.md` to recommend installing
-  agent skills via the NVIDIA skills catalog (`npx skills add nvidia/skills --skill nvalchemi-toolkit`),
-  with an interactive installation selector for Codex, Claude Code, and Pi.
+- Update `README.md` and `docs/userguide/agent_skills.md` to install the agent
+  skill from the NVIDIA skills catalog
+  (`npx skills@latest add nvidia/skills --skill nvalchemi-toolkit`), with an
+  interactive selector for Codex, Claude Code, and Pi, an update command, and
+  separate instructions for users and for developers working in a clone.
 
 ### Breaking Changes
 

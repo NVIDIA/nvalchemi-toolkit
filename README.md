@@ -51,17 +51,19 @@ for GPU-optimized neighbor lists and interaction kernels via NVIDIA `warp-lang`.
 
 ### Using with AI coding agents
 
-Install the toolkit agent skill from the [NVIDIA skills catalog](https://github.com/NVIDIA/skills):
+Install the ALCHEMI Toolkit agent skill so your coding assistant (Claude Code,
+Codex, Pi, and others) knows how to write `nvalchemi` code. First
+[install the toolkit](#installation), then the skill from the
+[NVIDIA skills catalog](https://github.com/NVIDIA/skills):
 
 ```bash
-npx skills add nvidia/skills --skill nvalchemi-toolkit
+npx skills@latest add nvidia/skills --skill nvalchemi-toolkit
 ```
 
-This skill teaches coding agents (such as Codex, Claude Code, and Pi) how to
-build and modify ALCHEMI Toolkit workflows. Agents that follow the `AGENTS.md`
-standard also load repository instructions from `AGENTS.md`. For agent-specific
-installation options, see the
-[Agent Skills user guide](docs/userguide/agent_skills.md).
+The command detects your assistant automatically. To choose one, install for
+all projects, or update the skill, see the
+[Agent Skills user guide](docs/userguide/agent_skills.md). If you are working
+on the skill itself, the guide has a section for developers.
 
 ### Example Snippets
 
