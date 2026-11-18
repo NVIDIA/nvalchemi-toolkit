@@ -149,7 +149,10 @@ html_css_files = [
     "css/nvidia-sphinx-theme.css",
     "css/custom.css",
 ]
-html_js_files = [("js/install-matrix.js", {"defer": "defer"})]
+html_js_files = [
+    ("js/install-matrix.js", {"defer": "defer"}),
+    ("js/skills-matrix.js", {"defer": "defer"}),
+]
 html_theme_options = {
     "logo": {
         "text": "ALCHEMI Toolkit",
