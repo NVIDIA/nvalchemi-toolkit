@@ -291,6 +291,50 @@ class TestCapturedStep:
         )  # fresh noise per replay, no recorded reset
         assert int(dyn._step_offset.item()) == 50 + 2
 
+    def test_checkpoint_after_replays_resumes_the_noise_stream(self, gpu_device):
+        """Warm-up + capture + 11 replays leave step_count at 2 but the device counter at 12.
+
+        The checkpoint carries the counter, so a fresh engine restored from it continues
+        bitwise like the uninterrupted run (5 more steps), not from offset 2.
+        """
+        dyn, b = _langevin(k=0.05), _batch(gpu_device)
+        dyn._ensure_state_initialized(b)
+        with dyn:
+            graph = self._capture(dyn, b)
+            for _ in range(11):
+                graph.replay()
+            torch.cuda.synchronize()
+            ckpt = dyn.state_dict()
+            saved = (b.positions.clone(), b.velocities.clone(), b.forces.clone())
+            for _ in range(5):
+                graph.replay()
+            torch.cuda.synchronize()
+        assert ckpt["rng_step_offset"] == 12 and ckpt["step_count"] == 2
+
+        dyn2, b2 = _langevin(k=0.05), _batch(gpu_device)
+        dyn2._ensure_state_initialized(b2)
+        dyn2.load_state_dict(ckpt)
+        b2.positions.copy_(saved[0])
+        b2.velocities.copy_(saved[1])
+        b2.forces.copy_(saved[2])
+        for _ in range(5):
+            dyn2.step(b2)
+        torch.cuda.synchronize()
+        assert int(dyn2._step_offset.item()) == 17
+        assert torch.equal(b2.positions, b.positions)
+        assert torch.equal(b2.velocities, b.velocities)
+
+    def test_checkpoint_restored_before_init_applies_the_counter(self, gpu_device):
+        dyn, b = _langevin(), _batch(gpu_device)
+        dyn._ensure_state_initialized(b)
+        dyn.step(b)
+        ckpt = dyn.state_dict()
+        ckpt["rng_step_offset"] = 40
+        fresh = _langevin()
+        fresh.load_state_dict({k: v for k, v in ckpt.items() if k != "state"})
+        fresh._ensure_state_initialized(_batch(gpu_device))
+        assert int(fresh._step_offset.item()) == 40
+
     def test_replays_draw_fresh_noise(self, gpu_device):
         dyn, b = _langevin(), _batch(gpu_device)
         dyn._ensure_state_initialized(b)

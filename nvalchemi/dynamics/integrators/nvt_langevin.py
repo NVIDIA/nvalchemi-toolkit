@@ -153,6 +153,43 @@ class NVTLangevin(BaseDynamics):
             [self.step_count], dtype=torch.int32, device=dev
         )
         self._rng_host_step: int = self.step_count
+        pending = getattr(self, "_pending_step_offset", None)
+        if pending is not None:
+            # a checkpoint restored before the state existed (see load_state_dict)
+            self._step_offset.fill_(pending)
+            self._pending_step_offset = None
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the base state plus the device step counter of the noise stream.
+
+        Graph replays advance ``_step_offset`` on the device without advancing the
+        Python ``step_count``, so the counter is saved on its own
+        (``rng_step_offset``); restoring only ``step_count`` would resume the noise
+        stream at the wrong offset.  Reading it synchronises with the device.
+        """
+        out = super().state_dict()
+        offset = getattr(self, "_step_offset", None)
+        if offset is not None:
+            out["rng_step_offset"] = int(offset.item())
+        return out
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore the base state and the device step counter (``rng_step_offset``).
+
+        Checkpoints without ``rng_step_offset`` (older ones) keep the previous
+        behaviour: the counter resyncs to the restored ``step_count`` at the next
+        eager step.
+        """
+        super().load_state_dict(state)
+        if "rng_step_offset" not in state:
+            return
+        value = int(state["rng_step_offset"])
+        if getattr(self, "_step_offset", None) is None:
+            self._pending_step_offset = value  # applied in _init_state
+        else:
+            self._step_offset.fill_(value)
+        # the counter is restored as saved: no resync to step_count at the next step
+        self._rng_host_step = self.step_count
 
     def apply_per_system_params(
         self, params: Mapping[str, torch.Tensor], batch: Batch
