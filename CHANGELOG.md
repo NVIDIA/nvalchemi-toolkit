@@ -29,6 +29,9 @@
   (`npx skills@latest add nvidia/skills --skill nvalchemi-toolkit`), with an
   interactive selector for Codex, Claude Code, and Pi, an update command, and
   separate instructions for users and for developers working in a clone.
+- Add documentation, repository, issues, and changelog links to the package
+  metadata (`[project.urls]`), and mention the agent skill on the documentation
+  landing page.
 
 ### Breaking Changes
 

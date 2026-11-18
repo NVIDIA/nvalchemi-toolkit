@@ -55,6 +55,10 @@ batching and size-aware sampling handle load balancing automatically.
   never idles during high-throughput screening.
 - **Zarr-backed I/O** --- write trajectories with zero-copy GPU buffering;
   reload through a CUDA-stream-prefetching `DataLoader`.
+- **Agent-ready** --- install the `nvalchemi-toolkit` agent skill so coding
+  assistants can write `nvalchemi` code. It works with most agent harnesses,
+  for example Claude Code, Codex, Cursor, and OpenCode
+  ([install the skill →](agent_skills)).
 
 [Read the introduction →](introduction_guide)
 
