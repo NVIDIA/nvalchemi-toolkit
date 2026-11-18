@@ -56,6 +56,18 @@ failure in tested scripts.
 6. **Record cheaply.** Store per-step results as detached tensors
    (`.detach().clone()`), and convert to Python or files after the run.
 
+### Preserve state when batch membership changes
+
+`BaseDynamics` and `FusedStage` pass a read-only
+`ctx.previous_graph_indices` at `ON_ADMISSION`: each current graph's index at
+its last admission, or `-1` for an arrival, regardless of status. This mapping
+composes membership changes since that admission. First admissions, new runs,
+and rebuilds after complete removal mark every graph new. Fused and sub-stage
+hooks receive the same full-batch mapping. Combine
+`previous_graph_indices < 0` with `active_graph_mask` to select a sub-stage's
+arrivals. Other stages receive `None`. Path hooks can recover previous paths
+using this mapping and their cached layout.
+
 ### Template
 
 This hook records a per-graph quantity every N steps and stops graphs that
@@ -201,6 +213,52 @@ rank. Every stage needs a `buffer_config=BufferConfig(...)` (from
 `n_steps` does not graduate systems in a pipeline; wrap fixed-length stages in
 a `FusedStage`. This `|` differs from the generative `gen | stage` pipeline.
 Details: [dynamics.md][doc-dyn], example [01_distributed_pipeline.py][ex-pipe].
+
+When `send_buffer` has limited capacity (via `BufferConfig`):
+
+- Transfers copy only selected graphs that fit all transported levels,
+  including graph, atom, and edge capacities. Grouped batches send a prefix
+  of complete selected groups in batch order.
+- Selected graphs or groups that are not copied remain in the active batch
+  for a later step as **no-ops**.
+  Their positions and velocities are saved before the integrator and
+  restored after it runs.
+- A mask selecting only part of a group raises `ValueError`. A nonempty
+  selection also raises if an empty send buffer cannot fit any selected
+  graph or group. In either case, the active batch is unchanged.
+- Every stage in a `DistributedPipeline` must have `buffer_config` set.
+  Adjacent stages must use identical `BufferConfig` values.
+
+| Layer | Attribute | Purpose |
+| --- | --- | --- |
+| **Overflow sinks** | `overflow_sinks`: `DataSink` list (priority-ordered) | Received samples waiting for room; private `HostMemory` by default |
+| **Result sinks** | `sinks`: `DataSink` list (priority-ordered) | Finished samples; never drained back |
+
+`_complete_pending_recv()` waits on deferred receive, routes into
+the active batch, and drains `overflow_sinks` (never `sinks`).
+
+| Method | Purpose |
+| --- | --- |
+| `_recv_to_batch(incoming)` | Route received data directly into active batch or overflow sinks |
+| `_buffer_to_batch(incoming)` | Append to active batch, overflow to `overflow_sinks` if full; admits complete groups |
+| `_batch_to_buffer(mask)` | Copy graduated samples that fit, trim only copied samples; retain the rest for a later step |
+| `_overflow_to_sinks(batch)` | Write pending samples to the first overflow sink with room for all of them |
+| `_write_to_sinks(batch)` | Write finished samples to the first result sink with room for all of them |
+| `_drain_sinks_to_batch()` | Pull from `overflow_sinks` back into active batch when room available |
+
+```python
+class DataSink(ABC):
+    def write(self, batch: Batch, mask: Tensor | None = None) -> None: ...
+    def read(self) -> Batch: ...
+    def zero(self) -> None: ...           # clear contents
+    def drain(self, max_samples: int | None = None) -> Batch: ...
+    # None: read() + zero(). Otherwise remove the oldest max_samples samples
+    # (complete groups when grouped, else graphs) and keep the rest.
+    def is_full(self) -> bool: ...        # len(self) >= capacity
+    def __len__(self) -> int: ...
+    @property
+    def capacity(self) -> int: ...
+```
 
 ## Domain decomposition across GPUs
 

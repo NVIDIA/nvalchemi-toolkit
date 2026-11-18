@@ -21,10 +21,12 @@ used in inflight batching for dynamics simulations.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 import torch
 
-from nvalchemi.data import AtomicData
+from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 
 # -----------------------------------------------------------------------------
@@ -1083,3 +1085,437 @@ class TestBudgetReplacement:
         assert sampler.max_atoms == 100
         assert sampler.max_edges == 500
         assert sampler.max_batch_size == 10
+
+
+class MockGroupedDataset:
+    """Cached groups with per-graph atom and edge counts for grouped sampling."""
+
+    def __init__(self, sizes: list[tuple[int, int, int]]) -> None:
+        """Build one grouped batch per (num_graphs, atoms, edges) entry."""
+        self.groups = []
+        for num_graphs, atoms, edges in sizes:
+            graphs = MockDataset([(atoms, edges)] * num_graphs)
+            group = Batch.from_data_list([graphs[i][0] for i in range(num_graphs)])
+            group.set_group_layout(torch.zeros(num_graphs, dtype=torch.long))
+            self.groups.append(group)
+
+    def __len__(self) -> int:
+        """Return the number of complete groups."""
+        return len(self.groups)
+
+    def get_metadata(self, index: int) -> tuple[int, int]:
+        """Return total atom and edge counts without loading the group."""
+        group = self.groups[index]
+        return group.num_nodes, group.num_edges
+
+    def __getitem__(self, index: int) -> tuple[Batch, dict]:
+        """Return a cached group to check metadata additions and data isolation."""
+        return self.groups[index], {}
+
+
+class TestSampleAssembly:
+    """Assembly remains overridable for initial batches and refills."""
+
+    @pytest.mark.parametrize("by_group", [False, True])
+    def test_subclass_override_used_for_initial_batch_and_refill(
+        self, by_group: bool
+    ) -> None:
+        """Both entry points call the subclass's assembly method in either mode."""
+        from nvalchemi.dynamics.base import BaseDynamics
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+        class CustomSampler(SizeAwareSampler):
+            """Record assembly calls while retaining the default behavior."""
+
+            assembly_count = 0
+
+            def assemble_samples(
+                self,
+                samples: list[AtomicData] | list[Batch],
+                device: torch.device | str,
+            ) -> Batch:
+                """Count and assemble the supplied graphs or groups."""
+                self.assembly_count += 1
+                return super().assemble_samples(samples, device=device)
+
+        dataset = (
+            MockGroupedDataset([(2, 2, 0)] * 4)
+            if by_group
+            else MockDataset([(2, 0)] * 4)
+        )
+        sampler = CustomSampler(dataset, max_batch_size=2, by_group=by_group)
+        batch = sampler.build_initial_batch()
+        assert sampler.assembly_count == 1
+        batch.status.fill_(1)
+        dynamics = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            sampler=sampler,
+            device_type="cpu",
+            by_group=by_group,
+        )
+
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert sampler.assembly_count == 2
+        assert result is not None
+        assert result.num_graphs == (4 if by_group else 2)
+        assert result.status.eq(0).all()
+        if by_group:
+            assert result.group_layout.num_graphs_per_group.tolist() == [2, 2]
+
+
+class TestFieldDefaults:
+    """Optional fields have the same defaults across graph sampling entry points."""
+
+    @pytest.mark.parametrize("by_group", [False, True])
+    def test_rejects_custom_levels(self, by_group: bool) -> None:
+        """Defaults are limited to built-in levels in both sampling modes."""
+        dataset = MockGroupedDataset([(3, 2, 0)]) if by_group else MockDataset([(2, 0)])
+        sampler = SizeAwareSampler(
+            dataset,
+            by_group=by_group,
+            max_batch_size=1,
+            field_defaults={"weight": ("custom", 0.0)},
+        )
+        with pytest.raises(ValueError, match="Unknown field default level 'custom'"):
+            sampler.build_initial_batch()
+        assert len(sampler) == 1
+
+    @pytest.mark.parametrize("mode", ["initial", "budget", "single", "vectorized"])
+    def test_graph_defaults_preserve_supplied_fields(
+        self, device: str, mode: str
+    ) -> None:
+        """Defaults fill graphs in place on their device without replacing values."""
+        dataset = MockDataset([(2, 2), (3, 1)])
+        cached = [dataset[i][0].to(device) for i in range(2)]
+        cached[0].add_node_property("charges", torch.ones(2, device=device))
+        sampler = SizeAwareSampler(
+            dataset,
+            max_batch_size=2,
+            field_defaults={
+                "charges": ("node", 0.0),
+                "shifts": ("edge", lambda n, dev: torch.zeros(n, 3, device=dev)),
+                "energy": ("system", lambda n, dev: torch.ones(n, 1, device=dev)),
+            },
+        )
+        with patch.object(
+            MockDataset, "__getitem__", side_effect=lambda index: (cached[index], {})
+        ):
+            if mode == "initial":
+                samples = sampler.build_initial_batch().to_data_list()
+            elif mode == "budget":
+                samples = sampler.request_replacements_budget(max_count=2)
+            elif mode == "single":
+                samples = [sampler.request_replacement(3, 2) for _ in range(2)]
+            else:
+                samples = sampler.request_replacements(
+                    torch.tensor([3, 3], device=device),
+                    torch.tensor([2, 2], device=device),
+                )
+        for index, sample in enumerate(samples):
+            assert sample is not None
+            assert sample.device.type == device
+            torch.testing.assert_close(
+                sample.charges,
+                torch.full(
+                    (sample.num_nodes,),
+                    float(sample.num_nodes == 2),
+                    device=device,
+                ),
+            )
+            assert sample.shifts.shape == (sample.num_edges, 3)
+            assert not sample.shifts.any()
+            torch.testing.assert_close(sample.energy, torch.ones(1, 1, device=device))
+            assert sample.system_id.item() == index
+        assert sampler.exhausted
+        torch.testing.assert_close(cached[1].charges, torch.zeros(3, device=device))
+        for source in cached:
+            assert source.shifts is not None
+            assert source.energy is not None
+            assert source.system_id is not None
+
+    def test_grouped_default_categories(self, device: str) -> None:
+        """Grouped defaults use public field categories, including in saved data."""
+        dataset = MockGroupedDataset([(3, 2, 1)])
+        dataset.groups = [group.to(device) for group in dataset.groups]
+        sampler = SizeAwareSampler(
+            dataset,
+            by_group=True,
+            max_batch_size=1,
+            field_defaults={
+                "charges": ("node", 0.0),
+                "shifts": ("edge", lambda n, dev: torch.zeros(n, 3, device=dev)),
+                "energy": ("system", 0.0),
+            },
+        )
+
+        batch = sampler.build_initial_batch()
+        assert "charges" in batch.keys["node"]
+        assert "shifts" in batch.keys["edge"]
+        assert "energy" in batch.keys["system"]
+        assert {"node", "edge", "system"} <= set(batch.keys)
+        # Pre-existing keys are preserved alongside the defaults.
+        assert "positions" in batch.keys["node"]
+
+        saved = batch.model_dump()
+        assert "charges" in saved["keys"]["node"]
+        assert "shifts" in saved["keys"]["edge"]
+        assert "energy" in saved["keys"]["system"]
+        assert {"node", "edge", "system"} <= set(saved["keys"])
+        assert saved["charges"].shape == (6,)
+        assert saved["shifts"].shape == (3, 3)
+        assert saved["energy"].shape == (3, 1)
+
+    def test_scalar_system_default_uses_system_payload_shape(self) -> None:
+        """Scalar system defaults are (num_graphs, 1) in graph and grouped modes."""
+        graph_sampler = SizeAwareSampler(
+            MockDataset([(2, 2), (3, 1)]),
+            max_batch_size=2,
+            field_defaults={"energy": ("system", 0.0)},
+        )
+        assert graph_sampler.build_initial_batch().energy.shape == (2, 1)
+
+        group_sampler = SizeAwareSampler(
+            MockGroupedDataset([(1, 3, 2), (2, 2, 1)]),
+            by_group=True,
+            max_batch_size=2,
+            field_defaults={"energy": ("system", 0.0)},
+        )
+        assert group_sampler.build_initial_batch().energy.shape == (3, 1)
+
+
+class TestGroupedSampling:
+    """Complete groups fit atom, edge, and group-count budgets without splitting."""
+
+    @pytest.mark.parametrize("replacement", [False, True])
+    @pytest.mark.parametrize("empty_first", [False, True])
+    @pytest.mark.parametrize("callable_default", [False, True])
+    def test_edge_defaults_allow_empty_levels(
+        self,
+        device: str,
+        replacement: bool,
+        empty_first: bool,
+        callable_default: bool,
+    ) -> None:
+        """Paths with empty edge tensors pack alongside paths with edges."""
+        dataset = MockGroupedDataset([(3, 2, 1)] * 2)
+        empty_index = 0 if empty_first else 1
+        graphs = dataset.groups[empty_index].to_data_list()
+        for graph in graphs:
+            graph.neighbor_list = torch.empty(0, 2, dtype=torch.long)
+        empty_group = Batch.from_data_list(graphs)
+        empty_group.set_group_layout(torch.zeros(3, dtype=torch.long))
+        dataset.groups[empty_index] = empty_group
+        dataset.groups = [group.to(device) for group in dataset.groups]
+        default = (
+            (lambda n, dev: torch.zeros(n, 3, device=dev))
+            if callable_default
+            else False
+        )
+        sampler = SizeAwareSampler(
+            dataset,
+            by_group=True,
+            max_batch_size=2,
+            field_defaults={"edge_flag": ("edge", default)},
+        )
+
+        if replacement:
+            samples = sampler.request_replacements_budget(max_count=2)
+            batch = sampler.assemble_samples(samples, device=device)
+        else:
+            batch = sampler.build_initial_batch()
+
+        payload_shape = (3,) if callable_default else ()
+        assert dataset.groups[empty_index].edge_flag.shape == (0, *payload_shape)
+        assert batch.edge_flag.shape == (3, *payload_shape)
+        assert not batch.edge_flag.any()
+        assert "edge_flag" in batch.keys["edge"]
+        assert batch.group_layout.num_graphs_per_group.tolist() == [3, 3]
+        assert sampler.exhausted
+
+    def test_default_requires_existing_segmented_level(self) -> None:
+        """Grouped defaults do not materialize a fieldless edge level."""
+        dataset = MockGroupedDataset([(3, 2, 0)])
+        dataset.groups[0].drop_level("edges")
+        sampler = SizeAwareSampler(
+            dataset,
+            by_group=True,
+            max_batch_size=1,
+            field_defaults={"edge_flag": ("edge", False)},
+        )
+        with pytest.raises(ValueError, match="existing tensors at level 'edge'"):
+            sampler.build_initial_batch()
+        assert len(sampler) == 1
+
+    @pytest.mark.parametrize("invalid", [None, "invalid"])
+    def test_invalid_default_does_not_consume_group(self, invalid: object) -> None:
+        """An unsupported default fails before the sample is consumed."""
+        dataset = MockGroupedDataset([(3, 2, 0)])
+        sampler = SizeAwareSampler(
+            dataset,
+            by_group=True,
+            max_batch_size=1,
+            field_defaults={"weight": ("node", invalid)},
+        )
+        with pytest.raises(TypeError):
+            sampler.build_initial_batch()
+        assert len(sampler) == 1
+        assert sampler._next_system_id == 0
+        assert "weight" not in dataset.groups[0]
+
+    def test_system_field_default_keeps_payload_shape(self) -> None:
+        """System defaults retain their row count, payload shape, and dtype."""
+        sampler = SizeAwareSampler(
+            MockGroupedDataset([(3, 2, 0), (4, 1, 0)]),
+            by_group=True,
+            max_batch_size=2,
+            field_defaults={
+                "weight": (
+                    "system",
+                    lambda n, dev: torch.ones(n, 2, dtype=torch.float64, device=dev),
+                ),
+            },
+        )
+        batch = sampler.build_initial_batch()
+        assert "weight" in batch.level_keys["system"]
+        torch.testing.assert_close(batch.weight, torch.ones(7, 2, dtype=torch.float64))
+
+    @pytest.mark.parametrize("masked_first", [False, True])
+    @pytest.mark.parametrize("replacement", [False, True])
+    def test_optional_field_defaults_preserve_mixed_inputs(
+        self, device: str, masked_first: bool, replacement: bool
+    ) -> None:
+        """Defaults fill absent fields in place without replacing supplied values."""
+        dataset = MockGroupedDataset([(3, 2, 0), (3, 2, 0)])
+        dataset.groups = [group.to(device) for group in dataset.groups]
+        masked = 0 if masked_first else 1
+        mask = torch.tensor([True, False] * 3, device=device)
+        dataset.groups[masked].add_key("fixed_mask", list(mask.split(2)))
+        dataset.groups[masked].forces = torch.ones(6, 3, device=device)
+        sampler = SizeAwareSampler(
+            dataset,
+            by_group=True,
+            max_batch_size=2,
+            field_defaults={"fixed_mask": ("node", False)},
+        )
+        if replacement:
+            samples = sampler.request_replacements_budget(max_count=2)
+            batch = sampler.assemble_samples(samples, device=device)
+        else:
+            batch = sampler.build_initial_batch()
+        expected = torch.zeros(12, dtype=torch.bool, device=device)
+        expected[masked * 6 : (masked + 1) * 6] = mask
+        torch.testing.assert_close(batch.fixed_mask, expected)
+        assert "forces" not in batch
+        assert not dataset.groups[1 - masked].fixed_mask.any()
+        torch.testing.assert_close(dataset.groups[masked].fixed_mask, mask)
+
+    def test_metadata_prescan_does_not_load_groups(self) -> None:
+        """Prescan reads group metadata without loading any group."""
+        dataset = MockGroupedDataset([(3, 1, 0), (5, 2, 2)])
+        with patch.object(
+            MockGroupedDataset,
+            "__getitem__",
+            side_effect=AssertionError("unexpected group load"),
+        ):
+            sampler = SizeAwareSampler(dataset, max_atoms=100, by_group=True)
+        assert sampler._sample_meta == [(3, 0), (10, 10)]
+
+    def test_initial_atom_limit_keeps_unfitting_group(self) -> None:
+        """A skipped group remains available and does not consume system IDs."""
+        dataset = MockGroupedDataset([(3, 1, 0), (5, 1, 0), (4, 1, 0)])
+        sampler = SizeAwareSampler(
+            dataset, max_atoms=7, max_batch_size=3, bin_width=100, by_group=True
+        )
+        batch = sampler.build_initial_batch()
+        assert batch.group_layout.num_graphs_per_group.tolist() == [3, 4]
+        assert batch.group_id.view(-1).tolist() == [0] * 3 + [2] * 4
+        assert batch.system_id.view(-1).tolist() == list(range(7))
+        assert batch.status.eq(0).all()
+        assert list(sampler) == [1]
+        next_batch = sampler.build_initial_batch()
+        assert next_batch.group_id.view(-1).tolist() == [1] * 5
+        assert next_batch.system_id.view(-1).tolist() == list(range(7, 12))
+        assert sampler.exhausted
+
+    def test_initial_limit_counts_groups(self) -> None:
+        """max_batch_size counts groups, regardless of the number of graphs per group."""
+        dataset = MockGroupedDataset([(3, 1, 0), (5, 1, 0), (4, 1, 0)])
+        sampler = SizeAwareSampler(
+            dataset, max_batch_size=2, bin_width=100, by_group=True
+        )
+        with patch.object(
+            MockGroupedDataset,
+            "__getitem__",
+            autospec=True,
+            side_effect=MockGroupedDataset.__getitem__,
+        ) as load:
+            batch = sampler.build_initial_batch()
+        assert batch.group_layout.num_graphs_per_group.tolist() == [3, 5]
+        assert [call.args[1] for call in load.call_args_list] == [0, 1]
+
+    @pytest.mark.parametrize("max_count", [0, 1, 2, None])
+    def test_replacement_limit_counts_groups(self, max_count: int | None) -> None:
+        """Replacement budgets count complete groups, not their graphs."""
+        dataset = MockGroupedDataset([(7, 1, 0), (3, 1, 0), (4, 1, 0)])
+        sampler = SizeAwareSampler(dataset, max_atoms=100, by_group=True)
+        samples = sampler.request_replacements_budget(max_count=max_count)
+        expected = {0: [], 1: [7], 2: [7, 4], None: [7, 4, 3]}[max_count]
+        assert [sample.num_graphs for sample in samples] == expected
+        assert len(sampler) == 3 - len(expected)
+        if samples:
+            ids = torch.cat([sample.system_id for sample in samples]).view(-1)
+            assert ids.tolist() == list(range(sum(expected)))
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_assembly_copies_geometry_and_loading_adds_ids(self, device: str) -> None:
+        """Loading stamps source IDs; assembled geometry has independent storage."""
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("CUDA unavailable")
+        dataset = MockGroupedDataset([(3, 2, 2), (4, 2, 2)])
+        dataset.groups = [group.to(device) for group in dataset.groups]
+        originals = [group.clone() for group in dataset.groups]
+        sampler = SizeAwareSampler(dataset, max_atoms=100, by_group=True)
+        batch = sampler.build_initial_batch()
+        assert batch.device.type == device
+        assert batch.group_id.device == batch.system_id.device == batch.device
+        assert batch.group_layout.num_graphs_per_group.tolist() == [3, 4]
+        torch.testing.assert_close(
+            batch.neighbor_list,
+            torch.cat(
+                [
+                    originals[0].neighbor_list,
+                    originals[1].neighbor_list + originals[0].num_nodes,
+                ]
+            ),
+        )
+        batch.positions.zero_()
+        start_id = 0
+        for identity, (group, original) in enumerate(zip(dataset.groups, originals)):
+            torch.testing.assert_close(group.positions, original.positions)
+            torch.testing.assert_close(group.neighbor_list, original.neighbor_list)
+            torch.testing.assert_close(group.group_idx, original.group_idx)
+            assert group.group_id.eq(identity).all()
+            torch.testing.assert_close(
+                group.system_id.view(-1),
+                torch.arange(start_id, start_id + group.num_graphs, device=device),
+            )
+            start_id += group.num_graphs
+
+    @pytest.mark.parametrize("invalid", ["atomic_data", "ungrouped", "multiple_groups"])
+    def test_rejects_invalid_grouped_items(self, invalid: str) -> None:
+        """Grouped mode requires a Batch containing exactly one group."""
+        dataset = MockGroupedDataset([(3, 1, 0)])
+        if invalid == "atomic_data":
+            dataset.groups[0] = dataset.groups[0].get_data(0)
+            error, message = TypeError, "Batch objects"
+        elif invalid == "ungrouped":
+            del dataset.groups[0]["group_idx"]
+            error, message = ValueError, "exactly one group"
+        else:
+            dataset.groups[0].set_group_layout(torch.tensor([0, 1, 1]))
+            error, message = ValueError, "exactly one group"
+        sampler = SizeAwareSampler(dataset, max_atoms=100, by_group=True)
+        with pytest.raises(error, match=message):
+            sampler.build_initial_batch()
+        assert len(sampler) == 1

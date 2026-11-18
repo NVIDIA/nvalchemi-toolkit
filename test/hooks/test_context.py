@@ -95,6 +95,7 @@ class TestDynamicsContext:
         assert ctx.converged_mask is None
         assert ctx.active_graph_mask is None
         assert ctx.graduated_mask is None
+        assert ctx.previous_graph_indices is None
         assert ctx.model is None
         assert ctx.global_rank == 0
 

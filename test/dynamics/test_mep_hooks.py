@@ -221,22 +221,29 @@ def _diagnostic_path(
     link_lengths: list[float] | None = None,
     *,
     device: str = "cpu",
+    dtype: torch.dtype = torch.float32,
 ) -> Batch:
     """Build a grouped path with deterministic energies and forces."""
     batch = Batch.from_data_list(
         [
             AtomicData(
                 atomic_numbers=torch.tensor([1], device=device),
-                positions=torch.tensor([[float(i), 0.0, 0.0]], device=device),
-                energy=torch.tensor([[energy]], device=device),
-                forces=torch.tensor([[float(i + 1), 0.0, 0.0]], device=device),
+                positions=torch.tensor(
+                    [[float(i), 0.0, 0.0]], device=device, dtype=dtype
+                ),
+                energy=torch.tensor([[energy]], device=device, dtype=dtype),
+                forces=torch.tensor(
+                    [[float(i + 1), 0.0, 0.0]], device=device, dtype=dtype
+                ),
             )
             for i, energy in enumerate(energies)
         ]
     )
     batch.set_group_layout(torch.tensor(groups, device=device))
     if link_lengths is not None:
-        batch.forward_link_length = torch.tensor(link_lengths, device=device)
+        batch.forward_link_length = torch.tensor(
+            link_lengths, device=device, dtype=dtype
+        )
     return batch
 
 
@@ -271,6 +278,99 @@ def _prepare_diagnostics(
 
 class TestPathDiagnosticsHook:
     """Exercise reusable diagnostics for reaction paths."""
+
+    def test_admission_resets_values_and_reuses_buffers(self, device: str) -> None:
+        """Membership changes reset results without reallocating compatible buffers."""
+        batch, _, stats_hook, hook = _prepare_diagnostics(device=device)
+        diagnostics = hook.get_diagnostics()
+        buffers = {
+            key: getattr(hook, key)
+            for key in (
+                "_path_start",
+                "_active_paths",
+                "_force_norms",
+                "_candidate_fmax",
+                "_candidate_energy_barrier",
+                "_candidate_path_length",
+                "_candidate_highest_interior_image_idx",
+            )
+        }
+        current = batch.index_select([4, 5, 6, 7, 8, 0, 1, 2, 3])
+        ctx = DynamicsContext(
+            batch=current,
+            previous_graph_indices=torch.tensor(
+                [4, 5, 6, 7, 8, -1, -1, -1, -1], device=device
+            ),
+            active_graph_mask=torch.tensor([False] * 5 + [True] * 4, device=device),
+        )
+        stats_hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+        assert hook.get_diagnostics() is diagnostics
+        for key, value in buffers.items():
+            assert getattr(hook, key) is value
+        assert hook._path_start.tolist() == [0, 5]
+        assert torch.isnan(diagnostics.fmax).all()
+        assert torch.isnan(diagnostics.energy_barrier).all()
+        assert torch.isnan(diagnostics.path_length).all()
+        assert torch.all(diagnostics.highest_interior_image_idx == -1)
+
+        current.forces.mul_(10)
+        stats_hook(ctx, DynamicsStage.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+        assert torch.isnan(diagnostics.fmax[0])
+        assert diagnostics.fmax[1] == 40
+        assert diagnostics.energy_barrier[1] == 5
+        assert diagnostics.path_length[1] == 6
+        assert diagnostics.highest_interior_image_idx[1] == 1
+
+        hook(DynamicsContext(batch=current), DynamicsStage.ON_ADMISSION)
+        assert torch.isnan(hook.get_diagnostics().fmax).all()
+        assert torch.all(hook.get_diagnostics().highest_interior_image_idx == -1)
+
+    @pytest.mark.parametrize("change", ["paths", "nodes", "dtype", "device"])
+    def test_admission_resizes_incompatible_buffers(
+        self, device: str, change: str
+    ) -> None:
+        """Changed sizes, precision, or device produce correctly sized reductions."""
+        batch, _, stats_hook, hook = _prepare_diagnostics(device=device)
+        diagnostics = hook.get_diagnostics()
+        force_norms = hook._force_norms
+        if change == "paths":
+            current = batch.index_select([4, 5, 6, 7, 8])
+        elif change == "nodes":
+            current = _diagnostic_path(
+                [0.0] * 6, [0] * 3 + [1] * 3, [1.0, 1.0, 0.0] * 2, device=device
+            )
+        elif change == "dtype":
+            current = _diagnostic_path(
+                _DIAGNOSTIC_ENERGIES,
+                _DIAGNOSTIC_GROUPS,
+                _DIAGNOSTIC_LINKS,
+                device=device,
+                dtype=torch.float64,
+            )
+        else:
+            if not torch.cuda.is_available():
+                pytest.skip("Device changes require CUDA")
+            current = batch.to("cuda" if device == "cpu" else "cpu")
+        ctx = DynamicsContext(batch=current)
+        stats_hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+        refreshed = hook.get_diagnostics()
+        assert (refreshed is diagnostics) == (change == "nodes")
+        assert hook._force_norms is not force_norms
+        assert hook._force_norms.shape == (current.num_nodes,)
+        assert hook._force_norms.dtype == current.positions.dtype
+        assert hook._force_norms.device == current.device
+        assert refreshed.fmax.shape == (current.group_layout.num_groups,)
+        assert refreshed.fmax.dtype == current.positions.dtype
+        assert refreshed.fmax.device == current.device
+        stats_hook(ctx, DynamicsStage.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+        assert torch.isfinite(refreshed.fmax).all()
+        assert torch.isfinite(refreshed.energy_barrier).all()
+        assert torch.isfinite(refreshed.path_length).all()
+        assert torch.all(refreshed.highest_interior_image_idx >= 0)
 
     def test_requires_link_lengths_at_admission(self) -> None:
         batch = _diagnostic_path([0.0, 1.0, 0.0], [0, 0, 0])
