@@ -32,6 +32,8 @@ __all__ = [
     "get_compile_routing",
     "clear_compile_routing",
     "compile_routing_active",
+    "set_compile_halo_config",
+    "get_compile_halo_config",
     "set_gp_compile_routing",
     "get_gp_compile_routing",
     "clear_gp_compile_routing",
@@ -41,6 +43,11 @@ __all__ = [
 # their eager path). A 5-tuple ``(send_index, recv_dest, recv_real, n_owned,
 # world_size)`` = an in-region refresh should use the static halo op wired to it.
 _COMPILE_ROUTING: list[Any] = [None]
+
+# Halo config of the region's mesh, for in-region collectives that need the
+# process group. A plain holder read is traceable; the DD-context ContextVar
+# is not (it graph-breaks every compiled forward).
+_COMPILE_HALO_CONFIG: list[Any] = [None]
 
 
 def set_compile_routing(
@@ -62,10 +69,21 @@ def get_compile_routing() -> Any:
     return _COMPILE_ROUTING[0]
 
 
+def set_compile_halo_config(config: Any) -> None:
+    """Publish the region's halo config for in-region collectives."""
+    _COMPILE_HALO_CONFIG[0] = config
+
+
+def get_compile_halo_config() -> Any:
+    """Return the published halo config, or ``None`` when none is published."""
+    return _COMPILE_HALO_CONFIG[0]
+
+
 def clear_compile_routing() -> None:
-    """Reset the holder to ``None``. The bridge calls this after each compiled
+    """Reset the holders to ``None``. The bridge calls this after each compiled
     forward so a later eager refresh never reads stale trace-time routing."""
     _COMPILE_ROUTING[0] = None
+    _COMPILE_HALO_CONFIG[0] = None
 
 
 def compile_routing_active() -> bool:

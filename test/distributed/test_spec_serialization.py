@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 
 import pytest
@@ -446,3 +447,31 @@ class TestTransformFieldsSurviveRoundTrip:
             json.loads(json.dumps(_output_transform_to_dict(original)))
         )
         assert restored.replicated_consumer is True
+
+
+class TestHaloReceiverEdgeFilter:
+    """The edge-filter setting must survive every way a spec is copied or saved."""
+
+    def test_defaults_to_filtering(self) -> None:
+        assert SPEC_MPNN_HALO.halo_receiver_edge_filter is True
+
+    def test_round_trips_through_json(self) -> None:
+        spec = dataclasses.replace(SPEC_MPNN_HALO, halo_receiver_edge_filter=False)
+        restored = MLIPSpec.from_dict(json.loads(json.dumps(spec.to_dict())))
+        assert restored.halo_receiver_edge_filter is False
+
+    def test_missing_key_means_filtering(self) -> None:
+        payload = SPEC_MPNN_HALO.to_dict()
+        payload.pop("halo_receiver_edge_filter")
+        assert MLIPSpec.from_dict(payload).halo_receiver_edge_filter is True
+
+    def test_copies_keep_the_setting(self) -> None:
+        spec = dataclasses.replace(SPEC_MPNN_HALO, halo_receiver_edge_filter=False)
+        assert spec.with_adapters().halo_receiver_edge_filter is False
+        assert spec.with_outputs({}).halo_receiver_edge_filter is False
+        assert spec.merge(spec).halo_receiver_edge_filter is False
+
+    def test_merging_disagreeing_specs_raises(self) -> None:
+        off = dataclasses.replace(SPEC_MPNN_HALO, halo_receiver_edge_filter=False)
+        with pytest.raises(ValueError, match="halo_receiver_edge_filter"):
+            SPEC_MPNN_HALO.merge(off)
