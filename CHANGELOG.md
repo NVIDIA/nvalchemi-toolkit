@@ -4,6 +4,15 @@
 
 ### Added
 
+- `langevin_half_step` takes an optional read-only `step_offset` (one-element
+  int32 device tensor) next to `random_seed`; the `nvalchemiops` kernel draws from
+  `random_seed + step_offset[0]` read when it runs (needs `nvalchemi-toolkit-ops`
+  with `langevin_baoab_half_step(step_offset=...)`, 0.6.0). `NVTLangevin` owns the
+  tensor and advances it with `add_(1)` after every half step, so a `dyn.step()`
+  captured in a CUDA graph draws fresh noise on every replay instead of repeating
+  the noise of the captured step; the noise stream is unchanged
+  (`random_seed + step_count`, bitwise). `random_seed` keeps its full range
+  (`2**31 + 7` works).
 - `DistributedPipeline` supports grouped dynamics, including NEB, with
   complete-path transfers and preserved optimizer state. Transfer capacities
   apply to complete paths.

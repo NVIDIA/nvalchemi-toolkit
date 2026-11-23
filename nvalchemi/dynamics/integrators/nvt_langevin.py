@@ -146,6 +146,50 @@ class NVTLangevin(BaseDynamics):
             },
             dev,
         )
+        # The step counter of the noise stream lives on the device: the op reads it
+        # (``random_seed + step_offset[0]``) and ``pre_update`` advances it, so a captured
+        # CUDA graph draws fresh noise on every replay (a Python int seed is baked into it).
+        self._step_offset: torch.Tensor = torch.tensor(
+            [self.step_count], dtype=torch.int32, device=dev
+        )
+        self._rng_host_step: int = self.step_count
+        pending = getattr(self, "_pending_step_offset", None)
+        if pending is not None:
+            # a checkpoint restored before the state existed (see load_state_dict)
+            self._step_offset.fill_(pending)
+            self._pending_step_offset = None
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the base state plus the device step counter of the noise stream.
+
+        Graph replays advance ``_step_offset`` on the device without advancing the
+        Python ``step_count``, so the counter is saved on its own
+        (``rng_step_offset``); restoring only ``step_count`` would resume the noise
+        stream at the wrong offset.  Reading it synchronises with the device.
+        """
+        out = super().state_dict()
+        offset = getattr(self, "_step_offset", None)
+        if offset is not None:
+            out["rng_step_offset"] = int(offset.item())
+        return out
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore the base state and the device step counter (``rng_step_offset``).
+
+        Checkpoints without ``rng_step_offset`` (older ones) keep the previous
+        behaviour: the counter resyncs to the restored ``step_count`` at the next
+        eager step.
+        """
+        super().load_state_dict(state)
+        if "rng_step_offset" not in state:
+            return
+        value = int(state["rng_step_offset"])
+        if getattr(self, "_step_offset", None) is None:
+            self._pending_step_offset = value  # applied in _init_state
+        else:
+            self._step_offset.fill_(value)
+        # the counter is restored as saved: no resync to step_count at the next step
+        self._rng_host_step = self.step_count
 
     def apply_per_system_params(
         self, params: Mapping[str, torch.Tensor], batch: Batch
@@ -208,6 +252,17 @@ class NVTLangevin(BaseDynamics):
         batch : Batch
             Current batch; *positions* and *velocities* updated in-place.
         """
+        if self._rng_host_step != self.step_count:
+            # step_count was changed from outside (restart, rewind): resync the device
+            # counter.  A resync recorded into a CUDA graph would reset it on every replay,
+            # so it is refused there.
+            if torch.cuda.is_available() and torch.cuda.is_current_stream_capturing():
+                raise RuntimeError(
+                    "NVTLangevin: the device step counter is out of sync with step_count "
+                    "during CUDA-graph capture.  Call dyn.sync_rng() "
+                    "(or run one eager step) before capturing."
+                )
+            self.sync_rng()
         langevin_half_step(
             batch.positions,
             batch.velocities,
@@ -216,9 +271,41 @@ class NVTLangevin(BaseDynamics):
             self._state.dt,
             self._state.temperature,
             self._state.friction,
-            self._random_seed + self.step_count,
+            self._random_seed,
             batch.batch_idx.int(),
+            self._step_offset,
         )
+        # the caller owns the counter; the add is recorded in a captured graph
+        self._step_offset.add_(1)
+        self._rng_host_step = self.step_count + 1
+
+    def sync_rng(self) -> None:
+        """Set the device step counter to ``step_count`` (eager only).
+
+        ``pre_update`` does this by itself before an eager step whenever
+        ``step_count`` changed since the last step (a restart, a rewind).  Call it
+        explicitly after such a change and before capturing ``step`` in a CUDA
+        graph: a resync cannot be recorded into a graph, because every replay
+        would reset the counter.  ``random_seed`` (and ``seed_offset``) need no
+        sync: the seed is a host launch argument, read at every eager step.
+
+        Raises
+        ------
+        RuntimeError
+            If the integrator state is not initialised yet, or the current CUDA
+            stream is capturing.
+        """
+        if getattr(self, "_step_offset", None) is None:
+            raise RuntimeError(
+                "NVTLangevin.sync_rng: integrator state is not initialised; "
+                "run or prime the dynamics first."
+            )
+        if torch.cuda.is_available() and torch.cuda.is_current_stream_capturing():
+            raise RuntimeError(
+                "NVTLangevin.sync_rng must run eagerly, not in a capture."
+            )
+        self._step_offset.fill_(self.step_count)
+        self._rng_host_step = self.step_count
 
     def post_update(self, batch: Batch) -> None:
         """BAOAB post-force final B step.

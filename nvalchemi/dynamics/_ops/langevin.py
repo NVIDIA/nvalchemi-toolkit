@@ -30,7 +30,10 @@ The BAOAB splitting scheme applies:
 Functions
 ---------
 langevin_half_step
-    Pre-force half: B-A-O-A sequence.
+    Pre-force half: B-A-O-A sequence.  The noise stream is ``random_seed +
+    step_offset[0]`` (``step_offset``: optional read-only int32 device tensor,
+    read when the kernel runs, so a replayed CUDA graph draws fresh noise once
+    the caller advances the counter).
 langevin_finalize
     Post-force half: final B step.
 """
@@ -66,6 +69,7 @@ def langevin_half_step(
     friction: torch.Tensor,
     random_seed: int,
     batch_idx: torch.Tensor,
+    step_offset: torch.Tensor | None = None,
 ) -> None:
     r"""BAOAB Langevin pre-force half-step (B-A-O-A).
 
@@ -96,6 +100,12 @@ def langevin_half_step(
         to produce unique random numbers per atom per step.
     batch_idx : torch.Tensor
         Per-atom system index ``[N]``, int32, non-decreasing.
+    step_offset : torch.Tensor, optional
+        One-element ``int32`` tensor on the same device, added to *random_seed*
+        when the kernel runs (``None``: offset 0).  The op only reads it; the
+        caller advances it (``step_offset.add_(1)``), and the advance recorded
+        in a CUDA graph makes every replay draw fresh noise, where a Python
+        ``int`` seed is baked into the captured launch.
     """
     dtype = positions.dtype
     vec_t = _vec_type(dtype)
@@ -110,6 +120,9 @@ def langevin_half_step(
         wp.from_torch(friction, dtype=scl_t),
         random_seed,
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
+        step_offset=(
+            None if step_offset is None else wp.from_torch(step_offset, dtype=wp.int32)
+        ),
     )
 
 
@@ -124,6 +137,7 @@ def _langevin_half_step_fake(
     friction,
     random_seed,
     batch_idx,
+    step_offset=None,
 ) -> None:
     pass
 
