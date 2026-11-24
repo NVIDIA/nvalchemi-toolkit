@@ -32,6 +32,23 @@
 - Add documentation, repository, issues, and changelog links to the package
   metadata (`[project.urls]`), and mention the agent skill on the documentation
   landing page.
+- **`UMAWrapper` computes only the derivatives `active_outputs` asks for.**
+  `model_config.active_outputs = {"energy"}` switches off fairchem's
+  forces/stress autograd for that call instead of computing and discarding them;
+  `{"energy", "forces"}` also skips the strain derivative. The predict unit is
+  restored after every call, so a `FAIRChemCalculator` or another wrapper
+  sharing it is unaffected. Checkpoints with direct forces or stress, or an
+  unrecognised fairchem layout, keep computing everything with a one-time
+  `UserWarning`. Measured on an A100 for energy-only Monte Carlo on Au-Pt: 2.1x
+  per step for site swaps under `turbo`, ~1.4x for transmutations.
+- **`UMAWrapper.from_checkpoint` accepts a `key=value` settings spec**, e.g.
+  `"compile=false,merge_mole=false,tf32=true,activation_checkpointing=false"`,
+  besides preset names and `InferenceSettings` instances. Values are converted
+  to each field's type; unknown fields and values that do not fit raise
+  `ValueError`. Such a spec can express combinations no preset covers, e.g.
+  eager, unmerged inference with TF32 and no activation checkpointing for
+  composition-changing Monte Carlo: 2.75x faster per step than the `"batch"`
+  preset (with energy-only evaluation) and the same sampled chain.
 
 ### Breaking Changes
 
@@ -245,23 +262,6 @@
   is one device on the rank whose current device is 0; without a CUDA runtime
   entries are compared as written. The named-model check refuses more than
   one *distinct* device rather than more than one entry.
-- **`UMAWrapper` computes only the derivatives `active_outputs` asks for.**
-  `model_config.active_outputs = {"energy"}` switches off fairchem's
-  forces/stress autograd for that call instead of computing and discarding them;
-  `{"energy", "forces"}` also skips the strain derivative. The predict unit is
-  restored after every call, so a `FAIRChemCalculator` or another wrapper
-  sharing it is unaffected. Checkpoints with direct forces or stress, or an
-  unrecognised fairchem layout, keep computing everything with a one-time
-  `UserWarning`. Measured on an A100 for energy-only Monte Carlo on Au-Pt: 2.1x
-  per step for site swaps under `turbo`, ~1.4x for transmutations.
-- **`UMAWrapper.from_checkpoint` accepts a `key=value` settings spec**, e.g.
-  `"compile=false,merge_mole=false,tf32=true,activation_checkpointing=false"`,
-  besides preset names and `InferenceSettings` instances. Values are converted
-  to each field's type; unknown fields and values that do not fit raise
-  `ValueError`. Such a spec can express combinations no preset covers, e.g.
-  eager, unmerged inference with TF32 and no activation checkpointing for
-  composition-changing Monte Carlo: 2.75x faster per step than the `"batch"`
-  preset (with energy-only evaluation) and the same sampled chain.
 
 ### Distillation
 
