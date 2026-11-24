@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import shutil
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -39,6 +40,18 @@ from nvalchemi.data.datapipes.backends.zarr import (
     ZarrWriteConfig,
 )
 
+# Neighbor tensors are rebuilt for computation. Their widths can change
+# between writes, so sinks omit them before copying or allocating storage.
+_NEIGHBOR_KEYS = frozenset(
+    {
+        "neighbor_matrix",
+        "num_neighbors",
+        "neighbor_matrix_shifts",
+        "neighbor_list",
+        "neighbor_list_shifts",
+    }
+)
+
 
 class DataSink(ABC):
     """
@@ -47,6 +60,10 @@ class DataSink(ABC):
     DataSink provides a unified interface for storing and retrieving
     batched atomic data. Implementations can target different storage
     backends such as GPU memory, CPU memory, or disk.
+
+    Built-in sinks omit temporary neighbor fields when writing. Their shapes
+    can change between steps, and neighbor lists are rebuilt before reuse.
+    The source batch retains its original tensors, including on write failure.
 
     Attributes
     ----------
@@ -59,8 +76,8 @@ class DataSink(ABC):
         Store a batch of data.
     read()
         Retrieve all stored data as a Batch.
-    drain()
-        Read all stored data and clear the sink.
+    drain(max_samples=None)
+        Remove and return the oldest samples, or all of them.
     zero()
         Clear all stored data.
     __len__()
@@ -159,26 +176,45 @@ class DataSink(ABC):
         """
         return len(self) >= self.capacity
 
-    def drain(self) -> Batch:
+    def drain(self, max_samples: int | None = None) -> Batch:
         """
-        Read all stored samples and clear the sink.
+        Remove and return the oldest stored samples.
 
-        This is equivalent to calling :meth:`read` followed by
-        :meth:`zero`, but subclasses may override for a more efficient
-        atomic operation.
+        Without *max_samples* this is equivalent to calling :meth:`read`
+        followed by :meth:`zero`. With *max_samples*, only the leading
+        samples are returned and the rest stay stored in order. This default
+        implementation reads everything and writes the rest back; subclasses
+        may override for a more efficient operation.
+
+        Parameters
+        ----------
+        max_samples : int | None, optional
+            Maximum number of samples to remove: complete groups for grouped
+            data, otherwise graphs. ``None`` removes everything. Default is
+            ``None``.
 
         Returns
         -------
         Batch
-            All samples that were stored in the sink.
+            The removed samples.
 
         Raises
         ------
         RuntimeError
             If the sink is empty.
+        ValueError
+            If *max_samples* is less than 1.
         """
+        if max_samples is not None and max_samples < 1:
+            raise ValueError(f"max_samples must be at least 1, got {max_samples}")
         batch = self.read()
         self.zero()
+        if max_samples is None:
+            return batch
+        num_taken = _leading_graphs(batch, max_samples)
+        if num_taken < batch.num_graphs:
+            self.write(batch.index_select(slice(num_taken, batch.num_graphs)))
+            batch = batch.index_select(slice(0, num_taken))
         return batch
 
     @property
@@ -228,8 +264,7 @@ class GPUBuffer(DataSink):
     This buffer lazily pre-allocates a :class:`Batch` with fixed maximum
     sizes for atoms and edges on the first :meth:`write` call.  The
     incoming batch serves as a template for attribute keys and dtypes,
-    ensuring all fields are preserved (not just positions and
-    atomic_numbers).
+    preserving fields other than temporary neighbor data.
 
     Parameters
     ----------
@@ -334,8 +369,9 @@ class GPUBuffer(DataSink):
         in *batch* are copied.
 
         Uses :meth:`Batch.put` for efficient in-place copying without
-        tensor allocation. A batch arriving on another device is moved to the
-        buffer's device first, as :class:`HostMemory` moves its items to CPU.
+        tensor allocation. Temporary neighbor data is omitted. A batch arriving
+        on another device is moved to the buffer's device first, as
+        :class:`HostMemory` moves its items to CPU.
 
         This method will set the value of ``_copied_mask``.
 
@@ -356,63 +392,64 @@ class GPUBuffer(DataSink):
         ValueError
             If mask length does not match batch.num_graphs.
         """
-        num_total = batch.num_graphs or 0
-        if num_total == 0:
-            return
+        with batch.without_keys(*_NEIGHBOR_KEYS):
+            num_total = batch.num_graphs or 0
+            if num_total == 0:
+                return
 
-        # Ensure buffer is allocated with full capacity (lazy init on first write)
-        self._ensure_buffer(template=batch)
-        if batch.device != self._buffer.device:
-            batch = batch.to(self._buffer.device)
+            # Ensure buffer is allocated with full capacity (lazy init on first write)
+            self._ensure_buffer(template=batch)
+            if batch.device != self._buffer.device:
+                batch = batch.to(self._buffer.device)
 
-        # Build mask if not provided
-        if mask is None:
-            mask = torch.ones(num_total, dtype=torch.bool, device=batch.device)
-        else:
-            mask = mask.to(device=batch.device, dtype=torch.bool)
-            if mask.shape[0] != num_total:
-                raise ValueError(
-                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
-                )
+            # Build mask if not provided
+            if mask is None:
+                mask = torch.ones(num_total, dtype=torch.bool, device=batch.device)
+            else:
+                mask = mask.to(device=batch.device, dtype=torch.bool)
+                if mask.shape[0] != num_total:
+                    raise ValueError(
+                        f"mask length {mask.shape[0]} != num_graphs {num_total}"
+                    )
 
-        # Count how many graphs we're trying to write
-        num_to_write = int(mask.sum().item())
-        if num_to_write == 0:
-            return
+            # Count how many graphs we're trying to write
+            num_to_write = int(mask.sum().item())
+            if num_to_write == 0:
+                return
 
-        # Validate graph capacity
-        current_count = len(self)
-        if current_count + num_to_write > self._capacity:
-            raise RuntimeError(
-                f"Buffer is full. Cannot add {num_to_write} samples to buffer "
-                f"with {current_count}/{self._capacity} samples."
-            )
-
-        # Validate atom capacity for masked graphs
-        nodes_per_graph = batch.num_nodes_per_graph
-        max_atoms_in_batch = int(nodes_per_graph[mask].max().item())
-        if max_atoms_in_batch > self._max_atoms:
-            raise RuntimeError(
-                f"Atom capacity exceeded: a system has {max_atoms_in_batch} atoms "
-                f"but buffer max_atoms={self._max_atoms}"
-            )
-
-        # Validate edge capacity for masked graphs (only if edges exist in batch)
-        if self._max_edges > 0 and batch.num_edges > 0:
-            edges_per_graph = batch.num_edges_per_graph
-            max_edges_in_batch = int(edges_per_graph[mask].max().item())
-            if max_edges_in_batch > self._max_edges:
+            # Validate graph capacity
+            current_count = len(self)
+            if current_count + num_to_write > self._capacity:
                 raise RuntimeError(
-                    f"Edge capacity exceeded: a system has {max_edges_in_batch} edges "
-                    f"but buffer max_edges={self._max_edges}"
+                    f"Buffer is full. Cannot add {num_to_write} samples to buffer "
+                    f"with {current_count}/{self._capacity} samples."
                 )
 
-        # Allocate fresh per-write output mask indicating which src graphs were placed
-        self._copied_mask = torch.zeros(
-            num_total, dtype=torch.bool, device=self._device
-        )
+            # Validate atom capacity for masked graphs
+            nodes_per_graph = batch.num_nodes_per_graph
+            max_atoms_in_batch = int(nodes_per_graph[mask].max().item())
+            if max_atoms_in_batch > self._max_atoms:
+                raise RuntimeError(
+                    f"Atom capacity exceeded: a system has {max_atoms_in_batch} atoms "
+                    f"but buffer max_atoms={self._max_atoms}"
+                )
 
-        self._buffer.put(batch, mask, copied_mask=self._copied_mask)
+            # Validate edge capacity for masked graphs (only if edges exist in batch)
+            if self._max_edges > 0 and batch.num_edges > 0:
+                edges_per_graph = batch.num_edges_per_graph
+                max_edges_in_batch = int(edges_per_graph[mask].max().item())
+                if max_edges_in_batch > self._max_edges:
+                    raise RuntimeError(
+                        f"Edge capacity exceeded: a system has {max_edges_in_batch} edges "
+                        f"but buffer max_edges={self._max_edges}"
+                    )
+
+            # Allocate fresh per-write output mask indicating which src graphs were placed
+            self._copied_mask = torch.zeros(
+                num_total, dtype=torch.bool, device=self._device
+            )
+
+            self._buffer.put(batch, mask, copied_mask=self._copied_mask)
 
     def read(self) -> Batch:
         """Retrieve stored (non-padding) data as a single Batch.
@@ -511,13 +548,88 @@ class GPUBuffer(DataSink):
         return self._device
 
 
+def _select_for_write(batch: Batch, mask: torch.Tensor | None) -> Batch | None:
+    """Select the graphs a host or Zarr sink should write.
+
+    Parameters
+    ----------
+    batch : Batch
+        Batch offered to the sink.
+    mask : torch.Tensor | None
+        Boolean graph mask of shape ``(batch.num_graphs,)``, or ``None`` to
+        select every graph. For grouped batches the mask must select
+        complete groups.
+
+    Returns
+    -------
+    Batch | None
+        The selected graphs, or ``None`` when nothing is selected.
+
+    Raises
+    ------
+    ValueError
+        If the mask length does not match ``batch.num_graphs`` or the mask
+        selects part of a group.
+    """
+    num_total = batch.num_graphs or 0
+    if num_total == 0:
+        return None
+    if mask is None:
+        return batch
+
+    mask = mask.to(device=batch.device, dtype=torch.bool)
+    if mask.shape[0] != num_total:
+        raise ValueError(f"mask length {mask.shape[0]} != num_graphs {num_total}")
+    num_selected = int(mask.sum().item())
+    if num_selected == 0:
+        return None
+    if num_selected == num_total:
+        return batch
+    _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
+    return batch.index_select(torch.nonzero(mask, as_tuple=True)[0])
+
+
+def _leading_graphs(batch: Batch, max_samples: int, start: int = 0) -> int:
+    """Count the graphs in the first *max_samples* samples from graph *start*.
+
+    Parameters
+    ----------
+    batch : Batch
+        Stored samples.
+    max_samples : int
+        Number of samples: complete groups for grouped batches, otherwise
+        graphs.
+    start : int, optional
+        Graph index to count from. For grouped batches it must begin a
+        group. Default is 0.
+
+    Returns
+    -------
+    int
+        Number of graphs in those samples, at most
+        ``batch.num_graphs - start``.
+    """
+    if "group_idx" in batch:
+        group_ptr = batch.group_layout.group_ptr
+        first = int(torch.searchsorted(group_ptr, start))
+        end = min(first + max_samples, group_ptr.numel() - 1)
+        return int(group_ptr[end]) - start
+    return min(max_samples, batch.num_graphs - start)
+
+
 class HostMemory(DataSink):
     """
     CPU-resident buffer for storing batched atomic data.
 
     This buffer ensures all data is stored on CPU memory, regardless
     of the input batch's device. It is useful for staging data before
-    disk I/O or for CPU-side processing.
+    disk I/O or for CPU-side processing. Temporary neighbor data is omitted
+    so batches with different neighbor widths can be read together.
+
+    Grouped batches (with ``group_idx``) are stored as whole groups, and
+    :meth:`read` returns them with group labels that stay distinct across
+    writes. A sink holds either grouped or ungrouped data until it is
+    cleared.
 
     Parameters
     ----------
@@ -546,15 +658,22 @@ class HostMemory(DataSink):
             Maximum number of samples to store.
         """
         self._capacity = capacity
-        self._data_list: list[AtomicData] = []
+        self._batches: deque[Batch] = deque()
+        self._num_graphs = 0
         self._device = torch.device("cpu")
+        # Number of graphs already drained from the first stored batch.
+        self._offset = 0
 
     def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
         """
         Store a batch of atomic data on CPU.
 
-        Decomposes the batch into individual AtomicData objects,
-        moves them to CPU, and appends to internal storage.
+        Discards unused buffer capacity and copies the selected graphs to CPU
+        as one batch, without splitting them into individual AtomicData objects.
+        Temporary neighbor data is omitted. The copy never shares
+        storage with the caller's batch. For a grouped batch, :meth:`read`
+        shifts each write's ``group_idx`` labels after the groups already
+        stored so that groups from different writes stay distinct.
 
         Parameters
         ----------
@@ -563,43 +682,73 @@ class HostMemory(DataSink):
         mask : torch.Tensor | None, optional
             Boolean tensor of shape ``(batch.num_graphs,)`` indicating
             which samples to write (``True`` = write). If ``None``, all
-            samples are written. Default is ``None``.
+            samples are written. For grouped batches the mask must select
+            complete groups. Default is ``None``.
 
         Raises
         ------
         RuntimeError
             If adding the selected samples would exceed capacity.
         ValueError
-            If mask length does not match batch.num_graphs.
+            If mask length does not match batch.num_graphs, the mask selects
+            part of a group, or grouped and ungrouped writes are mixed.
         """
-        num_total = batch.num_graphs or 0
-        if num_total == 0:
-            return
-
-        # Apply mask to select samples
-        if mask is not None:
-            mask = mask.to(device=batch.device, dtype=torch.bool)
-            if mask.shape[0] != num_total:
-                raise ValueError(
-                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
-                )
-            num_selected = int(mask.sum().item())
-            if num_selected == 0:
+        with batch.without_keys(*_NEIGHBOR_KEYS):
+            selected = _select_for_write(batch, mask)
+            if selected is None:
                 return
-            if num_selected < num_total:
-                indices = torch.nonzero(mask, as_tuple=True)[0]
-                _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
-                batch = batch.index_select(indices)
 
-        data_list = batch.to_data_list()
-        if len(self._data_list) + len(data_list) > self._capacity:
-            raise RuntimeError(
-                f"Buffer is full. Cannot add {len(data_list)} samples "
-                f"to buffer with {len(self._data_list)}/{self._capacity} samples."
-            )
-        # Move data to CPU before storing
-        for data in data_list:
-            self._data_list.append(data.to(self._device))
+            grouped = "group_idx" in selected
+            if self._batches and grouped != ("group_idx" in self._batches[0]):
+                raise ValueError("Cannot mix grouped and ungrouped writes in one sink.")
+
+            num_graphs = selected.num_graphs
+            if self._num_graphs + num_graphs > self._capacity:
+                raise RuntimeError(
+                    f"Buffer is full. Cannot add {num_graphs} samples "
+                    f"to buffer with {self._num_graphs}/{self._capacity} samples."
+                )
+            # Batch.to copies even when the batch is already on CPU.
+            self._batches.append(selected._without_padding().to(self._device))
+            self._num_graphs += num_graphs
+
+    @staticmethod
+    def _merge(batches: list[Batch]) -> Batch:
+        """Concatenate stored writes after checking they carry the same fields.
+
+        Parameters
+        ----------
+        batches : list[Batch]
+            Nonempty list of stored writes, oldest first.
+
+        Returns
+        -------
+        Batch
+            The only write, or a new batch combining them.
+
+        Raises
+        ------
+        ValueError
+            If a later write lacks a field that the first write stored.
+        """
+        if len(batches) == 1:
+            return batches[0]
+        # The first write sets the fields. Check before merging because
+        # Batch.append would zero-fill or drop a missing field.
+        first_keys = batches[0].level_keys
+        start = batches[0].num_graphs
+        for stored in batches[1:]:
+            stored_keys = stored.level_keys
+            for level, keys in first_keys.items():
+                missing = sorted(keys - stored_keys.get(level, set()))
+                if missing:
+                    samples = list(range(start, start + stored.num_graphs))
+                    raise ValueError(
+                        f"Field '{missing[0]}' in level '{level}' is missing "
+                        f"from samples {samples}"
+                    )
+            start += stored.num_graphs
+        return Batch.concatenate(batches, assume_compact=True)
 
     def read(self) -> Batch:
         """
@@ -614,14 +763,86 @@ class HostMemory(DataSink):
         ------
         RuntimeError
             If the buffer is empty.
+        ValueError
+            If a later write lacks a field that the first write stored.
         """
-        if len(self._data_list) == 0:
+        if not self._batches:
             raise RuntimeError("Cannot read from empty buffer.")
-        return Batch.from_data_list(self._data_list, device=self._device)
+        if self._offset:
+            first = self._batches[0]
+            self._batches[0] = first.index_select(slice(self._offset, first.num_graphs))
+            self._offset = 0
+        # Cache the merged batch so repeated reads concatenate only once.
+        self._batches = deque([self._merge(list(self._batches))])
+        return self._batches[0].clone()
+
+    def drain(self, max_samples: int | None = None) -> Batch:
+        """
+        Remove and return the oldest stored samples on CPU.
+
+        Writes are taken oldest first. A write that is only partly taken
+        keeps its remaining samples in place without copying them, so the
+        cost follows the samples removed rather than everything stored.
+        Removed samples no longer share storage with the sink.
+
+        Parameters
+        ----------
+        max_samples : int | None, optional
+            Maximum number of samples to remove: complete groups for grouped
+            data, otherwise graphs. ``None`` removes everything. Default is
+            ``None``.
+
+        Returns
+        -------
+        Batch
+            The removed samples on CPU.
+
+        Raises
+        ------
+        RuntimeError
+            If the buffer is empty.
+        ValueError
+            If *max_samples* is less than 1, or a later write lacks a field
+            that the first write stored. The sink is unchanged on error.
+        """
+        if max_samples is not None and max_samples < 1:
+            raise ValueError(f"max_samples must be at least 1, got {max_samples}")
+        if not self._batches:
+            raise RuntimeError("Cannot read from empty buffer.")
+        # Every sample holds at least one graph, so this bound takes all.
+        remaining = self._num_graphs if max_samples is None else max_samples
+        taken: list[Batch] = []
+        offset = 0
+        for stored in self._batches:
+            start = self._offset if not taken else 0
+            end = start + _leading_graphs(stored, remaining, start)
+            part = (
+                stored
+                if start == 0 and end == stored.num_graphs
+                else stored.index_select(slice(start, end))
+            )
+            taken.append(part)
+            if end < stored.num_graphs:
+                offset = end
+                break
+            remaining -= (
+                part.group_layout.num_groups if "group_idx" in part else part.num_graphs
+            )
+            if remaining == 0:
+                break
+        batch = self._merge(taken)
+        # Remove fully drained batches and keep any partly drained batch.
+        for _ in range(len(taken) - (offset > 0)):
+            self._batches.popleft()
+        self._offset = offset
+        self._num_graphs -= batch.num_graphs
+        return batch
 
     def zero(self) -> None:
         """Clear all stored data and reset the buffer."""
-        self._data_list.clear()
+        self._batches.clear()
+        self._offset = 0
+        self._num_graphs = 0
 
     def __len__(self) -> int:
         """
@@ -632,7 +853,7 @@ class HostMemory(DataSink):
         int
             Number of atomic data samples in the buffer.
         """
-        return len(self._data_list)
+        return self._num_graphs
 
     @property
     def capacity(self) -> int:
@@ -659,6 +880,11 @@ class ZarrData(DataSink):
     Supports any zarr-compatible store: filesystem paths (str or Path),
     zarr Store instances (LocalStore, MemoryStore, FsspecStore for remote
     storage like S3/GCS), StorePath, or dict for in-memory buffers.
+
+    Grouped batches (with ``group_idx``) are stored as whole groups, and
+    :meth:`read` returns them with group labels that stay distinct across
+    writes. A sink holds either grouped or ungrouped data until it is
+    cleared.
 
     Parameters
     ----------
@@ -717,6 +943,7 @@ class ZarrData(DataSink):
             config = ZarrWriteConfig()
         self._config = config
         self._count = 0
+        self._group_count = 0
         self._written_once = False
         # Lazily create writer — don't create store until first write
         self._writer: AtomicDataZarrWriter | None = None
@@ -739,7 +966,8 @@ class ZarrData(DataSink):
 
         Uses :class:`AtomicDataZarrWriter` for efficient bulk writes.
         The first write uses ``write()`` (creates store), subsequent
-        writes use ``append()`` (extends existing store).
+        writes use ``append()`` (extends existing store). Temporary neighbor
+        data is omitted so changing neighbor widths do not affect appends.
 
         Parameters
         ----------
@@ -748,51 +976,52 @@ class ZarrData(DataSink):
         mask : torch.Tensor | None, optional
             Boolean tensor of shape ``(batch.num_graphs,)`` indicating
             which samples to write (``True`` = write). If ``None``, all
-            samples are written. Default is ``None``.
+            samples are written. For grouped batches the mask must select
+            complete groups. Default is ``None``.
 
         Raises
         ------
         RuntimeError
             If adding the selected samples would exceed capacity.
         ValueError
-            If mask length does not match batch.num_graphs.
+            If mask length does not match batch.num_graphs, the mask selects
+            part of a group, or grouped and ungrouped writes are mixed.
         """
-        num_total = batch.num_graphs or 0
-        if num_total == 0:
-            return  # Nothing to write
-
-        # Apply mask to select samples
-        if mask is not None:
-            mask = mask.to(device=batch.device, dtype=torch.bool)
-            if mask.shape[0] != num_total:
-                raise ValueError(
-                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
-                )
-            num_selected = int(mask.sum().item())
-            if num_selected == 0:
+        with batch.without_keys(*_NEIGHBOR_KEYS):
+            selected = _select_for_write(batch, mask)
+            if selected is None:
                 return
-            if num_selected < num_total:
-                indices = torch.nonzero(mask, as_tuple=True)[0]
-                _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
-                batch = batch.index_select(indices)
-            num_graphs = num_selected
-        else:
-            num_graphs = num_total
+            num_graphs = selected.num_graphs
 
-        if self._count + num_graphs > self._capacity:
-            raise RuntimeError(
-                f"Store is full. Cannot add {num_graphs} samples "
-                f"to store with {self._count}/{self._capacity} samples."
-            )
+            grouped = "group_idx" in selected
+            if self._count and grouped != (self._group_count > 0):
+                raise ValueError("Cannot mix grouped and ungrouped writes in one sink.")
 
-        writer = self._get_writer()
-        if not self._written_once:
-            writer.write(batch)
-            self._written_once = True
-        else:
-            writer.append(batch)
+            if self._count + num_graphs > self._capacity:
+                raise RuntimeError(
+                    f"Store is full. Cannot add {num_graphs} samples "
+                    f"to store with {self._count}/{self._capacity} samples."
+                )
 
-        self._count += num_graphs
+            num_groups = selected.group_layout.num_groups if grouped else 0
+            # Offset labels so groups from different writes stay distinct on disk.
+            # Shift in place and undo afterwards rather than cloning the batch.
+            group_offset = self._group_count if grouped else 0
+            if group_offset:
+                selected.group_idx.add_(group_offset)
+            try:
+                writer = self._get_writer()
+                if not self._written_once:
+                    writer.write(selected)
+                    self._written_once = True
+                else:
+                    writer.append(selected)
+            finally:
+                if group_offset:
+                    selected.group_idx.sub_(group_offset)
+
+            self._count += num_graphs
+            self._group_count += num_groups
 
     def read(self) -> Batch:
         """
@@ -818,7 +1047,13 @@ class ZarrData(DataSink):
         with AtomicDataZarrReader(self._store) as reader:
             # TODO: optimize this by adding index_select/slicing to amortize overhead
             data_list = [AtomicData(**reader[i][0]) for i in range(len(reader))]
-            return Batch.from_data_list(data_list)
+            # field_levels places stored fields outside AtomicData's defaults,
+            # such as group_idx, at their level.
+            return Batch.from_data_list(
+                data_list,
+                attr_map=reader.level_schema,
+                field_levels=reader.field_levels,
+            )
 
     def zero(self) -> None:
         """Clear all stored data and reset the store."""
@@ -837,6 +1072,7 @@ class ZarrData(DataSink):
         # Reset state
         self._writer = AtomicDataZarrWriter(self._store, config=self._config)
         self._count = 0
+        self._group_count = 0
         self._written_once = False
 
     def __len__(self) -> int:

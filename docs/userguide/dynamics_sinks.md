@@ -120,6 +120,16 @@ calculations.
 ZarrData is the recommended choice for production workflows where results need to
 survive the process, be shared across machines, or feed back into analysis.
 
+## Grouped batches
+
+`HostMemory` and `ZarrData` also store grouped batches (batches with
+`group_idx`, see {py:attr}`~nvalchemi.data.Batch.group_layout`). Each group is
+kept whole, and `read()` returns a grouped batch whose group labels stay distinct
+across writes: two writes of two groups each read back as four groups. A mask
+passed to `write()` must select complete groups; a mask that splits a group
+raises `ValueError`. A sink holds either grouped or ungrouped data until
+`zero()` clears it.
+
 ## Putting it together
 
 A typical dynamics setup combines multiple hooks and sinks to capture different

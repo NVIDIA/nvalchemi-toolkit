@@ -58,6 +58,10 @@ nvalchemi-io-test = "nvalchemi.data.io_test:main"
 nvalchemi-training = "nvalchemi.training.cli:main"
 
 [project.urls]
+Documentation = "https://nvidia.github.io/nvalchemi-toolkit/"
+Repository = "https://github.com/NVIDIA/nvalchemi-toolkit"
+Issues = "https://github.com/NVIDIA/nvalchemi-toolkit/issues"
+Changelog = "https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md"
 
 # these are intended to be user-facing
 [project.optional-dependencies]

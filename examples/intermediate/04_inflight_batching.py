@@ -57,16 +57,6 @@ monotonically-increasing integer ``system_id`` stamped by the sampler as a
 graph-level tensor.  This lets downstream code track individual trajectories
 across refill events.
 
-**Important caveat**: when the standard :class:`~nvalchemi.dynamics.sinks.HostMemory`
-sink unbatches data via ``Batch.to_data_list()``, the reconstructed ``AtomicData``
-objects lose the knowledge that ``system_id`` is a system-level property (because
-``__system_keys__`` is reset to defaults during ``model_post_init``).  When the
-sink later re-batches via ``Batch.from_data_list()``, ``system_id`` gets dropped.
-
-This example defines a custom sink (``HostMemoryWithSystemId``) that re-registers
-``system_id`` as a system property after unbatching, ensuring it survives the
-round-trip through the sink.
-
 This example uses :class:`~nvalchemi.models.demo.DemoModelWrapper` (a small
 neural network) so no neighbor list is needed.  For a real LJ or MACE model,
 add :class:`~nvalchemi.hooks.NeighborListHook` to each sub-stage.
@@ -76,54 +66,12 @@ import logging
 
 import torch
 
-from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data import AtomicData
 from nvalchemi.dynamics import FIRE2, NVTLangevin, SizeAwareSampler
 from nvalchemi.dynamics.base import ConvergenceHook, FusedStage
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
-
-
-class HostMemoryWithSystemId(HostMemory):
-    """HostMemory subclass that preserves ``system_id`` across unbatch/rebatch."""
-
-    def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
-        """Store a batch, preserving ``system_id`` as a system property."""
-        num_total = batch.num_graphs or 0
-        if num_total == 0:
-            return
-
-        # Apply mask to select samples (same logic as HostMemory).
-        if mask is not None:
-            mask = mask.to(device=batch.device, dtype=torch.bool)
-            if mask.shape[0] != num_total:
-                raise ValueError(
-                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
-                )
-            num_selected = int(mask.sum().item())
-            if num_selected == 0:
-                return
-            if num_selected < num_total:
-                indices = torch.nonzero(mask, as_tuple=True)[0]
-                _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
-                batch = batch.index_select(indices)
-
-        # Extract system_id before unbatching; the AtomicData reconstruction loses
-        # the __system_keys__ registration.
-        system_ids = batch["system_id"].detach().to("cpu")
-
-        data_list = batch.to_data_list()
-        if len(self._data_list) + len(data_list) > self._capacity:
-            raise RuntimeError(
-                f"Buffer is full. Cannot add {len(data_list)} samples "
-                f"to buffer with {len(self._data_list)}/{self._capacity} samples."
-            )
-
-        for i, data in enumerate(data_list):
-            data_cpu = data.to(self._device)
-            data_cpu.add_system_property("system_id", system_ids[i : i + 1])
-            self._data_list.append(data_cpu)
-
 
 logging.basicConfig(level=logging.INFO)
 
@@ -275,7 +223,7 @@ torch.manual_seed(42)
 model = DemoModelWrapper(DemoModel())
 model.eval()
 
-results_sink = HostMemoryWithSystemId(capacity=30)
+results_sink = HostMemory(capacity=30)
 converged_hook = ConvergedSnapshotHook(sink=results_sink)
 
 fire_stage = FIRE2(

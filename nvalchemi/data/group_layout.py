@@ -37,6 +37,14 @@ _INTEGRAL_DTYPES = frozenset(
 )
 
 
+def _complete_group_mask(layout: GroupLayout, graph_mask: Tensor) -> Tensor:
+    """Return selected groups, rejecting masks that select only part of a group."""
+    selected = layout.reduce_all(graph_mask)
+    if not torch.equal(layout.broadcast(selected), graph_mask.to(layout.device)):
+        raise ValueError("Mask must select complete groups")
+    return selected
+
+
 def _normalize_and_validate_group_idx(
     group_idx: Tensor,
     *,

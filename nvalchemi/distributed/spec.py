@@ -480,7 +480,14 @@ class MLIPSpec:
         ``system_reductions``: logical OR. ``compile``: kept only when both sides
         declare a compatible :class:`CompilePolicy` (see
         :func:`_merge_compile_policies`), else ``None`` with a warning.
+        ``gp_replicate_geometry`` must agree: it selects how the framework runs
+        the wrapper, so specs that disagree cannot describe one composed model.
         """
+        if self.gp_replicate_geometry != other.gp_replicate_geometry:
+            raise ValueError(
+                "cannot merge specs that disagree on gp_replicate_geometry "
+                f"({self.gp_replicate_geometry} vs {other.gp_replicate_geometry})"
+            )
         merged_policy = _merge_policies(
             self.distribution.policy, other.distribution.policy
         )
@@ -505,6 +512,7 @@ class MLIPSpec:
             system_reductions=self.system_reductions or other.system_reductions,
             node_energy_key=self.node_energy_key or other.node_energy_key,
             node_virial_key=self.node_virial_key or other.node_virial_key,
+            gp_replicate_geometry=self.gp_replicate_geometry,
             compile=_merge_compile_policies(self.compile, other.compile),
         )
 
@@ -555,6 +563,7 @@ class MLIPSpec:
             system_reductions=self.system_reductions,
             node_energy_key=self.node_energy_key,
             node_virial_key=self.node_virial_key,
+            gp_replicate_geometry=self.gp_replicate_geometry,
             compile=self.compile,
         )
 
@@ -569,6 +578,7 @@ class MLIPSpec:
             system_reductions=self.system_reductions,
             node_energy_key=self.node_energy_key,
             node_virial_key=self.node_virial_key,
+            gp_replicate_geometry=self.gp_replicate_geometry,
             compile=policy,
         )
 
