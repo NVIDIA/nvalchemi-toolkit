@@ -20,6 +20,8 @@ integrator, or bias is in
 | Restraints, umbrella, metadynamics, replica exchange | [enhanced_sampling.md][doc-es] | [12_umbrella_sampling.py][ex-umb], [13_replica_exchange.py][ex-rex], [14_metadynamics.py][ex-metad] | `nvalchemi/enhanced_sampling/` |
 | L-BFGS relaxation | [dynamics_simulations.md][doc-sims] (L-BFGS) | [06_geometry_optimization_lbfgs.py][ex-lbfgs] | `nvalchemi/dynamics/optimizers/lbfgs.py` |
 | Monte Carlo: SGC, VC-SGC, Kawasaki, non-local swaps | [dynamics_simulations.md][doc-sims-mc] (Monte Carlo) | none | `nvalchemi/mc/` |
+| Hybrid MC-MD (e.g. SGC-NPT) | [dynamics_simulations.md][doc-sims-hybrid] (Hybrid MC-MD) | [17_uma_hybrid_sgc_npt.py][ex-hybrid] | `nvalchemi/hybrid/` |
+| Batch width, multi-GPU waves, restartable state-point campaigns | [dynamics_simulations.md][doc-sims-sched] (Batch planning and campaigns) | [17_uma_hybrid_sgc_npt.py][ex-hybrid] | `nvalchemi/scheduling/` |
 | Checkpoint and restore of a run's state | [enhanced_sampling.md][doc-es] (Checkpoint and restore) | none | `nvalchemi/_checkpoint.py`, `nvalchemi/enhanced_sampling/_runner.py` |
 
 API reference sources: [docs/modules/dynamics/][api-dyn].
@@ -82,6 +84,9 @@ COO equivalent.
 | Fixed-composition ordering by neighbour swaps | `Kawasaki(model, temperature, cutoff)` |
 | Fixed-composition swaps anywhere in a system | `NonlocalSwap(model, temperature)` |
 | Monte Carlo on some systems, MD on others, one model call | `mc + md` (a `FusedStage`) |
+| Alternate MC and MD on the same systems (SGC-NPT) | `HybridMCMD(mc, md, mc_steps, md_steps, mc_energy_only=True)` (from `nvalchemi.hybrid`) |
+| Batch width that fits a GPU, runs spread over GPUs | `SimulationBatchPlanner.profile` / `recommend_width` / `assign_runs` (from `nvalchemi.scheduling`) |
+| Temperature or chemical-potential ladders that resume after a crash | `CampaignSpec`, `CampaignScheduler`, `FinalStateStore` (from `nvalchemi.scheduling`) |
 | Behavior none of these cover | A custom hook, see `references/composition-and-extension.md` |
 
 Units: positions in Å, energies in eV, `dt` in fs, `temperature` in K,
@@ -402,6 +407,49 @@ print(mc.stats.acceptance)                        # host read: once, at the end
   of different composition share a batch, needs `merge_mole=False` in the
   inference settings. See the models note.
 
+### Alternating MC and MD
+
+`nvalchemi.hybrid` and `nvalchemi.scheduling` are also newer than 0.3.0.
+`HybridMCMD` runs `mc_steps` MC proposals, then `md_steps` MD steps, on the
+same systems, and refreshes forces and stress in between. Use it rather than
+calling `mc.run` and `md.run` in turns.
+
+```python
+from nvalchemi.hybrid import HybridMCMD
+
+hybrid = HybridMCMD(mc=mc, md=npt, mc_steps=100, md_steps=20, mc_energy_only=True)
+
+def record(batch, block):                 # after every block
+    compositions.append((batch.atomic_numbers == 78).float().cpu())
+    return False                          # True stops early
+
+batch = hybrid.run(batch, n_blocks=n_blocks, on_block=record)
+```
+
+- `mc_energy_only=True` narrows `active_outputs` to `{"energy"}` for each MC
+  block and restores it for MD; do not set `active_outputs` yourself.
+- MC and MD may use separate model instances of one checkpoint and task (for
+  example different inference settings). Each MC block then re-evaluates its
+  baseline with the MC model.
+- `before_md_block(batch)` prepares the MD model after MC changed species;
+  `after_md_block(batch)` runs after MD (with `md_steps=0`, e.g. a cell
+  relaxation between rigid-lattice MC blocks).
+- A custom loop calls `hybrid.run_mc_block(batch)` and
+  `hybrid.run_md_block(batch)`. They apply the settings above and rebuild
+  `Kawasaki`'s graph after MD.
+
+### Many state points
+
+`nvalchemi.scheduling` sizes and orders many independent runs. Profile one
+real workload with `SimulationBatchPlanner.profile(workload_factory, widths,
+device)`, take `recommend_width`, and spread runs with `assign_runs`. Describe
+state points as `RunSpec` nodes in a `CampaignSpec`
+(`cooling_from_reference`, `delta_mu_scan_runs`); `CampaignScheduler`
+releases ready runs in compatible batches, seeds children with
+`parent_state(run)`, and records each finished run with
+`complete(run_id, final_state)` in a `FinalStateStore`. A restarted scheduler
+reads completion from the store, so the campaign resumes.
+
 ## Restraints and biased sampling
 
 Use `nvalchemi.enhanced_sampling`, not `BiasedPotentialHook`. The hook is
@@ -461,6 +509,10 @@ batch = sampling.run(batch, n_steps=n)
 - Monte Carlo with uncalibrated chemical potentials on a machine-learned
   potential: every system drifts to a pure end member.
 - Reading `mc.stats` every step; it waits for the GPU.
+- Alternating `mc.run` and `md.run` by hand instead of `HybridMCMD`: MD then
+  starts from the forces of a rejected trial, and energy-only MC is lost.
+- Choosing a batch width from a memory estimate alone instead of a short
+  `SimulationBatchPlanner.profile` of the production workload.
 
 ## How to check the result
 
@@ -479,10 +531,15 @@ batch = sampling.run(batch, n_steps=n)
 - Monte Carlo: acceptance (`mc.stats.acceptance`) neither near 0 nor near 1,
   the per-system composition stops drifting over the last blocks, and each
   atom's `atomic_masses` matches its species.
+- Hybrid MC-MD: composition and volume both stop drifting over the last
+  blocks; the NPT pressure is near its target.
 
 [doc-dyn]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/dynamics.md
 [doc-sims]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/dynamics_simulations.md
 [doc-sims-mc]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/docs/userguide/dynamics_simulations.md#monte-carlo
+[doc-sims-hybrid]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/docs/userguide/dynamics_simulations.md#hybrid-mc-md
+[doc-sims-sched]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/docs/userguide/dynamics_simulations.md#batch-planning-and-campaigns
+[ex-hybrid]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/examples/advanced/17_uma_hybrid_sgc_npt.py
 [doc-hooks]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/hooks.md
 [doc-sinks]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/dynamics_sinks.md
 [doc-mep]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/dynamics_mep.md
