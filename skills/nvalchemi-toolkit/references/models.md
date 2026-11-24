@@ -153,6 +153,15 @@ batch. Select `cuda` when available, and place data on that device too.
   `active_outputs` does not. With OMol, supplying a cell turns periodic
   boundaries on by default, and without a cell no stress is returned even
   though it is declared. Set `pbc` explicitly.
+- UMA inference settings (newer than 0.3.0: a `key=value` string and
+  energy-only gating). When composition changes during a run (SGC, VC-SGC) or
+  systems of different composition share a batch, pass
+  `inference_settings="compile=false,merge_mole=false,tf32=true,activation_checkpointing=false"`:
+  `"default"` and `"turbo"` merge the experts for one composition, and
+  `"batch"` turns on activation checkpointing. At fixed composition
+  `merge_mole=True` is the largest speed-up. `model.set_config("active_outputs",
+  {"energy"})` skips the forces and stress backward pass. See
+  [dynamics_simulations.md][doc-sims-uma] (UMA settings for Monte Carlo).
 - AIMNet2 runs its kernels in float32.
 - `AIMNet2Wrapper` leaves out the Coulomb and D3 dispersion terms on
   purpose. The module docstring in `nvalchemi/models/aimnet2.py` says so.
@@ -214,6 +223,7 @@ steps in your answer. Do not run them unasked.
   stays flat (see the dynamics note).
 
 [doc-models]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/models.md
+[doc-sims-uma]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/docs/userguide/dynamics_simulations.md#uma-settings-for-monte-carlo
 [api-models]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/modules/models.rst
 [ex-data]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/examples/basic/01_data_structures.py
 [ex-opt]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/examples/basic/02_geometry_optimization.py
