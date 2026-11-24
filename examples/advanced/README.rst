@@ -64,3 +64,8 @@ scatter.
 along a pair distance; the metric correction demonstrated against an analytic
 answer, sample thresholds and force ramps, and why a force-only bias cannot
 join a replica-exchange ladder.
+
+**17 — UMA Hybrid SGC-NPT**: Batched semi-grand-canonical Au-Pt
+transmutations alternated with isotropic NPT molecular dynamics through the
+GPU-resident ``HybridMCMD`` scheduler, with batch-width planning and a
+restartable cooling campaign.

@@ -14,6 +14,8 @@ dynamics/index
 models
 gen
 mc
+hybrid
+scheduling
 training/index
 enhanced_sampling
 distributed

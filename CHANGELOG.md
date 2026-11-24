@@ -51,6 +51,21 @@
     rejected trial is re-primed before its first MD update; after an accepted
     trial its forces carry over. Sub-stages flag such graphs through
     `BaseDynamics._stale_on_exit`.
+- **Hybrid MC-MD** (`nvalchemi.hybrid.HybridMCMD`): alternates MC and MD
+  blocks on one batch (e.g. SGC-NPT), refreshing forces and stress after each MC
+  block. `mc_energy_only=True` runs MC with energy-only outputs; MC and MD may
+  use separate models of one potential, with the MC baseline re-evaluated per
+  block. `before_md_block` / `after_md_block` hooks, `run(on_block=...)` for
+  per-block observables and early stopping, and `md_steps=0` for MC-only blocks.
+- **Simulation scheduling** (`nvalchemi.scheduling`):
+  - `SimulationBatchPlanner` profiles a workload at candidate batch widths
+    (CUDA memory, throughput), recommends a width, extrapolates to GPUs of
+    different memory, and packs runs into per-GPU waves.
+  - `CampaignSpec` / `RunSpec` / `CampaignScheduler` / `FinalStateStore`:
+    dependency-ordered, restartable campaigns of state points (cooling ladders,
+    chemical-potential scans); compatible ready runs batch together across
+    temperatures, pressures and chemical potentials.
+- `examples/advanced/17_uma_hybrid_sgc_npt.py`: Au-Pt SGC-NPT with UMA.
 
 ### Changed
 
