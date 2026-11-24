@@ -21,6 +21,36 @@
   dynamics and optimization, training, generative workflows, and composition
   and extension). It replaces the 14 skills under `.claude/skills/`, which are
   removed from the repository.
+- **Monte Carlo samplers** (`nvalchemi.mc`): GPU-resident, batched
+  `BaseMonteCarlo` with one proposal per active graph per step.
+  - `SGC`: semi-grand-canonical single-site transmutations; scalar or per-graph
+    chemical-potential reservoirs.
+  - `VCSGC`: binary variance-constrained SGC (Sadigh et al., Phys. Rev. B 85,
+    184203, 2012), holding a graph at any composition, including inside a
+    miscibility gap, and returning `mu_B - mu_A = reference - phi - 2 kappa cbar`.
+    Parametrised by `phi` or `target_concentration` with an intensive `kappa`
+    (eV); `reference_exchange_potential` centres the constraint on a calibrated
+    `mu_B - mu_A`, which machine-learned potentials need.
+  - `Kawasaki`: fixed-composition nearest-neighbour swaps on a short-range
+    proposal graph independent of the model's neighbour list. By default only
+    unlike-species pairs are drawn, with the Metropolis-Hastings factor
+    `n(x)/n(x')` over unlike-pair counts, so no evaluation is spent on a swap
+    that cannot change the state.
+  - `NonlocalSwap`: fixed-composition swaps of two unlike atoms anywhere in a
+    graph (no neighbour graph), so one accepted move carries a solute across the
+    system, e.g. between a nanoparticle's core and surface. The draw (a uniform
+    atom, then a uniform atom of another species) is symmetric at fixed
+    composition, so plain Metropolis is exact.
+  - Proposals, acceptance and rejection run on the device with no
+    device-to-host synchronization per step (no data-dependent indexing), and
+    temperatures, species and chemical potentials are cached on the device.
+  - Accepted moves update `atomic_masses` to the new species' mass (custom
+    per-species masses are kept), so MD after MC integrates with the right mass.
+  - Samplers compose with MD in a `FusedStage` (`mc + md`), each acting on its
+    own graphs within one shared forward pass. A graph leaving MC after a
+    rejected trial is re-primed before its first MD update; after an accepted
+    trial its forces carry over. Sub-stages flag such graphs through
+    `BaseDynamics._stale_on_exit`.
 
 ### Changed
 
