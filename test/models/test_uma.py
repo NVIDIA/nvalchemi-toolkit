@@ -62,6 +62,7 @@ from nvalchemi.models.uma import (  # noqa: E402
     _UMA_TASKS,
     UMAWrapper,
     _complete_cell,
+    _distributed_balance_channels_batched,
     _distributed_edgewise_gather,
     _distributed_partition_graph,
     _fold_into_cell,
@@ -1268,6 +1269,8 @@ class TestMLIPSpec:
         assert ("escn_md", "reduce_node_to_system") in funcs
         # Element-reference undo summed over owned atoms only.
         assert ("ElementReferences", "undo_refs") in methods
+        # UMA 1.2+ per-layer charge/spin channel balance: owned-only sums.
+        assert ("escn_md", "balance_channels_batched") in funcs
         # MoLE composition-consistency guard (version-selected between the
         # fairchem<=2.19 and >=2.21 method names).
         assert ("eSCNMDBackbone", "_get_composition_info") in methods or (
@@ -1290,6 +1293,34 @@ class TestMLIPSpec:
             _distributed_partition_graph
         )
         assert replacements[("Edgewise", "forward")] is _distributed_edgewise_gather
+        funcs = {
+            (helper.module_path.split(".")[-1], helper.attr_name): helper.replacement
+            for helper in helpers
+            if hasattr(helper, "attr_name")
+        }
+        assert funcs[("escn_md", "balance_channels_batched")] is (
+            _distributed_balance_channels_batched
+        )
+
+    def test_balance_channels_matches_fairchem_off_dd(self):
+        """Outside domain decomposition the balance replacement is fairchem's."""
+        from fairchem.core.models.uma.escn_md import balance_channels_batched
+
+        g = torch.Generator().manual_seed(0)
+        emb = torch.randn(7, 9, 6, generator=g, dtype=torch.float64)
+        batch = torch.tensor([0, 0, 0, 1, 1, 1, 1])
+        natoms = torch.tensor([3, 4])
+        target = torch.tensor([1.0, -2.0], dtype=torch.float64)
+        for offset in (0.0, 1.0):
+            ref = balance_channels_batched(emb, target, natoms, batch, 1, 4, offset)
+            got = _distributed_balance_channels_batched(
+                emb, target, natoms, batch, 1, 4, offset
+            )
+            torch.testing.assert_close(got, ref)
+            sums = torch.zeros(2, 3, dtype=got.dtype).index_add_(
+                0, batch, got[:, 0, 1:4]
+            )
+            torch.testing.assert_close(sums, (target - offset)[:, None].expand(-1, 3))
 
 
 # ===========================================================================

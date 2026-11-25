@@ -127,6 +127,10 @@ def _build_bcc_fe(dtype: torch.dtype = torch.float32):
     return positions, atomic_numbers, masses, cell, pbc
 
 
+#: Checkpoint the fixed reference values above were computed with.
+_REFERENCE_CKPT = "uma-s-1p1"
+
+
 def _assert_reference(energy: torch.Tensor, forces: torch.Tensor) -> None:
     """Check the fixed Fairchem 2.21 eager/general UMA reference."""
     expected_rows = torch.tensor(
@@ -251,7 +255,7 @@ def _uma_equivalence_worker(rank: int, world_size: int, mode: str) -> None:
         ref_out = ref_wrapper(ref_batch)
         e_ref_host = ref_out["energy"].sum().detach().cpu().view(1)
         f_ref_host = ref_out["forces"].detach().cpu()
-        if rank == 0 and mode == "eager":
+        if rank == 0 and mode == "eager" and _CKPT == _REFERENCE_CKPT:
             _assert_reference(e_ref_host.squeeze(0), f_ref_host)
         del ref_batch, ref_out
 

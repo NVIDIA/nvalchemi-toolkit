@@ -59,6 +59,14 @@
 
 ### Fixed
 
+- UMA domain decomposition (halo and node-partition) handles the per-layer
+  charge/spin channel balancing of UMA 1.2+ checkpoints
+  (`charge_balanced_channels`): the per-system channel sums and atom counts now
+  cover owned atoms only and are all-reduced across ranks. Before, each rank
+  summed its owned + ghost rows, so UMA 1.2+ checkpoints gave wrong energies and
+  forces under DD (uma-s-1p2 on 864-atom bcc Fe, 2 A100s: compiled halo energy
+  2.0 eV off, node-partition forces up to 0.94 eV/A off); uma-s-1p1 has no
+  balanced channels and was unaffected.
 - `DistributedPipeline` sends that reach the send buffer's atom or edge
   capacity send the graduates that fit and keep the rest for a later send.
   Samples that cannot fit an empty buffer raise `ValueError` with their sizes

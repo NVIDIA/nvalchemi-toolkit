@@ -907,6 +907,75 @@ def _distributed_undo_refs(
     return tensor + ref_sum.view(tensor.shape)
 
 
+def _distributed_balance_channels_batched(
+    emb: "torch.Tensor",
+    target: "torch.Tensor",
+    natoms: "torch.Tensor",
+    batch: "torch.Tensor",
+    start_idx: int,
+    end_idx: int,
+    target_offset: float = 0.0,
+) -> "torch.Tensor":
+    """DD-aware replacement for fairchem ``balance_channels_batched``.
+
+    UMA 1.2+ checkpoints (``charge_balanced_channels`` / ``spin_balanced_channels``
+    in the backbone config; uma-s-1p1 has none) shift the ``l=0`` coefficients of
+    a few channels after every message-passing layer so that each system's sum over
+    its atoms equals its charge (or spin - 1). Fairchem sums every row it holds and
+    all-reduces only under its own ``gp_utils``. Under domain decomposition the rows
+    are this rank's owned + ghost (+ dead caps) atoms, so that sum is rank-local
+    and over-counts the ghost shell, and every layer then shifts each rank's
+    features by a different, wrong amount (2-GPU A100, uma-s-1p2p1, 864 bcc Fe:
+    energy 61.8 eV off).
+
+    Here the per-system channel sum and atom count cover owned rows only and are
+    all-reduced across the mesh (:attr:`Scope.OWNED`), so every rank applies the
+    single-process correction to all of its rows, ghosts included. Off the
+    distributed path it is fairchem's computation.
+
+    Parameters
+    ----------
+    emb : torch.Tensor
+        Node embeddings ``(n_rows, sph_features, channels)``.
+    target : torch.Tensor
+        Per-system target sum ``(num_systems,)`` (charge or spin).
+    natoms : torch.Tensor
+        Per-system atom count ``(num_systems,)``; used off the distributed path
+        only (under DD the global count is reduced from the owned rows).
+    batch : torch.Tensor
+        Per-row system index ``(n_rows,)``.
+    start_idx, end_idx : int
+        The contiguous channel range to balance, ``[start_idx, end_idx)``.
+    target_offset : float, default 0.0
+        Subtracted from ``target`` (1.0 for spin).
+
+    Returns
+    -------
+    torch.Tensor
+        A copy of ``emb`` with the channel range balanced to the target sums.
+    """
+    out_emb = emb.clone()
+    num_systems = int(natoms.shape[0])
+    channels = emb[:, 0, start_idx:end_idx]
+    if current_dd_context().is_distributed:
+        sums = system_sum(channels, batch, num_systems, scope=Scope.OWNED)
+        count = system_sum(
+            channels.new_ones(channels.shape[0], 1),
+            batch,
+            num_systems,
+            scope=Scope.OWNED,
+        )
+    else:
+        sums = channels.new_zeros(num_systems, channels.shape[1]).index_add_(
+            0, batch, channels
+        )
+        count = natoms.unsqueeze(1)
+    target_sums = (target - target_offset).unsqueeze(1).expand(-1, channels.shape[1])
+    corrections = (sums - target_sums) / count
+    out_emb[:, 0, start_idx:end_idx] = channels - corrections.to(emb.dtype)[batch]
+    return out_emb
+
+
 @distributed_method
 def _distributed_get_composition_info(
     ctx: Any, original: Any, backbone_self: Any, data: Any
@@ -1408,6 +1477,13 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             # Element-reference undo: sum refs over owned atoms only + all_reduce
             # (the owned-only model energy would otherwise be over-counted).
             MethodAdapter(ElementReferences, "undo_refs", _distributed_undo_refs),
+            # UMA 1.2+ per-layer charge/spin channel balancing: owned-only
+            # per-system sums + all-reduce (fairchem's sum would include ghosts).
+            PythonAdapter(
+                module_path="fairchem.core.models.uma.escn_md",
+                attr_name="balance_channels_batched",
+                replacement=_distributed_balance_channels_batched,
+            ),
             # MoLE composition-consistency guard (version-selected above): histogram
             # the real atoms only so dead caps atoms don't drift the composition.
             *mole_consistency,
@@ -1490,6 +1566,13 @@ class UMAWrapper(nn.Module, BaseModelMixin):
                     replacement=_distributed_reduce_node_to_system,
                 ),
                 MethodAdapter(ElementReferences, "undo_refs", _distributed_undo_refs),
+                # UMA 1.2+ per-layer charge/spin channel balancing: owned-only
+                # per-system sums + all-reduce (fairchem's sum would include ghosts).
+                PythonAdapter(
+                    module_path="fairchem.core.models.uma.escn_md",
+                    attr_name="balance_channels_batched",
+                    replacement=_distributed_balance_channels_batched,
+                ),
             )
             spec = dataclasses.replace(
                 spec,
