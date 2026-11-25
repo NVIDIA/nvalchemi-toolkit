@@ -127,7 +127,8 @@ def test_restart_continues_the_random_sequence(name: str, restore_into: str) -> 
 
     model = DemoModelWrapper(DemoModel())
     reference = fresh_batch()
-    _SAMPLERS[name](model).run(reference, n_steps=20)
+    uninterrupted = _SAMPLERS[name](model)
+    uninterrupted.run(reference, n_steps=20)
 
     batch = fresh_batch()
     first = _SAMPLERS[name](model)
@@ -143,3 +144,4 @@ def test_restart_continues_the_random_sequence(name: str, restore_into: str) -> 
     resumed.run(batch, n_steps=10)
 
     assert torch.equal(batch.atomic_numbers, reference.atomic_numbers)
+    assert resumed.stats == uninterrupted.stats

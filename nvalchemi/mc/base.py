@@ -130,9 +130,11 @@ class BaseMonteCarlo(BaseDynamics):
     graph uses the periodic-table mass. Masses are only touched where the
     species changed.
 
-    :meth:`state_dict` includes the proposal/acceptance generator's state, so a
-    run restored with :meth:`load_state_dict` continues the same random
-    sequence as an uninterrupted one.
+    :meth:`state_dict` includes the proposal/acceptance generator's state, the
+    per-graph mass lookup and the acceptance counters, so a run restored with
+    :meth:`load_state_dict` continues exactly as an uninterrupted one: the same
+    random sequence, the same masses for species that left a graph before the
+    checkpoint, and cumulative :attr:`stats`.
     """
 
     __needs_keys__: set[str] = {"energy"}
@@ -194,6 +196,8 @@ class BaseMonteCarlo(BaseDynamics):
         # Generator state from load_state_dict, applied when the generator is
         # next created (its device is known only once a batch is seen).
         self._pending_generator_state: torch.Tensor | None = None
+        # Mass lookup from load_state_dict, adopted when the batch is next seen.
+        self._pending_mass_table: torch.Tensor | None = None
         self._energy: torch.Tensor | None = None
         self._energy_batch: weakref.ref[Batch] | None = None
         self._validated_batch: weakref.ref[Batch] | None = None
@@ -263,28 +267,44 @@ class BaseMonteCarlo(BaseDynamics):
         return self._generator
 
     def state_dict(self) -> dict[str, Any]:
-        """Return the state needed to resume this run, including the generator.
+        """Return the state needed to resume this run exactly.
 
-        Extends :meth:`BaseDynamics.state_dict` with ``generator_state``, the
-        proposal/acceptance generator's byte state (absent before the first
-        step), so a restored run draws the same random sequence.
+        Extends :meth:`BaseDynamics.state_dict` with the Monte Carlo run state,
+        each entry present once it exists (after the first step):
+
+        * ``generator_state``: the proposal/acceptance generator's byte state,
+          so a restored run draws the same random sequence;
+        * ``mass_table``: the per-graph species-to-mass lookup, which keeps a
+          custom mass for a species that has since left its graph;
+        * ``attempted`` / ``accepted``: the cumulative move counters behind
+          :attr:`stats`.
+
+        The acceptance baseline energy is not stored: :meth:`run` re-evaluates
+        it on the restored batch.
 
         Returns
         -------
         dict[str, Any]
-            The base state plus ``generator_state`` when the generator exists.
+            The base state plus the entries above.
         """
         state = super().state_dict()
         if self._generator is not None:
             state["generator_state"] = self._generator.get_state()
+        if self._mass_table is not None:
+            state["mass_table"] = self._mass_table.detach().clone()
+        if self._attempted is not None and self._accepted is not None:
+            state["attempted"] = self._attempted.detach().clone()
+            state["accepted"] = self._accepted.detach().clone()
         return state
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
-        """Restore state produced by :meth:`state_dict`, including the generator.
+        """Restore state produced by :meth:`state_dict`.
 
-        The generator is rebuilt from the restored seed on its next use, then
-        set to ``generator_state`` when the checkpoint has one, so a sampler
-        that already ran does not keep its advanced sequence.
+        Everything the sampler accumulated is replaced, so a sampler that
+        already ran does not keep its advanced generator, masses or counters.
+        The generator is rebuilt from the restored seed on its next use and set
+        to ``generator_state``; the mass lookup is adopted when the sampler
+        next sees a batch, which must have the checkpoint's number of graphs.
 
         Parameters
         ----------
@@ -300,6 +320,19 @@ class BaseMonteCarlo(BaseDynamics):
             if generator_state is None
             else generator_state.detach().to("cpu", torch.uint8).clone()
         )
+        mass_table = state.get("mass_table")
+        self._mass_table = None
+        self._mass_numbers = None
+        self._mass_batch = None
+        self._pending_mass_table = (
+            None if mass_table is None else mass_table.detach().clone()
+        )
+        attempted, accepted = state.get("attempted"), state.get("accepted")
+        if attempted is None or accepted is None:
+            self._attempted = self._accepted = None
+        else:
+            self._attempted = attempted.detach().clone()
+            self._accepted = accepted.detach().clone()
 
     def _ensure_observables(self, batch: Batch) -> None:
         """Allocate graph-level energy and acceptance storage if absent."""
@@ -410,7 +443,13 @@ class BaseMonteCarlo(BaseDynamics):
         Each species present in a graph takes its mass from that graph, so
         custom per-species masses survive and never leak into another graph;
         species absent from a graph fall back to the periodic-table mass.
-        Rebuilt when the batch object or its size changes.
+        Rebuilt when the batch object or its size changes; after
+        :meth:`load_state_dict` the restored lookup is adopted instead.
+
+        Raises
+        ------
+        ValueError
+            If a restored lookup does not match the batch's number of graphs.
         """
         masses = getattr(batch, "atomic_masses", None)
         if masses is None:
@@ -424,8 +463,18 @@ class BaseMonteCarlo(BaseDynamics):
             and self._mass_numbers.shape == numbers.shape
         ):
             return
-        default = _default_mass_table().to(device=masses.device, dtype=masses.dtype)
-        table = default.expand(batch.num_graphs, -1).clone()
+        if self._pending_mass_table is not None:
+            restored = self._pending_mass_table
+            if restored.shape[0] != batch.num_graphs:
+                raise ValueError(
+                    f"{type(self).__name__}: the restored mass lookup covers "
+                    f"{restored.shape[0]} graphs but the batch has {batch.num_graphs}"
+                )
+            table = restored.to(device=masses.device, dtype=masses.dtype)
+            self._pending_mass_table = None
+        else:
+            default = _default_mass_table().to(device=masses.device, dtype=masses.dtype)
+            table = default.expand(batch.num_graphs, -1).clone()
         table[batch.batch_idx.long(), numbers] = masses.detach().reshape(-1)
         self._mass_table = table
         self._mass_numbers = numbers.clone()
@@ -487,6 +536,9 @@ class BaseMonteCarlo(BaseDynamics):
                 self._attempted = self._active.sum().detach()
                 self._accepted = accepted.sum().detach()
             else:
+                if self._attempted.device != batch.device:  # restored counters
+                    self._attempted = self._attempted.to(batch.device)
+                    self._accepted = self._accepted.to(batch.device)
                 self._attempted += self._active.sum().detach()
                 self._accepted += accepted.sum().detach()
         # Rejected trials are already restored, so only accepted moves differ.
