@@ -362,11 +362,10 @@ A custom `SpringConfig.resolve(context)` returns one constant per link;
 
 ## Monte Carlo
 
-`nvalchemi.mc` is newer than release 0.3.0: check that the module exists
-before you use it. Each sampler is a `BaseDynamics` engine that makes one
-proposal per system per step, evaluates every trial in one model call, and
-accepts or rejects each system on its own. Hooks, `FusedStage`, and
-`model.make_neighbor_hooks()` work as for MD.
+`nvalchemi.mc` is newer than release 0.3.0: check that it exists. Each sampler
+is a `BaseDynamics` engine: one proposal per system per step, all trials in
+one model call. Hooks, `FusedStage` (`mc + md`), and
+`model.make_neighbor_hooks()` work as for MD; masses follow species.
 
 ```python
 from nvalchemi.mc import SGC
@@ -386,12 +385,8 @@ print(mc.stats.acceptance)                        # host read: once, at the end
   zero. With a machine-learned potential, centre `SGC`'s potentials, or
   `VCSGC`'s `reference_exchange_potential`, on a calibrated `mu_B - mu_A`
   (for example from pure-element runs), or every system runs to an end member.
-- Accepted moves give each atom its new species' mass in that system (custom
-  masses kept), so MD after MC integrates with the right mass.
 - After positions change outside `Kawasaki` (e.g. an MD block), call
   `mc.synchronize(batch)` or `mc.refresh_energy(batch)` to rebuild its graph.
-- In a `FusedStage` (`mc + md`), a system leaving MC after a rejected trial is
-  re-primed, so MD never uses the undone trial's forces.
 - UMA needs `merge_mole=False` when composition changes (SGC, VC-SGC) or
   systems of different composition share a batch; see the models note.
 
