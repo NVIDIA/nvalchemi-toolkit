@@ -143,8 +143,9 @@ def test_missing_neighbor_pairs_raise() -> None:
         sampler.run(batch, n_steps=1)
 
 
-def test_synchronize_rebuilds_the_proposal_graph() -> None:
-    """After positions move outside the cutoff, synchronize must refresh the graph."""
+@pytest.mark.parametrize("method", ["synchronize", "refresh_energy"])
+def test_resync_rebuilds_the_proposal_graph(method: str) -> None:
+    """After positions move outside the cutoff, both re-syncs must refresh the graph."""
     batch = Batch.from_data_list([_pair(1, 2, separation=1.0)])
     batch.energy = torch.zeros(batch.num_graphs, 1)
     sampler = _sampler(cutoff=2.0)
@@ -154,7 +155,7 @@ def test_synchronize_rebuilds_the_proposal_graph() -> None:
         batch.positions[1, 0] = 10.0
 
     with pytest.raises(ValueError, match="no neighbour pairs"):
-        sampler.synchronize(batch)
+        getattr(sampler, method)(batch)
 
 
 def test_composition_is_conserved_over_many_steps() -> None:
