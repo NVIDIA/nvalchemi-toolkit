@@ -36,11 +36,13 @@
     unlike-species pairs are drawn, with the Metropolis-Hastings factor
     `n(x)/n(x')` over unlike-pair counts, so no evaluation is spent on a swap
     that cannot change the state.
-  - `NonlocalSwap`: fixed-composition swaps of two unlike atoms anywhere in a
-    graph (no neighbour graph), so one accepted move carries a solute across the
-    system, e.g. between a nanoparticle's core and surface. The draw (a uniform
-    atom, then a uniform atom of another species) is symmetric at fixed
-    composition, so plain Metropolis is exact.
+  - `NonlocalSwap`: fixed-composition swaps of two unlike atoms at any
+    distance, so one accepted move carries a solute across the system, e.g.
+    between a nanoparticle's core and surface. Each step draws, per system, one
+    atom uniformly from all its atoms and a second uniformly from the atoms of
+    another species; no neighbour graph is built or kept between steps. The
+    pair probability depends only on the species counts, which a swap
+    preserves, so plain Metropolis is exact. Single-species systems are skipped.
   - Proposals, acceptance and rejection run on the device with no
     device-to-host synchronization per step (no data-dependent indexing), and
     temperatures, species and chemical potentials are cached on the device.
