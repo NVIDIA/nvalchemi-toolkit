@@ -16,6 +16,7 @@ needs already have a shipped component, listed in the other notes.
 | Custom bias | [enhanced_sampling.md][doc-es] (writing your own bias) | [15_rmsd_metadynamics.py][ex-rmsd] | `nvalchemi/enhanced_sampling/_bias.py` |
 | Reporting and dashboards | [reporting.md][doc-rep] | [07_rich_training_reporting.py][ex-rich] | `nvalchemi/hooks/reporting/` |
 | Domain decomposition | [distributed.md][doc-dd], [distributed_byo.md][doc-byo] | [03_mace_nvt_distributed.py][ex-dd], [04_byo_pytorch_mpnn.py][ex-byo] | `nvalchemi/distributed/` |
+| Batch width per GPU, state-point campaigns | [dynamics_simulations.md][doc-sims-sched] (Batch planning and campaigns) | [17_uma_hybrid_sgc_npt.py][ex-hybrid] | `nvalchemi/scheduling/` |
 | Multi-rank stage pipelines | [dynamics.md][doc-dyn] (distributed pipelines) | [01_distributed_pipeline.py][ex-pipe] | `DistributedPipeline` in `nvalchemi/dynamics/base.py` |
 
 API reference sources: [docs/modules/hooks.rst][api-hooks],
@@ -204,6 +205,21 @@ out of `energy()` if you set `compile_biases=True`; put validation in a
   `nvalchemi.dynamics.hooks`. See [reporting.md][doc-rep], [hooks.md][doc-hooks].
 - Extra metrics: `custom_scalars={"name": callable}`; keep the callable cheap.
 
+## Batch width and many state points
+
+`nvalchemi.scheduling` is newer than 0.3.0. It sizes and orders many
+independent runs on one or more GPUs; reuse it before writing a job loop.
+
+- `SimulationBatchPlanner.profile(workload_factory, widths, device)` measures
+  memory and throughput of the real workload; `recommend_width` picks a width
+  and `assign_runs` spreads runs over GPUs in waves. Do not size a batch from
+  a memory estimate alone.
+- A `CampaignSpec` of `RunSpec` state points (`cooling_from_reference`,
+  `delta_mu_scan_runs`) runs through `CampaignScheduler`: it releases ready
+  runs in compatible batches, seeds children with `parent_state(run)`, and
+  records each finished run with `complete(run_id, final_state)` in a
+  `FinalStateStore`. A restarted scheduler resumes from the store.
+
 ## Dynamics stages on different GPUs
 
 `relax + md` fuses stages on one GPU. `relax | md` (dynamics engines) builds a
@@ -322,6 +338,8 @@ class DataSink(ABC):
 [doc-es]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/enhanced_sampling.md
 [doc-rep]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/reporting.md
 [doc-dd]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/distributed.md
+[doc-sims-sched]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/docs/userguide/dynamics_simulations.md#batch-planning-and-campaigns
+[ex-hybrid]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/examples/advanced/17_uma_hybrid_sgc_npt.py
 [doc-byo]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/distributed_byo.md
 [api-hooks]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/modules/hooks.rst
 [api-dyn]: https://github.com/NVIDIA/nvalchemi-toolkit/tree/v0.3.0/docs/modules/dynamics
