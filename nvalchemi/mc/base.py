@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import weakref
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -122,11 +123,16 @@ class BaseMonteCarlo(BaseDynamics):
     Atomic masses always follow the species. Every accepted move that changes
     an atom's type also sets that atom's ``atomic_masses`` entry to the mass of
     its new species, so any dynamics run afterwards (e.g. alternating MC and
-    MD blocks) integrates each atom with the right mass. The
-    per-species masses are taken from the batch the first time the sampler sees
-    it (so custom masses, e.g. a deuterium mass for H, are kept and move with
-    the species); a species absent from that batch uses the periodic-table mass.
-    Masses are only touched where the species changed.
+    MD blocks) integrates each atom with the right mass. The per-species
+    masses are taken from each graph the first time the sampler sees the batch
+    (so custom masses, e.g. a deuterium mass for H, are kept and move with the
+    species, and never cross into another graph); a species absent from a
+    graph uses the periodic-table mass. Masses are only touched where the
+    species changed.
+
+    :meth:`state_dict` includes the proposal/acceptance generator's state, so a
+    run restored with :meth:`load_state_dict` continues the same random
+    sequence as an uninterrupted one.
     """
 
     __needs_keys__: set[str] = {"energy"}
@@ -185,14 +191,18 @@ class BaseMonteCarlo(BaseDynamics):
         ] = {}
         self._generator: torch.Generator | None = None
         self._generator_device: torch.device | None = None
+        # Generator state from load_state_dict, applied when the generator is
+        # next created (its device is known only once a batch is seen).
+        self._pending_generator_state: torch.Tensor | None = None
         self._energy: torch.Tensor | None = None
         self._energy_batch: weakref.ref[Batch] | None = None
         self._validated_batch: weakref.ref[Batch] | None = None
         self._active: torch.Tensor | None = None
         self._attempted: torch.Tensor | None = None
         self._accepted: torch.Tensor | None = None
-        # Per-species mass lookup and the species each atom's mass currently
-        # matches, both for the batch object last seen by _ensure_mass_table.
+        # Per-graph, per-species mass lookup [num_graphs, max Z + 1] and the
+        # species each atom's mass currently matches, both for the batch object
+        # last seen by _ensure_mass_table.
         self._mass_table: torch.Tensor | None = None
         self._mass_numbers: torch.Tensor | None = None
         self._mass_batch: weakref.ref[Batch] | None = None
@@ -240,7 +250,56 @@ class BaseMonteCarlo(BaseDynamics):
             self._generator = torch.Generator(device=batch.device)
             self._generator.manual_seed(self._random_seed)
             self._generator_device = batch.device
+            if self._pending_generator_state is not None:
+                try:
+                    self._generator.set_state(self._pending_generator_state)
+                except RuntimeError as error:
+                    raise RuntimeError(
+                        f"{type(self).__name__}: the restored generator state does not "
+                        f"fit a {batch.device.type} generator; restore onto the device "
+                        "type the checkpoint was written on"
+                    ) from error
+                self._pending_generator_state = None
         return self._generator
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the state needed to resume this run, including the generator.
+
+        Extends :meth:`BaseDynamics.state_dict` with ``generator_state``, the
+        proposal/acceptance generator's byte state (absent before the first
+        step), so a restored run draws the same random sequence.
+
+        Returns
+        -------
+        dict[str, Any]
+            The base state plus ``generator_state`` when the generator exists.
+        """
+        state = super().state_dict()
+        if self._generator is not None:
+            state["generator_state"] = self._generator.get_state()
+        return state
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore state produced by :meth:`state_dict`, including the generator.
+
+        The generator is rebuilt from the restored seed on its next use, then
+        set to ``generator_state`` when the checkpoint has one, so a sampler
+        that already ran does not keep its advanced sequence.
+
+        Parameters
+        ----------
+        state
+            The mapping previously returned by :meth:`state_dict`.
+        """
+        super().load_state_dict(state)
+        generator_state = state.get("generator_state")
+        self._generator = None
+        self._generator_device = None
+        self._pending_generator_state = (
+            None
+            if generator_state is None
+            else generator_state.detach().to("cpu", torch.uint8).clone()
+        )
 
     def _ensure_observables(self, batch: Batch) -> None:
         """Allocate graph-level energy and acceptance storage if absent."""
@@ -346,11 +405,12 @@ class BaseMonteCarlo(BaseDynamics):
         """Validate sampler-specific assumptions for a newly seen batch."""
 
     def _ensure_mass_table(self, batch: Batch) -> None:
-        """Record per-species masses from a newly seen batch, before any move.
+        """Record per-graph, per-species masses from a newly seen batch.
 
-        Each species present takes its mass from the batch itself, so custom
-        per-species masses survive; absent species fall back to the
-        periodic-table mass. Rebuilt when the batch object or its size changes.
+        Each species present in a graph takes its mass from that graph, so
+        custom per-species masses survive and never leak into another graph;
+        species absent from a graph fall back to the periodic-table mass.
+        Rebuilt when the batch object or its size changes.
         """
         masses = getattr(batch, "atomic_masses", None)
         if masses is None:
@@ -364,10 +424,9 @@ class BaseMonteCarlo(BaseDynamics):
             and self._mass_numbers.shape == numbers.shape
         ):
             return
-        table = (
-            _default_mass_table().to(device=masses.device, dtype=masses.dtype).clone()
-        )
-        table[numbers] = masses.detach().reshape(-1)
+        default = _default_mass_table().to(device=masses.device, dtype=masses.dtype)
+        table = default.expand(batch.num_graphs, -1).clone()
+        table[batch.batch_idx.long(), numbers] = masses.detach().reshape(-1)
         self._mass_table = table
         self._mass_numbers = numbers.clone()
         self._mass_batch = weakref.ref(batch)
@@ -385,7 +444,8 @@ class BaseMonteCarlo(BaseDynamics):
         changed = numbers != self._mass_numbers
         with torch.no_grad():
             flat = masses.reshape(-1)
-            flat.copy_(torch.where(changed, self._mass_table[numbers], flat))
+            new = self._mass_table[batch.batch_idx.long(), numbers]
+            flat.copy_(torch.where(changed, new, flat))
         self._mass_numbers.copy_(numbers)
 
     def pre_update(self, batch: Batch) -> None:

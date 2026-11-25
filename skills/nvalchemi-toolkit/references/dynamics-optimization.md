@@ -376,31 +376,24 @@ mc = SGC(model=model, temperature=1000.0, species=[79, 78],
          chemical_potentials={79: 0.0, 78: dmu}, device_type=device.type)
 for hook in model.make_neighbor_hooks():
     mc.register_hook(hook)
-model.set_config("active_outputs", {"energy"})   # MC reads energies only
+model.set_config("active_outputs", {"energy"})   # UMA skips the backward pass
 with mc:
     batch = mc.run(batch, n_steps=n_trials)
 print(mc.stats.acceptance)                        # host read: once, at the end
 ```
 
-- The model must return one energy per system. Monte Carlo reads no forces,
-  so set `active_outputs` to `{"energy"}` for MC-only runs. `UMAWrapper` then
-  skips the force and stress backward pass.
 - Chemical potentials are absolute per-atom energies in the model's own energy
   zero. With a machine-learned potential, centre `SGC`'s potentials, or
   `VCSGC`'s `reference_exchange_potential`, on a calibrated `mu_B - mu_A`
-  (for example from pure-element runs). Otherwise every system runs to one
-  pure end member.
-- Accepted moves set `atomic_masses` to the new species' mass, so MD after
-  MC integrates with the right mass. Custom per-species masses are kept.
-- `Kawasaki` draws from a fixed short-range neighbour graph. Call
-  `mc.synchronize(batch)` after positions change outside the sampler (for
-  example after an MD block) so the graph is rebuilt.
-- In a `FusedStage` (`mc + md`), a system that leaves MC after a rejected
-  trial is re-primed before its first MD step, so MD never uses the forces of
-  the undone trial.
-- With UMA, any run where composition changes (SGC, VC-SGC), or where systems
-  of different composition share a batch, needs `merge_mole=False` in the
-  inference settings. See the models note.
+  (for example from pure-element runs), or every system runs to an end member.
+- Accepted moves give each atom its new species' mass in that system (custom
+  masses kept), so MD after MC integrates with the right mass.
+- After positions change outside `Kawasaki` (e.g. an MD block), call
+  `mc.synchronize(batch)` or `mc.refresh_energy(batch)` to rebuild its graph.
+- In a `FusedStage` (`mc + md`), a system leaving MC after a rejected trial is
+  re-primed, so MD never uses the undone trial's forces.
+- UMA needs `merge_mole=False` when composition changes (SGC, VC-SGC) or
+  systems of different composition share a batch; see the models note.
 
 ## Restraints and biased sampling
 

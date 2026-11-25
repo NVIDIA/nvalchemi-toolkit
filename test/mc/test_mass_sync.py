@@ -93,3 +93,23 @@ def test_kawasaki_swap_carries_custom_per_species_masses() -> None:
         batch.atomic_numbers.tolist(), batch.atomic_masses.tolist()
     ):
         assert abs(mass - custom[number]) < 1e-5, (number, mass)
+
+
+def test_custom_mass_does_not_cross_into_another_graph() -> None:
+    """Graph 0's deuterium mass for H must not reach H created in graph 1."""
+    deuterium = AtomicData(
+        atomic_numbers=torch.tensor([1], dtype=torch.long),
+        positions=torch.zeros(1, 3),
+        atomic_masses=torch.tensor([2.014]),
+    )
+    helium = AtomicData(
+        atomic_numbers=torch.tensor([2], dtype=torch.long), positions=torch.zeros(1, 3)
+    )
+    batch = Batch.from_data_list([deuterium, helium])
+    batch.energy = torch.zeros(2, 1)
+    # mu_2 = -1e6: He -> H always accepted, H -> He always rejected.
+    _sgc(DemoModelWrapper(DemoModel()), mu_2=-1.0e6).run(batch, n_steps=1)
+
+    assert batch.atomic_numbers.tolist() == [1, 1]
+    assert abs(batch.atomic_masses[0].item() - 2.014) < 1e-5
+    assert torch.isclose(batch.atomic_masses[1], _default_mass(1, batch.atomic_masses))

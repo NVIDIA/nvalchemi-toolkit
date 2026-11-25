@@ -46,8 +46,11 @@
   - Proposals, acceptance and rejection run on the device with no
     device-to-host synchronization per step (no data-dependent indexing), and
     temperatures, species and chemical potentials are cached on the device.
-  - Accepted moves update `atomic_masses` to the new species' mass (custom
-    per-species masses are kept), so MD after MC integrates with the right mass.
+  - Accepted moves update `atomic_masses` to the new species' mass in that
+    system (custom per-species masses are kept and never cross between
+    systems), so MD after MC integrates with the right mass.
+  - `state_dict` / `load_state_dict` carry the generator state, so a restored
+    run continues the same random sequence.
   - Samplers compose with MD in a `FusedStage` (`mc + md`), each acting on its
     own graphs within one shared forward pass. A graph leaving MC after a
     rejected trial is re-primed before its first MD update; after an accepted

@@ -220,6 +220,16 @@ class Kawasaki(_PairSwapMonteCarlo):
         super().synchronize(batch)
         self._build_proposal_graph(batch)
 
+    def refresh_energy(self, batch: Batch) -> None:
+        """Re-evaluate the current energy and rebuild the proposal graph.
+
+        The :meth:`synchronize` counterpart for a re-evaluated baseline: after
+        positions change (e.g. an MD block), proposals must use the new
+        neighbours, not the pairs cached from the old geometry.
+        """
+        super().refresh_energy(batch)
+        self._build_proposal_graph(batch)
+
     def _unlike_counts(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
         """Return per-edge unlike-species flags and their per-graph counts.
 

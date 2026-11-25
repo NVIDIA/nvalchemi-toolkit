@@ -113,3 +113,33 @@ def test_proposal_and_acceptance_do_not_sync_the_device(name: str) -> None:
         torch.cuda.set_sync_debug_mode(previous)
 
     assert sampler.stats.attempted == 4
+
+
+@pytest.mark.parametrize("restore_into", ["fresh", "advanced"])
+@pytest.mark.parametrize("name", list(_SAMPLERS))
+def test_restart_continues_the_random_sequence(name: str, restore_into: str) -> None:
+    """A run restored from ``state_dict`` matches an uninterrupted one step for step."""
+
+    def fresh_batch() -> Batch:
+        batch = Batch.from_data_list([_chain([1, 2, 1, 2, 1, 2]) for _ in range(3)])
+        batch.energy = torch.zeros(batch.num_graphs, 1)
+        return batch
+
+    model = DemoModelWrapper(DemoModel())
+    reference = fresh_batch()
+    _SAMPLERS[name](model).run(reference, n_steps=20)
+
+    batch = fresh_batch()
+    first = _SAMPLERS[name](model)
+    first.run(batch, n_steps=10)
+    state = first.state_dict()
+    assert "generator_state" in state
+    if restore_into == "advanced":
+        first.run(fresh_batch(), n_steps=5)  # advance it past the checkpoint
+        resumed = first
+    else:
+        resumed = _SAMPLERS[name](model)
+    resumed.load_state_dict(state)
+    resumed.run(batch, n_steps=10)
+
+    assert torch.equal(batch.atomic_numbers, reference.atomic_numbers)
