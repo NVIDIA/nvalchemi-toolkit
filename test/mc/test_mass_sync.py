@@ -16,8 +16,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import torch
 
+from nvalchemi._checkpoint import load_checkpoint, save_checkpoint
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.atomic_data import _default_mass_table
 from nvalchemi.mc import SGC, Kawasaki
@@ -113,3 +116,32 @@ def test_custom_mass_does_not_cross_into_another_graph() -> None:
     assert batch.atomic_numbers.tolist() == [1, 1]
     assert abs(batch.atomic_masses[0].item() - 2.014) < 1e-5
     assert torch.isclose(batch.atomic_masses[1], _default_mass(1, batch.atomic_masses))
+
+
+def test_checkpoint_keeps_the_mass_of_a_species_that_left_the_graph(
+    tmp_path: Path,
+) -> None:
+    """A restart must remember graph 0's deuterium mass after its H is gone."""
+    batch = Batch.from_data_list(
+        [
+            AtomicData(
+                atomic_numbers=torch.tensor([1], dtype=torch.long),
+                positions=torch.zeros(1, 3),
+                atomic_masses=torch.tensor([2.014]),
+            )
+        ]
+    )
+    batch.energy = torch.zeros(1, 1)
+    model = DemoModelWrapper(DemoModel())
+    to_helium = _sgc(model, mu_2=1.0e6)
+    to_helium.run(batch, n_steps=1)
+    assert batch.atomic_numbers.tolist() == [2]
+    save_checkpoint(tmp_path / "mc", {"mc": to_helium})
+
+    to_hydrogen = _sgc(model, mu_2=-1.0e6)
+    load_checkpoint(tmp_path / "mc", {"mc": to_hydrogen})
+    to_hydrogen.run(batch, n_steps=1)
+
+    assert batch.atomic_numbers.tolist() == [1]
+    assert abs(batch.atomic_masses[0].item() - 2.014) < 1e-5
+    assert to_hydrogen.stats.attempted == 2

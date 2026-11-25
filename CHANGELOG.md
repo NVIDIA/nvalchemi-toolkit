@@ -49,8 +49,9 @@
   - Accepted moves update `atomic_masses` to the new species' mass in that
     system (custom per-species masses are kept and never cross between
     systems), so MD after MC integrates with the right mass.
-  - `state_dict` / `load_state_dict` carry the generator state, so a restored
-    run continues the same random sequence.
+  - `state_dict` / `load_state_dict` carry the generator state, the per-system
+    mass lookup and the acceptance counters, so a restored run continues
+    exactly as an uninterrupted one.
   - Samplers compose with MD in a `FusedStage` (`mc + md`), each acting on its
     own graphs within one shared forward pass. A graph leaving MC after a
     rejected trial is re-primed before its first MD update; after an accepted
