@@ -138,8 +138,13 @@ def test_checkpoint_keeps_the_mass_of_a_species_that_left_the_graph(
     assert batch.atomic_numbers.tolist() == [2]
     save_checkpoint(tmp_path / "mc", {"mc": to_helium})
 
+    # Load and re-save before any step: the restored lookup must survive.
+    reloaded = _sgc(model, mu_2=-1.0e6)
+    load_checkpoint(tmp_path / "mc", {"mc": reloaded})
+    save_checkpoint(tmp_path / "mc_again", {"mc": reloaded})
+
     to_hydrogen = _sgc(model, mu_2=-1.0e6)
-    load_checkpoint(tmp_path / "mc", {"mc": to_hydrogen})
+    load_checkpoint(tmp_path / "mc_again", {"mc": to_hydrogen})
     to_hydrogen.run(batch, n_steps=1)
 
     assert batch.atomic_numbers.tolist() == [1]
