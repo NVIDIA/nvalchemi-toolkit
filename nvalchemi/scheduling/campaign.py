@@ -296,9 +296,10 @@ class CampaignSpec:
         :meth:`delta_mu_scan_from_endpoints` instead for the common
         standalone case (fresh, parentless seeds; validate immediately).
 
-        ``start_after`` adds a completion barrier to every step of every
-        branch; use it, e.g., to require an independent calibration or
-        coarse-screen job to finish first.
+        ``start_after`` adds a completion barrier to every run returned, the
+        branch seeds included (keeping their own ``depends_on``); use it, e.g.,
+        to require an independent calibration or coarse-screen job to finish
+        before any part of the scan starts.
         """
         seeds = tuple(branch_seeds)
         ladders = tuple(
@@ -335,7 +336,10 @@ class CampaignSpec:
                 "start_after must not reference the branch seeds themselves"
             )
 
-        runs = list(seeds)
+        runs = [
+            replace(seed, depends_on=tuple(dict.fromkeys((*seed.depends_on, *barrier))))
+            for seed in seeds
+        ]
         for seed, ladder in zip(seeds, ladders):
             parent_id = seed.run_id
             for step_index, mu_value in enumerate(ladder[1:], start=1):

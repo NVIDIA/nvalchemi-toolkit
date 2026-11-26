@@ -210,10 +210,10 @@ out of `energy()` if you set `compile_biases=True`; put validation in a
 `nvalchemi.scheduling` is newer than 0.3.0. It sizes and orders many
 independent runs on one or more GPUs; reuse it before writing a job loop.
 
-- `SimulationBatchPlanner.profile(workload_factory, widths, device)` measures
-  memory and throughput of the real workload; `recommend_width` picks a width
-  and `assign_runs` spreads runs over GPUs in waves. Do not size a batch from
-  a memory estimate alone.
+- `SimulationBatchPlanner.profile(workload_factory, widths, device=device)`
+  measures memory and throughput of the real workload; `recommend_width`
+  picks a width and `assign_runs` spreads runs over GPUs in waves. Do not size
+  a batch from a memory estimate alone.
 - A `CampaignSpec` of `RunSpec` state points (`cooling_from_reference`,
   `delta_mu_scan_runs`) runs through `CampaignScheduler`: it releases ready
   runs in compatible batches, seeds children with `parent_state(run)`, and

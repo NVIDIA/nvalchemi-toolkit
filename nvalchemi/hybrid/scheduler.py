@@ -54,7 +54,12 @@ class HybridMCMD:
 
     ``md_steps=0`` gives MC-only blocks (e.g. rigid-lattice SGC); with an
     ``after_md_block`` hook (e.g. a volume relaxation) the hook still runs
-    between MC blocks on a fresh force/stress evaluation.
+    between MC blocks on a fresh force/stress evaluation. Every MD-side
+    evaluation, the zero-step ones included, runs MD's admission and compute
+    hooks (e.g. the neighbour list from ``model.make_neighbor_hooks()``).
+
+    All work runs on the caller's current CUDA stream, so the returned batch
+    is ready for that stream without further synchronization.
     """
 
     def __init__(
@@ -163,10 +168,30 @@ class HybridMCMD:
         if n_steps > 0:
             self.md.run(batch, n_steps=n_steps)
         else:
-            self.md.compute(batch)
+            self._evaluate_md(batch)
         if self.after_md_block is not None:
             self.after_md_block(batch)
         self.mc.synchronize(batch)
+
+    def _evaluate_md(self, batch: Batch) -> None:
+        """Evaluate MD's outputs once with its full hook lifecycle, taking no step.
+
+        Mirrors the start of ``md.run``: a fresh admission (``ON_ADMISSION``
+        hooks), then ``BEFORE_COMPUTE`` hooks, the model call and
+        ``AFTER_COMPUTE`` hooks, so neighbour lists and other compute-time
+        state exist before the model reads them. ``md.compute`` alone skips
+        every hook.
+        """
+        md = self.md
+        md._open_hooks()
+        try:
+            md._admission_initialized = False
+            md._pending_graph_indices = None
+            md._ensure_state_initialized(batch)
+            md._ensure_admission_initialized(batch)
+            md._prime_forces(batch, md.active_graph_mask(batch, md.exit_status))
+        finally:
+            md._close_hooks()
 
     def run(
         self,
@@ -199,12 +224,13 @@ class HybridMCMD:
         # Without MD steps or a hook nothing changes the geometry between MC
         # blocks, and MC's own accepted energies are already on the batch.
         md_between_blocks = self.md_steps > 0 or self.after_md_block is not None
-        with self.md:
-            self.run_md_block(batch, n_steps=0)
-            for block in range(n_blocks):
-                self.run_mc_block(batch)
-                if md_between_blocks:
-                    self.run_md_block(batch)
-                if on_block is not None and on_block(batch, block):
-                    break
+        # No ``with self.md``: its private CUDA stream would leave the returned
+        # batch unfinished on the caller's stream (``__exit__`` does not wait).
+        self.run_md_block(batch, n_steps=0)
+        for block in range(n_blocks):
+            self.run_mc_block(batch)
+            if md_between_blocks:
+                self.run_md_block(batch)
+            if on_block is not None and on_block(batch, block):
+                break
         return batch

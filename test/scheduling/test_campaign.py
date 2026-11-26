@@ -202,6 +202,28 @@ def test_delta_mu_scan_branches_march_from_their_own_endpoints(tmp_path) -> None
     assert [run.run_id for run in scheduler.ready()] == ["hi", "lo.dmu1.mu0"]
 
 
+def test_delta_mu_scan_start_after_gates_the_seeds_too(tmp_path) -> None:
+    """No part of the scan, seeds included, starts before the barrier run."""
+    calibration = _reference("calibration", 0.0)
+    lo = replace(_reference("lo", -0.2), depends_on=("screen",))
+    screen = _reference("screen", 0.1)
+    scan = CampaignSpec.delta_mu_scan_runs(
+        [lo, _reference("hi", 0.2)],
+        [[-0.2, 0.0], [0.2, 0.0]],
+        species=78,
+        start_after=["calibration"],
+    )
+    by_id = {run.run_id: run for run in scan}
+    assert by_id["lo"].depends_on == ("screen", "calibration")  # own edge kept
+    assert by_id["hi"].depends_on == ("calibration",)
+
+    campaign = CampaignSpec(runs=(calibration, screen, *scan), name="combined")
+    scheduler = CampaignScheduler(campaign, FinalStateStore(tmp_path))
+    assert {run.run_id for run in scheduler.ready()} == {"calibration", "screen"}
+    scheduler.complete("calibration", _state(0.0))
+    assert {run.run_id for run in scheduler.ready()} == {"screen", "hi"}
+
+
 def test_delta_mu_scan_ladder_must_start_at_its_seed() -> None:
     with pytest.raises(ValueError, match="must start at its seed"):
         CampaignSpec.delta_mu_scan_from_endpoints(

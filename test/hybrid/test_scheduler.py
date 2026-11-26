@@ -16,13 +16,20 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
+import pytest
 import torch
+from ase.build import bulk
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.dynamics.demo import DemoDynamics
+from nvalchemi.dynamics.integrators.nve import NVE
 from nvalchemi.hybrid import HybridMCMD
-from nvalchemi.mc import SGC
+from nvalchemi.mc import SGC, NonlocalSwap
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+from nvalchemi.models.lj import LennardJonesModelWrapper
 
 
 def test_scheduler_alternates_sgc_and_md_on_the_same_batch() -> None:
@@ -278,3 +285,73 @@ def test_on_block_sees_every_block_and_can_stop_early() -> None:
 
     assert seen == [0, 1]
     assert mc.step_count == 2
+
+
+def _ar_kr_lattice() -> Batch:
+    """Periodic fcc Ar with every other atom turned to Kr (32 atoms)."""
+    atoms = bulk("Ar", "fcc", a=5.26, cubic=True) * (2, 2, 2)
+    numbers = torch.as_tensor(atoms.get_atomic_numbers())
+    numbers[::2] = 36
+    batch = Batch.from_data_list(
+        [
+            AtomicData(
+                atomic_numbers=numbers,
+                positions=torch.as_tensor(atoms.positions, dtype=torch.float32),
+                cell=torch.as_tensor(atoms.cell.array, dtype=torch.float32)[None],
+                pbc=torch.tensor([[True, True, True]]),
+                velocities=torch.zeros(len(atoms), 3),
+            )
+        ]
+    )
+    batch.forces = torch.zeros(len(atoms), 3)
+    batch.energy = torch.zeros(1, 1)
+    return batch
+
+
+@pytest.mark.parametrize("md_steps", [0, 2])
+def test_neighbor_list_model_runs_from_a_fresh_batch(md_steps: int) -> None:
+    """Zero-step MD evaluations run MD's compute hooks, which build the neighbour list."""
+    model = LennardJonesModelWrapper(epsilon=0.0104, sigma=3.40, cutoff=8.5)
+    md = NVE(model=model, dt=1.0)
+    mc = NonlocalSwap(model=model, temperature=100.0, random_seed=0)
+    for stage in (md, mc):
+        for hook in model.make_neighbor_hooks():
+            stage.register_hook(hook)
+    batch = _ar_kr_lattice()
+
+    HybridMCMD(
+        mc=mc,
+        md=md,
+        mc_steps=2,
+        md_steps=md_steps,
+        after_md_block=(lambda b: None) if md_steps == 0 else None,
+    ).run(batch, n_blocks=2)
+
+    assert torch.isfinite(batch.energy).all()
+    assert torch.isfinite(batch.forces).all()
+
+
+def test_run_stays_on_the_callers_stream() -> None:
+    """run must not enter MD's private-stream context, which never syncs back."""
+    model = DemoModelWrapper(DemoModel())
+    md = DemoDynamics(model=model, n_steps=None, dt=0.01)
+    mc = SGC(
+        model=model,
+        temperature=1000.0,
+        species=[1, 2],
+        chemical_potentials={1: 0.0, 2: 0.1},
+    )
+    batch = Batch.from_data_list(
+        [
+            AtomicData(
+                atomic_numbers=torch.tensor([1, 2], dtype=torch.long),
+                positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+            )
+        ]
+    )
+    batch.forces = torch.zeros(2, 3)
+    batch.energy = torch.zeros(1, 1)
+    with patch.object(
+        BaseDynamics, "__enter__", side_effect=AssertionError("private stream entered")
+    ):
+        HybridMCMD(mc=mc, md=md, mc_steps=1, md_steps=1).run(batch, n_blocks=1)
