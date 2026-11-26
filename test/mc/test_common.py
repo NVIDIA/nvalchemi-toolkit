@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -149,3 +150,23 @@ def test_restart_continues_the_random_sequence(name: str, restore_into: str) -> 
 
     assert torch.equal(batch.atomic_numbers, reference.atomic_numbers)
     assert resumed.stats == uninterrupted.stats
+
+
+@pytest.mark.parametrize("name", list(_SAMPLERS))
+def test_restore_into_the_same_batch_object_re_evaluates_the_baseline(
+    name: str,
+) -> None:
+    """Rolling one batch object back to a checkpoint must not reuse a later energy."""
+    batch = Batch.from_data_list([_chain([1, 2, 1, 2, 1, 2]) for _ in range(3)])
+    batch.energy = torch.zeros(batch.num_graphs, 1)
+    sampler = _SAMPLERS[name](DemoModelWrapper(DemoModel()))
+    sampler.run(batch, n_steps=5)
+    state = sampler.state_dict()
+    sampler.run(batch, n_steps=5)  # the cached baseline now describes step 10
+
+    sampler.load_state_dict(state)
+    with patch.object(
+        sampler, "_initialize_energy", wraps=sampler._initialize_energy
+    ) as baseline:
+        sampler.run(batch, n_steps=1)
+    baseline.assert_called_once()

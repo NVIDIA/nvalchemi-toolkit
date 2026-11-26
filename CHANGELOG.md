@@ -48,7 +48,8 @@
     temperatures, species and chemical potentials are cached on the device.
   - Accepted moves update `atomic_masses` to the new species' mass in that
     system (custom per-species masses are kept and never cross between
-    systems), so MD after MC integrates with the right mass.
+    systems), so MD after MC integrates with the right mass. Their velocities
+    are rescaled by `sqrt(m_old / m_new)`, keeping each atom's kinetic energy.
   - `state_dict` / `load_state_dict` carry the generator state, the per-system
     mass lookup and the acceptance counters, so a restored run continues
     exactly as an uninterrupted one.

@@ -128,7 +128,10 @@ class BaseMonteCarlo(BaseDynamics):
     (so custom masses, e.g. a deuterium mass for H, are kept and move with the
     species, and never cross into another graph); a species absent from a
     graph uses the periodic-table mass. Masses are only touched where the
-    species changed.
+    species changed. Such an atom's velocity is rescaled by
+    :math:`\sqrt{m_\text{old}/m_\text{new}}`, keeping its kinetic energy: a
+    Maxwell-Boltzmann velocity for the old mass becomes one for the new mass,
+    and acceptance on the potential energy alone stays exact.
 
     :meth:`state_dict` includes the proposal/acceptance generator's state, the
     per-graph mass lookup and the acceptance counters, so a run restored with
@@ -311,7 +314,9 @@ class BaseMonteCarlo(BaseDynamics):
         """Restore state produced by :meth:`state_dict`.
 
         Everything the sampler accumulated is replaced, so a sampler that
-        already ran does not keep its advanced generator, masses or counters.
+        already ran does not keep its advanced generator, masses or counters,
+        and the cached acceptance baseline is dropped: the next step
+        re-evaluates it, even on a reused batch object.
         The generator is rebuilt from the restored seed on its next use and set
         to ``generator_state``; the mass lookup is adopted when the sampler
         next sees a batch, which must have the checkpoint's number of graphs.
@@ -322,6 +327,8 @@ class BaseMonteCarlo(BaseDynamics):
             The mapping previously returned by :meth:`state_dict`.
         """
         super().load_state_dict(state)
+        self._energy = None
+        self._energy_batch = None
         generator_state = state.get("generator_state")
         self._generator = None
         self._generator_device = None
@@ -491,10 +498,11 @@ class BaseMonteCarlo(BaseDynamics):
         self._mass_batch = weakref.ref(batch)
 
     def _sync_masses(self, batch: Batch) -> None:
-        """Give every atom whose species changed the mass of its new species.
+        """Give every atom whose species changed its new mass, at fixed kinetic energy.
 
+        Velocities, when present, are rescaled by ``sqrt(m_old / m_new)``.
         Device-only (no host sync): atoms whose type is unchanged keep their
-        mass bit-for-bit.
+        mass and velocity bit-for-bit.
         """
         masses = getattr(batch, "atomic_masses", None)
         if masses is None or self._mass_table is None or self._mass_numbers is None:
@@ -503,8 +511,15 @@ class BaseMonteCarlo(BaseDynamics):
         changed = numbers != self._mass_numbers
         with torch.no_grad():
             flat = masses.reshape(-1)
-            new = self._mass_table[batch.batch_idx.long(), numbers]
-            flat.copy_(torch.where(changed, new, flat))
+            new = torch.where(
+                changed, self._mass_table[batch.batch_idx.long(), numbers], flat
+            )
+            velocities = getattr(batch, "velocities", None)
+            if velocities is not None:
+                # m_old / m_new is exactly 1 for unchanged atoms.
+                scale = torch.sqrt(flat / new).to(velocities.dtype)
+                velocities.mul_(scale.reshape(-1, *([1] * (velocities.ndim - 1))))
+            flat.copy_(new)
         self._mass_numbers.copy_(numbers)
 
     def pre_update(self, batch: Batch) -> None:

@@ -365,8 +365,8 @@ A custom `SpringConfig.resolve(context)` returns one constant per link;
 
 `nvalchemi.mc` is newer than release 0.3.0: check that it exists. Each sampler
 is a `BaseDynamics` engine: one proposal per system per step, all trials in
-one model call. Hooks, `FusedStage` (`mc + md`), and
-`model.make_neighbor_hooks()` work as for MD; masses follow species.
+one model call. Hooks, `FusedStage` (`mc + md`), `make_neighbor_hooks()` work
+as for MD; masses and velocities (at fixed kinetic energy) follow species.
 
 ```python
 from nvalchemi.mc import SGC

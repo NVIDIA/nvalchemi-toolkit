@@ -150,3 +150,52 @@ def test_checkpoint_keeps_the_mass_of_a_species_that_left_the_graph(
     assert batch.atomic_numbers.tolist() == [1]
     assert abs(batch.atomic_masses[0].item() - 2.014) < 1e-5
     assert to_hydrogen.stats.attempted == 2
+
+
+def test_transmutation_rescales_velocity_at_fixed_kinetic_energy() -> None:
+    """H -> He keeps 0.5 m v^2: v scales by sqrt(m_H / m_He)."""
+    batch = _one_atom(1)
+    batch.velocities = torch.tensor([[1.0, -2.0, 0.5]])
+    before_v = batch.velocities.clone()
+    before_m = batch.atomic_masses.clone()
+    _sgc(DemoModelWrapper(DemoModel()), mu_2=1.0e6).run(batch, n_steps=1)
+
+    assert batch.atomic_numbers.tolist() == [2]
+    scale = torch.sqrt(before_m / batch.atomic_masses)
+    torch.testing.assert_close(batch.velocities, before_v * scale[:, None])
+    torch.testing.assert_close(
+        (batch.atomic_masses[:, None] * batch.velocities**2).sum(),
+        (before_m[:, None] * before_v**2).sum(),
+    )
+
+
+def test_rejected_transmutation_leaves_velocity_alone() -> None:
+    batch = _one_atom(1)
+    batch.velocities = torch.tensor([[1.0, -2.0, 0.5]])
+    before = batch.velocities.clone()
+    _sgc(DemoModelWrapper(DemoModel()), mu_2=-1.0e6).run(batch, n_steps=1)
+
+    assert torch.equal(batch.velocities, before)
+
+
+def test_swap_keeps_every_atoms_kinetic_energy() -> None:
+    """An H-He swap rescales both atoms, so each keeps its kinetic energy."""
+    data = AtomicData(
+        atomic_numbers=torch.tensor([1, 2], dtype=torch.long),
+        positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        velocities=torch.tensor([[1.0, 0.0, 0.0], [0.0, 0.5, 0.0]]),
+    )
+    batch = Batch.from_data_list([data])
+    batch.energy = torch.zeros(1, 1)
+    kinetic = (batch.atomic_masses[:, None] * batch.velocities**2).sum(-1)
+    Kawasaki(
+        model=DemoModelWrapper(DemoModel()),
+        temperature=1.0e6,
+        cutoff=2.0,
+        random_seed=7,
+    ).run(batch, n_steps=1)
+
+    assert batch.atomic_numbers.tolist() == [2, 1]
+    torch.testing.assert_close(
+        (batch.atomic_masses[:, None] * batch.velocities**2).sum(-1), kinetic
+    )
