@@ -21,6 +21,22 @@
   dynamics and optimization, training, generative workflows, and composition
   and extension). It replaces the 14 skills under `.claude/skills/`, which are
   removed from the repository.
+- `UMAWrapper.from_checkpoint(moe_layer_type=...)`: unmerged UMA backbones
+  (`merge_mole=False`, as SGC / VC-SGC requires) run their mixture-of-experts
+  layers through the `fairchem_cpp` `segment_mm` extension (fairchem's
+  `moe_layer_type="dgl"`) instead of fairchem's per-system Python loop.
+  `"auto"` (default) uses it for registered `uma-*` checkpoints without
+  compile whenever it is installed and warns otherwise;
+  `NVALCHEMI_UMA_MOE_LAYER_TYPE=dgl` makes a missing extension an error.
+  Merged (`merge_mole=True`) and checkpointed (`activation_checkpointing=True`)
+  settings always use the loop, with a warning when `"dgl"` was asked for:
+  fairchem cannot merge `MOLEDGL` layers, and `segment_mm` fails past the first
+  131,072-edge checkpointing chunk (~2,300 bulk atoms).
+  A100, 500 atoms: SGC-NPT hybrid 1.28x faster per block for one walker and
+  1.53x for four, ~15% more GPU memory. `UMAWrapper.moe_layer_type` and
+  `mole_layer_counts` report the layers built. Availability is read from
+  `fairchem...nn.mole.fairchem_cpp_found` (a real import): the same-named flag in
+  `mole_utils` is unconditionally True in fairchem 2.22-2.24.
 
 ### Changed
 
@@ -32,6 +48,23 @@
 - Add documentation, repository, issues, and changelog links to the package
   metadata (`[project.urls]`), and mention the agent skill on the documentation
   landing page.
+- **`UMAWrapper` computes only the derivatives `active_outputs` asks for.**
+  `model_config.active_outputs = {"energy"}` switches off fairchem's
+  forces/stress autograd for that call instead of computing and discarding them;
+  `{"energy", "forces"}` also skips the strain derivative. The predict unit is
+  restored after every call, so a `FAIRChemCalculator` or another wrapper
+  sharing it is unaffected. Checkpoints with direct forces or stress, or an
+  unrecognised fairchem layout, keep computing everything with a one-time
+  `UserWarning`. Measured on an A100 for energy-only Monte Carlo on Au-Pt: 2.1x
+  per step for site swaps under `turbo`, ~1.4x for transmutations.
+- **`UMAWrapper.from_checkpoint` accepts a `key=value` settings spec**, e.g.
+  `"compile=false,merge_mole=false,tf32=true,activation_checkpointing=false"`,
+  besides preset names and `InferenceSettings` instances. Values are converted
+  to each field's type; unknown fields and values that do not fit raise
+  `ValueError`. Such a spec can express combinations no preset covers, e.g.
+  eager, unmerged inference with TF32 and no activation checkpointing for
+  composition-changing Monte Carlo: 2.75x faster per step than the `"batch"`
+  preset (with energy-only evaluation) and the same sampled chain.
 
 ### Breaking Changes
 
@@ -726,6 +759,25 @@
   lattice vector `i` instead of Cartesian axis `i`. With mixed `pbc` on a
   triclinic cell, atoms moved by a vector that was not a lattice translation.
   A `pbc` that does not have 3 flags per graph now raises a `ValueError`.
+- **`UMAWrapper` folds positions into the periodic cell before every
+  evaluation.** It passed raw positions to fairchem, whose periodic graph
+  builder scans only image offsets of +-ceil(cutoff x inverse plane spacing)
+  around the positions it is given and so relies on wrapped input (fairchem's
+  own `AtomicData.from_ase` wraps first). NPT does not fold coordinates back, so
+  in long MD runs without `WrapPeriodicHook` atoms that drifted about a cell
+  length apart in unwrapped coordinates lost their minimum-image pair: UMA
+  silently dropped those interactions and atoms could collapse onto each other
+  (seen in Au-Pt hybrid MC-MD NPT runs at 1200-1400 K, where every collapsed
+  pair needed an image offset beyond +-1). `adapt_input` now shifts each atom by
+  whole lattice vectors along its system's periodic directions, on a copy handed
+  to fairchem only: `data.positions` keeps its continuous coordinates,
+  non-periodic (vacuum) directions are left alone, and gradients pass through
+  unchanged. The shift follows a strained cell, so autograd stress (e.g. in a
+  `PipelineGroup` with `use_autograd=True`) is unaffected. Energies, forces
+  and stress are unchanged for correctly wrapped inputs. Zero vectors of a
+  supplied cell (1D and 2D systems) are first completed with orthonormal unit
+  vectors, as fairchem's own `from_ase` does, so such systems fold along their
+  periodic axes and fairchem gets a non-zero cell volume.
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the
   `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
   `AFTER_POST_UPDATE` boundaries, and sub-stage `BEFORE_COMPUTE` hooks now

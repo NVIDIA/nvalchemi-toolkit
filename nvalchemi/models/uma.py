@@ -87,14 +87,43 @@ through :meth:`from_checkpoint`'s ``inference_settings`` argument:
               execution_mode="general",
           ),
       )
+
+Mixture-of-linear-experts (MoLE) layers
+---------------------------------------
+UMA mixes per-system expert weights in its SO(2) convolutions. With
+``merge_mole=False`` (required whenever composition changes, e.g. SGC Monte
+Carlo, or when systems of different composition share a batch) fairchem runs
+those layers either as a pure-PyTorch loop over systems (``MOLE``) or through
+the ``fairchem_cpp`` ``segment_mm`` CUDA extension (``MOLEDGL``, fairchem's
+``moe_layer_type="dgl"``). :meth:`UMAWrapper.from_checkpoint` selects the
+extension automatically when it is installed (``moe_layer_type="auto"``),
+except with ``merge_mole=True`` or ``activation_checkpointing=True``, where
+fairchem's ``MOLEDGL`` does not work and the loop is always used; on
+an A100 it made 500-atom energy calls 1.6-2.0x faster and an SGC-NPT hybrid
+1.3x (one walker) to 1.5x (four walkers) faster, for ~15% more GPU memory.
+``fairchem_cpp`` is not on PyPI; see the user guide's UMA section for the
+build.
 """
 
 from __future__ import annotations
 
 import contextlib
 import copy
+import os
+import warnings
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, get_args
+from types import UnionType
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 import torch
 from torch import nn
@@ -122,13 +151,343 @@ if TYPE_CHECKING:
     from fairchem.core.units.mlip_unit import MLIPPredictUnit
     from fairchem.core.units.mlip_unit.api.inference import InferenceSettings
 
-__all__ = ["UMATask", "UMAWrapper"]
+__all__ = ["MoLELayerType", "UMATask", "UMAWrapper"]
 
 
 # UMA task heads. The ``Literal`` is the single source of truth for valid task
 # names; the membership set is derived from it.
 UMATask = Literal["omol", "omat", "oc20", "odac", "omc"]
+#: MoLE layer implementation of an unmerged UMA backbone (see
+#: ``UMAWrapper.from_checkpoint``): fairchem's ``"pytorch"`` loop or the
+#: ``fairchem_cpp`` segment_mm extension, which fairchem names ``"dgl"``.
+MoLELayerType = Literal["auto", "pytorch", "dgl"]
 _UMA_TASKS: frozenset[str] = frozenset(get_args(UMATask))
+
+_FAIRCHEM_CPP_BUILD_HINT = (
+    "fairchem_cpp is not on PyPI: build it from the fairchem_cpp branch of "
+    "facebookresearch/fairchem (src/fairchem/fairchem_cpp, `pip install "
+    "--no-build-isolation -e .` on a GPU node with nvcc matching torch's CUDA). "
+    "`uv sync` removes it, so rebuild after every sync."
+)
+
+
+def _fairchem_cpp_available() -> bool:
+    """Whether ``fairchem_cpp`` imported where fairchem's ``MOLEDGL`` will call it.
+
+    Reads ``fairchem.core.models.uma.nn.mole.fairchem_cpp_found``, set by a real
+    ``import fairchem_cpp``. The same-named flag in ``mole_utils`` is set to True
+    without importing anything (fairchem 2.22-2.24), so it is True everywhere
+    and fairchem's own "dgl" guard never fires.
+    """
+    try:
+        from fairchem.core.models.uma.nn import mole  # noqa: PLC0415
+    except ImportError:
+        return False
+    return bool(getattr(mole, "fairchem_cpp_found", False))
+
+
+def _merge_compile_checkpointing(
+    settings: Any,
+) -> tuple[bool | None, bool | None, bool | None]:
+    """``(merge_mole, compile, activation_checkpointing)`` of resolved inference
+    settings; ``None`` where unknown."""
+    if isinstance(settings, str):
+        try:
+            from fairchem.core.units.mlip_unit.api import (  # noqa: PLC0415
+                inference,
+            )
+        except ImportError:
+            return None, None, None
+        # Preset name -> fairchem's inference_settings_<name>() factory.
+        factory = getattr(inference, f"inference_settings_{settings}", None)
+        if factory is None:
+            return None, None, None
+        settings = factory()
+    return (
+        getattr(settings, "merge_mole", None),
+        getattr(settings, "compile", None),
+        getattr(settings, "activation_checkpointing", None),
+    )
+
+
+def _resolve_moe_layer_type(
+    requested: str, inference_settings: Any, is_uma_name: bool
+) -> str:
+    """Pick fairchem's ``moe_layer_type`` (``"pytorch"`` or ``"dgl"``) for one load.
+
+    ``"auto"`` defers to ``NVALCHEMI_UMA_MOE_LAYER_TYPE`` (default ``"auto"``)
+    and then applies ``"dgl"`` only where it is known to work: a registered
+    ``uma-*`` checkpoint, ``merge_mole=False``, ``compile=False``,
+    ``activation_checkpointing=False``. Merged and checkpointed settings use the
+    loop even when ``"dgl"`` is requested explicitly (with a warning): fairchem's
+    merge step reads ``MOLE.merged_linear_layer``, which ``MOLEDGL`` lacks, and
+    checkpointing splits the edges into 131,072-edge chunks, past the first of
+    which ``MOLEDGL``'s ``segment_mm`` raises "Segment index out of bound"
+    (fairchem 2.22). Inside that
+    scope a missing ``fairchem_cpp`` is a warning under ``"auto"`` and an error
+    when ``"dgl"`` was asked for (argument or environment variable), so a
+    production job that requires the extension cannot silently run slower.
+
+    Raises
+    ------
+    ValueError
+        On a value outside :data:`MoLELayerType`.
+    ImportError
+        When ``"dgl"`` is required but ``fairchem_cpp`` is not importable.
+    """
+    choices = get_args(MoLELayerType)
+    if requested not in choices:
+        raise ValueError(f"moe_layer_type {requested!r} must be one of {choices}")
+    scoped = requested == "auto"
+    mode = requested
+    if scoped:
+        mode = os.environ.get("NVALCHEMI_UMA_MOE_LAYER_TYPE", "auto").strip().lower()
+        if mode not in choices:
+            raise ValueError(
+                f"NVALCHEMI_UMA_MOE_LAYER_TYPE={mode!r} must be one of {choices}"
+            )
+    if mode == "pytorch":
+        return "pytorch"
+    merge_mole, compile_on, checkpointing = _merge_compile_checkpointing(
+        inference_settings
+    )
+    if merge_mole:
+        # Merging folds the experts into plain linears: no MoLE layer runs, and
+        # fairchem's merge step cannot fold MOLEDGL (no merged_linear_layer).
+        if not scoped:
+            warnings.warn(
+                "moe_layer_type='dgl' has no effect with merge_mole=True "
+                "(fairchem cannot merge MOLEDGL layers): using the pytorch loop",
+                UserWarning,
+                stacklevel=3,
+            )
+        return "pytorch"
+    if checkpointing:
+        # Activation checkpointing chunks the edges (131,072 per chunk); MOLEDGL
+        # fails on every chunk after the first, i.e. on any large system.
+        if not scoped:
+            warnings.warn(
+                "moe_layer_type='dgl' is not supported with activation_checkpointing=True "
+                "(fairchem_cpp segment_mm fails past the first 131,072-edge chunk): "
+                "using the pytorch loop",
+                UserWarning,
+                stacklevel=3,
+            )
+        return "pytorch"
+    if scoped and (merge_mole is None or compile_on or not is_uma_name):
+        return "pytorch"
+    if not _fairchem_cpp_available():
+        if mode == "dgl":
+            raise ImportError(
+                f"moe_layer_type 'dgl' requires fairchem_cpp. {_FAIRCHEM_CPP_BUILD_HINT}"
+            )
+        warnings.warn(
+            "fairchem_cpp not found: unmerged UMA MoLE layers use fairchem's "
+            "pure-PyTorch loop (~1.3-2x slower MC-MD on GPU). "
+            + _FAIRCHEM_CPP_BUILD_HINT,
+            UserWarning,
+            stacklevel=3,
+        )
+        return "pytorch"
+    if compile_on:
+        warnings.warn(
+            "moe_layer_type='dgl' with compile=True is untested: fairchem_cpp "
+            "registers segment_mm without a fake-tensor kernel, so dynamo may "
+            "graph-break at every MoLE layer",
+            UserWarning,
+            stacklevel=3,
+        )
+    return "dgl"
+
+
+def _mole_layer_counts(predict_unit: Any) -> dict[str, int]:
+    """Count fairchem MoLE layers by class (``MOLE`` / ``MOLEDGL``) in a predict unit."""
+    model = getattr(predict_unit, "model", None)
+    if not isinstance(model, nn.Module):
+        return {}
+    counts: dict[str, int] = {}
+    for module in model.modules():
+        name = type(module).__name__
+        if name in ("MOLE", "MOLEDGL"):
+            counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+# Autograd-derived fairchem task properties that UMAWrapper can skip when
+# ``active_outputs`` does not ask for them (see ``_gated_derivatives``).
+_DERIVATIVE_PROPERTIES: frozenset[str] = frozenset({"forces", "stress", "hessian"})
+
+
+def _resolve_inference_settings(settings: Any) -> Any:
+    """Turn a ``key=value`` spec into ``InferenceSettings``; pass anything else through.
+
+    ``"compile=false,merge_mole=false,tf32=true"`` builds
+    ``InferenceSettings(compile=False, merge_mole=False, tf32=True)``, so one
+    string can name any combination -- the fairchem presets (``"default"``,
+    ``"turbo"``, ``"batch"``) cannot express, e.g., eager unmerged inference with TF32.
+    Preset names and ``InferenceSettings`` instances are returned unchanged.
+
+    Each value is converted to its field's declared type (``bool``, ``int``,
+    ``float``, ``str``, ``None`` where optional, or a ``torch.dtype`` name such
+    as ``float64``).
+
+    Raises
+    ------
+    ValueError
+        On an item that is not ``key=value``, a field ``InferenceSettings``
+        does not have (a typo must not be silently dropped), or a value that
+        does not fit the field's type (e.g. ``compile=1`` or a set-valued
+        field, which must be given through ``InferenceSettings`` directly).
+    """
+    if not isinstance(settings, str) or "=" not in settings:
+        return settings
+    from fairchem.core.units.mlip_unit.api.inference import (  # noqa: PLC0415
+        InferenceSettings,
+    )
+
+    hints = get_type_hints(InferenceSettings)
+    fields: dict[str, Any] = {}
+    for item in settings.split(","):
+        if not item.strip():
+            continue
+        key, separator, raw = item.partition("=")
+        key, raw = key.strip(), raw.strip()
+        if not separator or key not in hints:
+            raise ValueError(
+                f"inference_settings item {item.strip()!r} is not key=value with a field of "
+                f"InferenceSettings ({sorted(hints)})"
+            )
+        fields[key] = _coerce_setting(key, raw, hints[key])
+    return InferenceSettings(**fields)
+
+
+def _coerce_setting(key: str, raw: str, hint: Any) -> Any:
+    """Convert the string *raw* to the type *hint* of ``InferenceSettings.<key>``."""
+    kinds = get_args(hint) if get_origin(hint) in (Union, UnionType) else (hint,)
+    lowered = raw.lower()
+    if lowered in {"none", "null"} and type(None) in kinds:
+        return None
+    if bool in kinds and lowered in {"true", "false"}:
+        return lowered == "true"
+    for kind in (int, float):
+        if kind in kinds:
+            with contextlib.suppress(ValueError):
+                return kind(raw)
+    if torch.dtype in kinds:  # a string here can only name a dtype
+        if isinstance(dtype := getattr(torch, raw, None), torch.dtype):
+            return dtype
+    elif str in kinds:
+        return raw
+    raise ValueError(f"inference_settings {key}={raw!r} does not fit its type {hint}")
+
+
+@dataclass(frozen=True)
+class _DerivativeTables:
+    """As-loaded snapshot of what fairchem needs changed to skip derivatives.
+
+    UMA's ``MLP_EFS_Head`` computes forces (and, with ``regress_config.stress``,
+    stress alongside them) by autograd through the energy, gated by
+    ``regress_config``. fairchem's post-processing then indexes the model output
+    by every entry of two task tables -- ``_tasks`` in ``_process_outputs`` and
+    ``_dataset_to_tasks`` in the ``collate_predictions`` wrapper around
+    ``predict`` -- so both must list exactly the properties the head produces.
+    """
+
+    tasks: dict[str, Any]
+    dataset_to_tasks: dict[str, list[Any]]
+    forces: bool
+    stress: bool
+
+
+def _complete_cell(cell: torch.Tensor) -> torch.Tensor:
+    """Replace zero lattice vectors by unit vectors orthogonal to the others.
+
+    Batched, sync-free counterpart of ``ase.geometry.complete_cell`` (what
+    fairchem's ``AtomicData.from_ase`` feeds its graph builder via
+    ``get_cell(complete=True)``): a 2D slab with a zero out-of-plane vector gets
+    the unit normal, a 1D wire with one vector ``a`` gets two unit vectors
+    spanning the plane orthogonal to ``a``, and an all-zero cell becomes the
+    identity. The completed cell is right-handed wherever vectors were added
+    and is returned unchanged for systems with no zero vector.
+
+    Parameters
+    ----------
+    cell : torch.Tensor
+        Row-vector lattice ``[B, 3, 3]``.
+
+    Returns
+    -------
+    torch.Tensor
+        Completed lattice ``[B, 3, 3]``.
+    """
+
+    def unit(v: torch.Tensor) -> torch.Tensor:
+        return v / v.norm(dim=-1, keepdim=True).clamp_min(torch.finfo(v.dtype).tiny)
+
+    def cyclic_normals(c: torch.Tensor) -> torch.Tensor:
+        # Row i is unit(c[i+1] x c[i+2]), i.e. right-handed with the other two.
+        return unit(torch.linalg.cross(c.roll(-1, dims=1), c.roll(-2, dims=1)))
+
+    missing = ~cell.any(dim=-1, keepdim=True)  # [B, 3, 1]
+    n_missing = missing.sum(dim=1, keepdim=True)  # [B, 1, 1]
+    eye = torch.eye(3, dtype=cell.dtype, device=cell.device).expand_as(cell)
+    cell = torch.where(n_missing == 3, eye, cell)
+    # 1D: put a unit vector orthogonal to the lone vector ``a`` in the first
+    # empty slot (crossing ``a`` with its least-aligned axis), leaving one gap.
+    a = cell.sum(dim=1)
+    axis = torch.nn.functional.one_hot(a.abs().argmin(dim=-1), 3).to(cell.dtype)
+    first_gap = missing & (missing.cumsum(dim=1) == 1) & (n_missing == 2)
+    cell = torch.where(first_gap, unit(torch.linalg.cross(a, axis))[:, None], cell)
+    # 1D (second gap) and 2D: the unit normal of the other two vectors.
+    return torch.where(~cell.any(dim=-1, keepdim=True), cyclic_normals(cell), cell)
+
+
+def _fold_into_cell(
+    pos: torch.Tensor,
+    cell: torch.Tensor,
+    pbc: torch.Tensor,
+    batch_idx: torch.Tensor,
+) -> torch.Tensor:
+    """Return *pos* translated by whole lattice vectors into its periodic cell.
+
+    Each atom is moved by the integer lattice shift that brings its fractional
+    coordinate into ``[0, 1)`` along every periodic direction of its system
+    (a coordinate of exactly 1.0 maps to 0.0); non-periodic directions are left
+    untouched. Only the integer image counts are detached; the shift is applied
+    through *cell*, so a strained cell (autograd stress) moves folded atoms
+    with the lattice. Gradients through *pos* pass unchanged and *pos* itself
+    is not modified.
+    Batched, sync-free and free of data-dependent control flow, so it traces
+    under ``torch.compile``. Systems whose cell is singular (e.g. a zero
+    placeholder cell) get no shift.
+
+    Parameters
+    ----------
+    pos : torch.Tensor
+        Cartesian positions ``[N, 3]``.
+    cell : torch.Tensor
+        Row-vector lattice ``[B, 3, 3]`` (``[B, 1, 3, 3]`` is accepted).
+    pbc : torch.Tensor
+        Per-system periodic flags ``[B, 3]`` (``[B, 1, 3]`` is accepted).
+    batch_idx : torch.Tensor
+        System index of every atom ``[N]``.
+
+    Returns
+    -------
+    torch.Tensor
+        Folded positions ``[N, 3]`` in ``pos.dtype``.
+    """
+    cell = cell.reshape(-1, 3, 3).to(pos.dtype)
+    pbc = pbc.reshape(-1, 3).to(torch.bool)
+    with torch.no_grad():
+        # inv_ex never raises (no host sync); a singular cell yields non-finite
+        # entries, which the ``isfinite`` mask below turns into a zero shift.
+        inv_cell, _ = torch.linalg.inv_ex(cell)
+        frac = torch.einsum("ni,nij->nj", pos.detach(), inv_cell[batch_idx])
+        n_images = torch.floor(frac)
+        keep = pbc[batch_idx] & torch.isfinite(n_images).all(dim=-1, keepdim=True)
+        n_images = torch.where(keep, n_images, torch.zeros_like(n_images))
+    return pos - torch.einsum("ni,nij->nj", n_images, cell[batch_idx])
 
 
 # Fixed-shape caps for compiled MD. fairchem's compiled graph needs static
@@ -939,7 +1298,13 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         self.predict_unit = predict_unit
         self.task_name = task_name
+        # MoLE layers as built, before any lazy merge_mole fold on first call.
+        self.mole_layer_counts = _mole_layer_counts(predict_unit)
         self._cutoff = self._extract_cutoff()
+        # Snapshot before anything prunes the tables: fairchem builds them in
+        # MLIPPredictUnit.__init__, so this is the full as-loaded set.
+        self._derivative_tables = self._snapshot_derivative_tables()
+        self._warned_ungated = False
 
         outputs = frozenset({"energy", "forces", "stress"})
 
@@ -984,6 +1349,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         inference_settings: "InferenceSettings | str" = "default",
         overrides: dict | None = None,
         train: bool = False,
+        moe_layer_type: MoLELayerType = "auto",
     ) -> "UMAWrapper":
         """Resolve and load a UMA checkpoint.
 
@@ -1006,8 +1372,11 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         device : str | torch.device
             Target device for inference. Defaults to ``"cpu"``.
         inference_settings : InferenceSettings | str
-            fairchem inference configuration. Either a preset name
-            (``"default"``, ``"batch"``, or ``"turbo"``) or a
+            fairchem inference configuration: a preset name (``"default"``,
+            ``"batch"``, or ``"turbo"``), a comma-separated ``key=value`` spec of
+            ``InferenceSettings`` fields (e.g.
+            ``"compile=false,merge_mole=false,tf32=true,activation_checkpointing=false"``,
+            for composition-changing Monte Carlo), or a
             ``fairchem.core.units.mlip_unit.api.inference.InferenceSettings``
             instance. ``torch.compile`` is reached through this argument
             — see the module docstring's *torch.compile* section.
@@ -1025,6 +1394,26 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             ``forward`` path goes through fairchem's inference ``predict``
             (eval mode, detached forces); gradient-based training requires a
             separate path through the raw model.
+        moe_layer_type : {"auto", "pytorch", "dgl"}
+            Implementation of the backbone's mixture-of-linear-experts layers
+            when they stay unmerged (``merge_mole=False``). ``"dgl"`` is
+            fairchem's name for the ``fairchem_cpp`` ``segment_mm`` CUDA
+            extension; ``"pytorch"`` is fairchem's per-system Python loop.
+            ``"auto"`` (default) reads ``NVALCHEMI_UMA_MOE_LAYER_TYPE`` (unset =
+            ``"auto"``) and uses ``"dgl"`` for registered ``uma-*`` checkpoints
+            with ``merge_mole=False`` and ``compile=False`` when ``fairchem_cpp``
+            is installed, warning and falling back to ``"pytorch"`` when it is
+            not; ``NVALCHEMI_UMA_MOE_LAYER_TYPE=dgl`` turns that fallback into
+            an error. An explicit ``"dgl"`` applies to any unmerged checkpoint
+            and raises without ``fairchem_cpp``. Ignored with
+            ``merge_mole=True``, which removes the MoLE layers. Note that
+            fairchem's per-dataset output head always uses ``"pytorch"``
+            (3 small layers on uma-s-1p2). The resolved choice is
+            :attr:`moe_layer_type` on the returned wrapper. A
+            ``backbone.moe_layer_type`` in ``overrides`` counts as an explicit
+            request: it must agree with an explicit ``moe_layer_type``, goes
+            through the same checks, and is replaced in the (copied) overrides
+            by the resolved value.
 
         Returns
         -------
@@ -1035,7 +1424,12 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         ------
         ValueError
             If ``name_or_path`` is neither a registered model name nor a local
-            file path.
+            file path, or ``moe_layer_type`` conflicts with ``overrides``.
+        ImportError
+            If ``"dgl"`` is required but ``fairchem_cpp`` is not importable.
+        RuntimeError
+            If ``"dgl"`` was resolved but the loaded model has no ``MOLEDGL``
+            layer (the override did not reach the backbone).
         """
         import os as _os
 
@@ -1059,8 +1453,32 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         if isinstance(device, torch.device):
             device = device.type
+        inference_settings = _resolve_inference_settings(inference_settings)
 
         name_str = str(name_or_path)
+        user_moe = ((overrides or {}).get("backbone") or {}).get("moe_layer_type")
+        if user_moe is not None and moe_layer_type not in ("auto", user_moe):
+            raise ValueError(
+                f"moe_layer_type={moe_layer_type!r} conflicts with "
+                f"overrides['backbone']['moe_layer_type']={user_moe!r}"
+            )
+        # An override is an explicit request and gets the same safety checks
+        # (merge_mole, activation checkpointing, a missing fairchem_cpp).
+        resolved_moe = _resolve_moe_layer_type(
+            moe_layer_type if user_moe is None else str(user_moe),
+            inference_settings,
+            is_uma_name=name_str in pretrained_mlip.available_models
+            and name_str.startswith("uma"),
+        )
+        if resolved_moe == "dgl" or user_moe is not None:
+            # Copy, never mutate the caller's dict; fairchem merges these
+            # keys into the checkpoint's backbone config.
+            overrides = dict(overrides or {})
+            overrides["backbone"] = {
+                **(overrides.get("backbone") or {}),
+                "moe_layer_type": resolved_moe,
+            }
+
         if name_str in pretrained_mlip.available_models:
             predict_unit = pretrained_mlip.get_predict_unit(
                 name_str,
@@ -1081,7 +1499,13 @@ class UMAWrapper(nn.Module, BaseModelMixin):
                 f"local file path. Known names: "
                 f"{sorted(pretrained_mlip.available_models)}"
             )
-        return cls(predict_unit, task_name=task_name, train=train)
+        wrapper = cls(predict_unit, task_name=task_name, train=train)
+        if resolved_moe == "dgl" and "MOLEDGL" not in wrapper.mole_layer_counts:
+            raise RuntimeError(
+                "moe_layer_type 'dgl' was requested but the loaded model has no "
+                f"MOLEDGL layer (MoLE layers: {wrapper.mole_layer_counts})"
+            )
+        return wrapper
 
     def _extract_cutoff(self) -> float:
         """Pull the radial cutoff from the loaded backbone.
@@ -1108,6 +1532,21 @@ class UMAWrapper(nn.Module, BaseModelMixin):
     def cutoff(self) -> float:
         """Radial cutoff (Å) for neighbor-list construction."""
         return self._cutoff
+
+    @property
+    def moe_layer_type(self) -> str | None:
+        """MoLE implementation the backbone was built with.
+
+        ``"dgl"`` (``fairchem_cpp`` segment_mm) if any ``MOLEDGL`` layer was
+        built, ``"pytorch"`` if only fairchem's ``MOLE`` loop, ``None`` for a
+        checkpoint without MoLE layers. Read from the layers at construction;
+        with ``merge_mole=True`` fairchem folds them into plain linears on the
+        first call, so this then names the layers that were merged, not ones
+        that run.
+        """
+        if "MOLEDGL" in self.mole_layer_counts:
+            return "dgl"
+        return "pytorch" if self.mole_layer_counts else None
 
     def distribution_spec(self, strategy: Any = None) -> Any:
         """MLIPSpec for UMA under domain decomposition.
@@ -1382,10 +1821,13 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         rebuilds the graph internally, matching the default ``FAIRChemCalculator``
         path (``r_edges=False``). For OMol, missing cell and PBC mean a
         nonperiodic molecule; when a cell is supplied without PBC, PBC defaults
-        to periodic. Other tasks default missing PBC to periodic. Charge/spin
-        default per the ASE-calculator convention (per-system LongTensors; OMol
-        spin defaults to the closed-shell singlet, while other tasks default to
-        0) unless provided on the batch.
+        to periodic. Other tasks default missing PBC to periodic. As in
+        ``FAIRChemCalculator``, zero vectors of a supplied cell are completed
+        with unit vectors (so 1D and 2D systems have a valid cell) and positions are
+        folded into the cell along periodic directions; ``data.positions`` is
+        not modified. Charge/spin default per the ASE-calculator convention
+        (per-system LongTensors; OMol spin defaults to the closed-shell singlet,
+        while other tasks default to 0) unless provided on the batch.
 
         Parameters
         ----------
@@ -1429,7 +1871,9 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         if cell is None:
             cell = torch.zeros(n_systems, 3, 3, dtype=target_dtype, device=device)
         else:
-            cell = cell.to(target_dtype)
+            # Zero lattice vectors (1D/2D slabs) make the cell singular; complete
+            # them as fairchem's ``from_ase`` does.
+            cell = _complete_cell(cell.to(target_dtype).reshape(n_systems, 3, 3))
 
         pbc = getattr(data, "pbc", None)
         if pbc is None:
@@ -1439,6 +1883,11 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             )
         else:
             pbc = pbc.to(torch.bool)
+
+        # fairchem's graph builder scans only nearby images, so it needs wrapped
+        # positions; MD keeps them continuous. Fold a copy; ``data`` is untouched.
+        if has_cell:
+            pos = _fold_into_cell(pos, cell, pbc, batch_idx)
 
         # charge/spin: the typed AtomicData fields are float (B, 1); fairchem
         # wants per-system long (B,), so flatten + cast (also handles raw (B,)).
@@ -1530,12 +1979,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             out["energy"] = energy
         if "forces" in active:
             out["forces"] = raw["forces"]
-        cellless_omol = (
-            self.task_name == "omol"
-            and data is not None
-            and getattr(data, "cell", None) is None
-        )
-        if "stress" in active and "stress" in raw and not cellless_omol:
+        if "stress" in active and "stress" in raw and not self._cellless_omol(data):
             stress = raw["stress"]
             if stress.dim() == 2 and stress.shape[-1] == 9:
                 # fairchem sometimes flattens stress; reshape to (n, 3, 3).
@@ -1545,6 +1989,157 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         return out
 
     # ------------------------------------------------------------------
+    # derivative gating
+    # ------------------------------------------------------------------
+
+    def _fairchem_model(self) -> Any:
+        """Return fairchem's inner hydra model (the ``.module`` of the unit's model)."""
+        return getattr(getattr(self.predict_unit, "model", None), "module", None)
+
+    def _regress_configs(self) -> list[Any]:
+        """Return every live ``regress_config`` object the heads read.
+
+        Each head keeps its own reference, and a MoLE merge on the first call can
+        swap in a new backbone, so flags are set on all of them, not one captured
+        at construction.
+        """
+        inner = self._fairchem_model()
+        candidates = [getattr(getattr(inner, "backbone", None), "regress_config", None)]
+        heads = getattr(inner, "output_heads", None)
+        if heads is not None:
+            candidates += [
+                getattr(head, "regress_config", None) for head in heads.values()
+            ]
+        unique: dict[int, Any] = {}
+        for config in candidates:
+            if config is not None:
+                unique.setdefault(id(config), config)
+        return list(unique.values())
+
+    def _snapshot_derivative_tables(self) -> _DerivativeTables | None:
+        """Capture the as-loaded task tables, or ``None`` if gating is unsupported.
+
+        Unsupported means the fairchem layout is not the one gating was written
+        against, or the checkpoint predicts forces or stress directly (a separate
+        head ``regress_config`` does not switch off); the wrapper then computes
+        every derivative and filters on output, as before gating existed.
+
+        Gating is undone after every call (see ``_gated_derivatives``), so the
+        unit is always as-loaded when another wrapper takes its snapshot.
+        """
+        inner = self._fairchem_model()
+        tasks = getattr(inner, "_tasks", None)
+        dataset_to_tasks = getattr(inner, "_dataset_to_tasks", None)
+        configs = self._regress_configs()
+        if (
+            not configs
+            or not isinstance(tasks, dict)
+            or not isinstance(dataset_to_tasks, dict)
+        ):
+            return None
+        if any(
+            getattr(config, "direct_forces", False)
+            or getattr(config, "direct_stress", False)
+            for config in configs
+        ):
+            return None
+        return _DerivativeTables(
+            tasks=dict(tasks),
+            dataset_to_tasks={
+                name: list(task_list) for name, task_list in dataset_to_tasks.items()
+            },
+            forces=any(bool(getattr(config, "forces", False)) for config in configs),
+            stress=any(bool(getattr(config, "stress", False)) for config in configs),
+        )
+
+    def _cellless_omol(self, data: AtomicData | Batch | None) -> bool:
+        """Whether *data* is an OMol molecule without a cell (no stress is returned)."""
+        return (
+            self.task_name == "omol"
+            and data is not None
+            and getattr(data, "cell", None) is None
+        )
+
+    @contextlib.contextmanager
+    def _gated_derivatives(
+        self, data: AtomicData | Batch | None = None
+    ) -> Iterator[None]:
+        """Compute only the derivatives ``active_outputs`` asks for, for one call.
+
+        Dropping forces and stress removes the autograd backward pass entirely --
+        what a Monte Carlo step, which only reads energies, would otherwise pay
+        and discard. Stress is derived together with forces, so asking for
+        stress keeps forces on. The predict unit is restored to its as-loaded
+        derivatives on exit, so anything else sharing it (another wrapper, a
+        ``FAIRChemCalculator``) is unaffected. Gating and restoring only set
+        flags and rebuild two small tables, negligible next to the forward pass;
+        under ``torch.compile`` the graph sees the same gated flags every call,
+        so restoring between calls does not recompile.
+        """
+        tables = self._derivative_tables
+        active = self.model_config.active_outputs
+        if tables is None:
+            producible = {"forces", "stress"} & set(self.model_config.outputs)
+            if self._cellless_omol(data):
+                producible.discard("stress")
+            if producible - set(active) and not self._warned_ungated:
+                warnings.warn(
+                    "UMAWrapper cannot skip forces/stress for this predict unit (unrecognized "
+                    "fairchem layout or direct-force checkpoint); they are computed and discarded.",
+                    UserWarning,
+                    stacklevel=4,
+                )
+                self._warned_ungated = True
+            yield
+            return
+        want_stress = tables.stress and "stress" in active
+        want_forces = tables.forces and ("forces" in active or want_stress)
+        if (want_forces, want_stress) == (tables.forces, tables.stress):
+            yield
+            return
+        self._apply_derivatives(tables, want_forces, want_stress)
+        try:
+            yield
+        finally:
+            self._apply_derivatives(tables, tables.forces, tables.stress)
+
+    def _apply_derivatives(
+        self, tables: _DerivativeTables, forces: bool, stress: bool
+    ) -> None:
+        """Set every head's derivative flags and rebuild the task tables to match.
+
+        Applied to the live model each time, since fairchem can swap model
+        internals mid-run (2.22's merge_mole fallback rebuilds an unmerged
+        model after the first composition change).
+        """
+        configs = self._regress_configs()
+        for config in configs:
+            config.forces = forces
+            config.stress = stress
+        produced = {"forces"} if forces else set()
+        if stress:
+            produced.add("stress")
+        if any(getattr(config, "hessian", False) for config in configs):
+            produced.add("hessian")  # hessians are not gated; keep their tasks
+
+        def keep(task: Any) -> bool:
+            prop = getattr(task, "property", None)
+            return prop not in _DERIVATIVE_PROPERTIES or prop in produced
+
+        # Rebuild both tables from the snapshot, in place: other fairchem objects
+        # hold references to these same dict/list objects.
+        inner = self._fairchem_model()
+        live_tasks, dataset_to_tasks = inner._tasks, inner._dataset_to_tasks
+        live_tasks.clear()
+        live_tasks.update(
+            {name: task for name, task in tables.tasks.items() if keep(task)}
+        )
+        for name, task_list in tables.dataset_to_tasks.items():
+            dataset_to_tasks.setdefault(name, [])[:] = [
+                task for task in task_list if keep(task)
+            ]
+
+    # ------------------------------------------------------------------
     # forward
     # ------------------------------------------------------------------
 
@@ -1552,6 +2147,9 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         """Run the UMA predict unit on ``data``.
 
         Pipeline: ``adapt_input`` -> ``MLIPPredictUnit.predict`` -> ``adapt_output``.
+        Derivatives absent from ``model_config.active_outputs`` are not computed:
+        ``active_outputs={"energy"}`` skips the forces/stress autograd backward
+        (see ``_gated_derivatives``).
         The single distribution touchpoint is ``ctx.maybe_pad_graph``, which under
         compiled domain decomposition pads the fairchem graph to stable per-rank
         shapes (a no-op single-process). The two blocks below handle fairchem's own
@@ -1591,6 +2189,6 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             if first_call and compiling and dd_context.graph_padder is not None
             else contextlib.nullcontext()
         )
-        with static_cm:
+        with static_cm, self._gated_derivatives(data):
             raw = self.predict_unit.predict(fc_data, undo_element_references=True)
         return self.adapt_output(raw, data=data)
