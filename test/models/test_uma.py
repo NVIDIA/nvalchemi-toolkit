@@ -2083,6 +2083,44 @@ class TestMoLELayerType:
                 "uma-s-1p2", task_name="omat", inference_settings=_settings(_UNMERGED)
             )
 
+    @pytest.mark.parametrize(
+        ("settings", "warning"),
+        [
+            ("compile=false,merge_mole=true", "no effect"),
+            (
+                "compile=false,merge_mole=false,activation_checkpointing=true",
+                "activation_checkpointing",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("argument", ["auto", "dgl"])
+    def test_dgl_override_gets_the_same_safety_checks(
+        self, monkeypatch, settings, warning, argument
+    ):
+        calls = self._patch_loader(monkeypatch, layer_cls=MOLE)
+        user = {"backbone": {"moe_layer_type": "dgl"}}
+        with pytest.warns(UserWarning, match=warning):
+            wrapper = UMAWrapper.from_checkpoint(
+                "uma-s-1p2",
+                task_name="omat",
+                inference_settings=_settings(settings),
+                overrides=user,
+                moe_layer_type=argument,
+            )
+        assert calls["overrides"] == {"backbone": {"moe_layer_type": "pytorch"}}
+        assert user == {"backbone": {"moe_layer_type": "dgl"}}
+        assert wrapper.moe_layer_type == "pytorch"
+
+    def test_dgl_override_requires_fairchem_cpp(self, monkeypatch):
+        self._patch_loader(monkeypatch, cpp=False)
+        with pytest.raises(ImportError, match="fairchem_cpp"):
+            UMAWrapper.from_checkpoint(
+                "uma-s-1p2",
+                task_name="omat",
+                inference_settings=_settings(_UNMERGED),
+                overrides={"backbone": {"moe_layer_type": "dgl"}},
+            )
+
     def test_conflicting_override_raises(self, monkeypatch):
         self._patch_loader(monkeypatch)
         with pytest.raises(ValueError, match="conflicts"):
@@ -2093,3 +2131,69 @@ class TestMoLELayerType:
                 overrides={"backbone": {"moe_layer_type": "pytorch"}},
                 moe_layer_type="dgl",
             )
+
+
+def _au_pt_alloy(n_pt: int, seed: int) -> AtomicData:
+    """fcc Au 2x2x2 (32 atoms) with *n_pt* random sites turned to Pt, rattled."""
+    atoms = bulk("Au", "fcc", a=4.08, cubic=True) * (2, 2, 2)
+    rng = np.random.default_rng(seed)
+    numbers = atoms.get_atomic_numbers()
+    numbers[rng.choice(len(atoms), size=n_pt, replace=False)] = 78
+    atoms.set_atomic_numbers(numbers)
+    atoms.rattle(stdev=0.05, seed=seed)
+    return _atomicdata_from_ase(atoms)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fairchem_cpp is CUDA-only")
+class TestMoLEDGLExtension:
+    """The real fairchem_cpp ``segment_mm`` layers against fairchem's loop."""
+
+    @pytest.fixture(scope="class")
+    def wrappers(self) -> dict[str, UMAWrapper]:
+        if not uma_module._fairchem_cpp_available():
+            pytest.skip("fairchem_cpp is not installed")
+        try:
+            return {
+                kind: UMAWrapper.from_checkpoint(
+                    _CKPT,
+                    task_name="omat",
+                    device="cuda",
+                    inference_settings=_UNMERGED,
+                    moe_layer_type=kind,
+                )
+                for kind in ("pytorch", "dgl")
+            }
+        except Exception as e:  # noqa: BLE001 - gated or unavailable checkpoint
+            pytest.skip(f"could not load UMA checkpoint {_CKPT}: {e}")
+
+    def test_each_implementation_builds_its_own_layers(self, wrappers) -> None:
+        assert wrappers["dgl"].moe_layer_type == "dgl"
+        assert wrappers["dgl"].mole_layer_counts.get("MOLEDGL", 0) > 0
+        assert wrappers["pytorch"].mole_layer_counts.get("MOLEDGL", 0) == 0
+        assert wrappers["pytorch"].mole_layer_counts.get("MOLE", 0) > 0
+
+    def test_mixed_composition_batch_matches_the_loop(self, wrappers) -> None:
+        # Systems of different composition in one batch: the case the
+        # unmerged layers (and so the extension) exist for.
+        data = [_au_pt_alloy(n_pt, seed) for seed, n_pt in enumerate((4, 16, 28))]
+        out = {}
+        for kind, wrapper in wrappers.items():
+            result = wrapper(Batch.from_data_list(data).to("cuda"))
+            out[kind] = {
+                key: result[key].detach().cpu()
+                for key in ("energy", "forces", "stress")
+            }
+        n_atoms = 32
+        torch.testing.assert_close(
+            out["dgl"]["energy"] / n_atoms,
+            out["pytorch"]["energy"] / n_atoms,
+            atol=1e-4,
+            rtol=0.0,
+        )
+        torch.testing.assert_close(
+            out["dgl"]["forces"], out["pytorch"]["forces"], atol=2e-3, rtol=0.0
+        )
+        torch.testing.assert_close(
+            out["dgl"]["stress"], out["pytorch"]["stress"], atol=1e-4, rtol=0.0
+        )

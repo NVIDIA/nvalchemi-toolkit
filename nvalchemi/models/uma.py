@@ -1410,8 +1410,10 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             fairchem's per-dataset output head always uses ``"pytorch"``
             (3 small layers on uma-s-1p2). The resolved choice is
             :attr:`moe_layer_type` on the returned wrapper. A
-            ``backbone.moe_layer_type`` in ``overrides`` takes precedence over
-            ``"auto"`` and must agree with an explicit value.
+            ``backbone.moe_layer_type`` in ``overrides`` counts as an explicit
+            request: it must agree with an explicit ``moe_layer_type``, goes
+            through the same checks, and is replaced in the (copied) overrides
+            by the resolved value.
 
         Returns
         -------
@@ -1455,28 +1457,27 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         name_str = str(name_or_path)
         user_moe = ((overrides or {}).get("backbone") or {}).get("moe_layer_type")
-        if user_moe is not None:
-            if moe_layer_type not in ("auto", user_moe):
-                raise ValueError(
-                    f"moe_layer_type={moe_layer_type!r} conflicts with "
-                    f"overrides['backbone']['moe_layer_type']={user_moe!r}"
-                )
-            resolved_moe = str(user_moe)
-        else:
-            resolved_moe = _resolve_moe_layer_type(
-                moe_layer_type,
-                inference_settings,
-                is_uma_name=name_str in pretrained_mlip.available_models
-                and name_str.startswith("uma"),
+        if user_moe is not None and moe_layer_type not in ("auto", user_moe):
+            raise ValueError(
+                f"moe_layer_type={moe_layer_type!r} conflicts with "
+                f"overrides['backbone']['moe_layer_type']={user_moe!r}"
             )
-            if resolved_moe == "dgl":
-                # Copy, never mutate the caller's dict; fairchem merges these
-                # keys into the checkpoint's backbone config.
-                overrides = dict(overrides or {})
-                overrides["backbone"] = {
-                    **(overrides.get("backbone") or {}),
-                    "moe_layer_type": "dgl",
-                }
+        # An override is an explicit request and gets the same safety checks
+        # (merge_mole, activation checkpointing, a missing fairchem_cpp).
+        resolved_moe = _resolve_moe_layer_type(
+            moe_layer_type if user_moe is None else str(user_moe),
+            inference_settings,
+            is_uma_name=name_str in pretrained_mlip.available_models
+            and name_str.startswith("uma"),
+        )
+        if resolved_moe == "dgl" or user_moe is not None:
+            # Copy, never mutate the caller's dict; fairchem merges these
+            # keys into the checkpoint's backbone config.
+            overrides = dict(overrides or {})
+            overrides["backbone"] = {
+                **(overrides.get("backbone") or {}),
+                "moe_layer_type": resolved_moe,
+            }
 
         if name_str in pretrained_mlip.available_models:
             predict_unit = pretrained_mlip.get_predict_unit(
