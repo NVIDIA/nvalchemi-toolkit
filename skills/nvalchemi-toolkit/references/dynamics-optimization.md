@@ -1,7 +1,7 @@
 # Dynamics and optimization
 
 This note covers relaxation, molecular dynamics, chained stages, built-in
-hooks, reaction paths (NEB), and biased sampling. Writing a new hook,
+hooks, reaction paths (NEB), biased sampling, and Monte Carlo. Writing a new hook,
 integrator, or bias is in
 `references/composition-and-extension.md`.
 
@@ -19,6 +19,7 @@ integrator, or bias is in
 | Reaction paths, NEB | [dynamics_mep.md][doc-mep] | [11_batched_neb.py][ex-neb] | `nvalchemi/dynamics/mep/` |
 | Restraints, umbrella, metadynamics, replica exchange | [enhanced_sampling.md][doc-es] | [12_umbrella_sampling.py][ex-umb], [13_replica_exchange.py][ex-rex], [14_metadynamics.py][ex-metad] | `nvalchemi/enhanced_sampling/` |
 | L-BFGS relaxation | [dynamics_simulations.md][doc-sims] (L-BFGS) | [06_geometry_optimization_lbfgs.py][ex-lbfgs] | `nvalchemi/dynamics/optimizers/lbfgs.py` |
+| Monte Carlo: SGC, VC-SGC, Kawasaki, non-local swaps | [dynamics_simulations.md][doc-sims-mc] (Monte Carlo) | none | `nvalchemi/mc/` |
 | Checkpoint and restore of a run's state | [enhanced_sampling.md][doc-es] (Checkpoint and restore) | none | `nvalchemi/_checkpoint.py`, `nvalchemi/enhanced_sampling/_runner.py` |
 
 API reference sources: [docs/modules/dynamics/][api-dyn].
@@ -76,6 +77,11 @@ COO equivalent.
 | Minimum-energy path | `nvalchemi.dynamics.mep.NEB` |
 | Different NEB force equation or spring policy | `method=` (`TorchNEBMethod` callable or Warp `NEBMethod`), `spring=` (`SpringConfig`); see [dynamics_mep.md][doc-mep] |
 | Restraint, umbrella window, wall, metadynamics | `nvalchemi.enhanced_sampling` biases run by `EnhancedSampling` |
+| Sample alloy composition at fixed chemical potentials | `SGC(model, temperature, species, chemical_potentials)` (from `nvalchemi.mc`) |
+| Hold a composition inside a miscibility gap, read `mu_B - mu_A` | `VCSGC(..., kappa=..., target_concentration=..., reference_exchange_potential=...)` |
+| Fixed-composition ordering by neighbour swaps | `Kawasaki(model, temperature, cutoff)` |
+| Fixed-composition swaps anywhere in a system | `NonlocalSwap(model, temperature)` |
+| Monte Carlo on some systems, MD on others, one model call | `mc + md` (a `FusedStage`) |
 | Behavior none of these cover | A custom hook, see `references/composition-and-extension.md` |
 
 Units: positions in Å, energies in eV, `dt` in fs, `temperature` in K,
@@ -354,6 +360,36 @@ A custom `SpringConfig.resolve(context)` returns one constant per link;
 `refresh` selects `ON_ADMISSION` or `AFTER_COMPUTE`. See
 [dynamics_mep.md][doc-mep] for the force-method protocols.
 
+## Monte Carlo
+
+`nvalchemi.mc` is newer than release 0.3.0: check that it exists. Each sampler
+is a `BaseDynamics` engine: one proposal per system per step, all trials in
+one model call. Hooks, `FusedStage` (`mc + md`), `make_neighbor_hooks()` work
+as for MD; masses and velocities (at fixed kinetic energy) follow species.
+
+```python
+from nvalchemi.mc import SGC
+
+# Binary Au-Pt; chemical potentials in eV, scalars or one value per system.
+mc = SGC(model=model, temperature=1000.0, species=[79, 78],
+         chemical_potentials={79: 0.0, 78: dmu}, device_type=device.type)
+for hook in model.make_neighbor_hooks():
+    mc.register_hook(hook)
+model.set_config("active_outputs", {"energy"})   # UMA skips the backward pass
+with mc:
+    batch = mc.run(batch, n_steps=n_trials)
+print(mc.stats.acceptance)                        # host read: once, at the end
+```
+
+- Chemical potentials are absolute per-atom energies in the model's own energy
+  zero. With a machine-learned potential, centre `SGC`'s potentials, or
+  `VCSGC`'s `reference_exchange_potential`, on a calibrated `mu_B - mu_A`
+  (for example from pure-element runs), or every system runs to an end member.
+- After positions change outside `Kawasaki` (e.g. an MD block), call
+  `mc.synchronize(batch)` or `mc.refresh_energy(batch)` to rebuild its graph.
+- UMA needs `merge_mole=False` when composition changes (SGC, VC-SGC) or
+  systems of different composition share a batch; see the models note.
+
 ## Restraints and biased sampling
 
 Use `nvalchemi.enhanced_sampling`, not `BiasedPotentialHook`. The hook is
@@ -410,6 +446,9 @@ batch = sampling.run(batch, n_steps=n)
   custom per-graph fields in `batch_fields=`.
 - `WrapPeriodicHook` with L-BFGS; it corrupts the curvature history.
 - A long trajectory as a first test. Run tens of steps first.
+- Monte Carlo with uncalibrated chemical potentials on a machine-learned
+  potential: every system drifts to a pure end member.
+- Reading `mc.stats` every step; it waits for the GPU.
 
 ## How to check the result
 
@@ -425,9 +464,13 @@ batch = sampling.run(batch, n_steps=n)
 - NEB: the climbing image's `fmax` below threshold, and a smooth energy
   profile along the path.
 - Bias: the collective variable's histogram centers on the restraint target.
+- Monte Carlo: acceptance (`mc.stats.acceptance`) neither near 0 nor near 1,
+  the per-system composition stops drifting over the last blocks, and each
+  atom's `atomic_masses` matches its species.
 
 [doc-dyn]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/dynamics.md
 [doc-sims]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/dynamics_simulations.md
+[doc-sims-mc]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/docs/userguide/dynamics_simulations.md#monte-carlo
 [doc-hooks]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/hooks.md
 [doc-sinks]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/dynamics_sinks.md
 [doc-mep]: https://github.com/NVIDIA/nvalchemi-toolkit/blob/v0.3.0/docs/userguide/dynamics_mep.md

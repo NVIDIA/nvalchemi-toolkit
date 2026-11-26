@@ -3904,6 +3904,27 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 else:
                     val[sys_mask] = sv
 
+    def _stale_on_exit(self, batch: Batch) -> torch.Tensor | None:
+        """Return the graphs whose carried model outputs are stale if they leave now.
+
+        A :class:`FusedStage` re-primes such a graph when a status change moves
+        it to another sub-stage, so the next stage never integrates with forces
+        that do not describe the graph's current state. ``None`` (the default)
+        means every carried output is current.
+
+        Parameters
+        ----------
+        batch : Batch
+            The batch after this stage's latest ``post_update``.
+
+        Returns
+        -------
+        torch.Tensor | None
+            Boolean ``(num_graphs,)`` mask of graphs to re-prime on exit, or
+            ``None``.
+        """
+        return None
+
     def _masked_pre_update(
         self,
         batch: Batch,
@@ -4544,6 +4565,13 @@ class FusedStage(BaseDynamics):
         self._reprime_status_codes = frozenset(
             code for code, dynamics in sub_stages if dynamics.reprime_on_entry
         )
+        # Sub-stages that can leave a graph's outputs stale (e.g. Monte Carlo
+        # after a rejected trial): graphs leaving them are re-primed.
+        self._stale_exit_stages = tuple(
+            (code, dynamics)
+            for code, dynamics in sub_stages
+            if type(dynamics)._stale_on_exit is not BaseDynamics._stale_on_exit
+        )
         # Pipeline arrivals enter the entry sub-stage, so they follow its flag.
         self.reprime_on_entry = entry_status in self._reprime_status_codes
 
@@ -4887,13 +4915,27 @@ class FusedStage(BaseDynamics):
         batch: Batch,
         previous_status: torch.Tensor,
     ) -> torch.Tensor:
-        """Mark graphs newly entering a sub-stage requiring force repriming."""
+        """Mark graphs that need force repriming after a status change.
+
+        A graph is re-primed when it enters a sub-stage created with
+        ``reprime_on_entry=True``, or when it leaves, for another sub-stage, one
+        whose :meth:`~BaseDynamics._stale_on_exit` flags its carried outputs.
+        """
         current_status = batch.status.view(-1)[: batch.num_graphs]
         entered = torch.zeros_like(current_status, dtype=torch.bool)
         for status_code in self._reprime_status_codes:
             entered.logical_or_(
                 (previous_status != status_code) & (current_status == status_code)
             )
+        for status_code, dynamics in self._stale_exit_stages:
+            stale = dynamics._stale_on_exit(batch)
+            if stale is not None:
+                entered.logical_or_(
+                    (previous_status == status_code)
+                    & (current_status != status_code)
+                    & (current_status < self.exit_status)
+                    & stale.view(-1)[: batch.num_graphs]
+                )
         batch.reprime_pending.view(-1)[: batch.num_graphs].logical_or_(entered)
         return current_status.clone()
 

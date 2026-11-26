@@ -13,6 +13,7 @@ hooks
 dynamics/index
 models
 gen
+mc
 training/index
 enhanced_sampling
 distributed
