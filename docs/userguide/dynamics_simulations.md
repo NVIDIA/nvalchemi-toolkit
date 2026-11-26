@@ -298,14 +298,18 @@ mc = NonlocalSwap(model=model, temperature=400.0, random_seed=1)
 
 Every sampler updates `atomic_masses` for each atom whose species an accepted
 move changes, so MD run afterwards always integrates with the current species'
-mass. MC samplers also compose with MD in a `FusedStage` (`mc + md`), which
-runs MC on some graphs and MD on others, selected by `status`, sharing one
-forward pass per step. MC takes its acceptance baseline from the energy on the
-batch, so a graph that migrates into the MC stage needs no extra call. A graph
-migrating out of it after an accepted trial carries that trial's energy and
-forces, which describe its current state, into MD. After a rejected trial the
-carried forces describe the undone configuration, so the graph sits out one MD
-update while the shared forward pass re-primes it (no extra model call).
+mass. Such an atom's velocity is rescaled by $\sqrt{m_\text{old}/m_\text{new}}$,
+keeping its kinetic energy, so velocities stay Maxwell-Boltzmann for the new
+masses and acceptance on the potential energy alone stays exact.
+
+MC samplers also compose with MD in a `FusedStage` (`mc + md`), which runs MC
+on some graphs and MD on others, selected by `status`, sharing one forward pass
+per step. MC takes its acceptance baseline from the energy on the batch, so a
+graph that migrates into the MC stage needs no extra call. A graph migrating
+out of it after an accepted trial carries that trial's energy and forces, which
+describe its current state, into MD. After a rejected trial the carried forces
+describe the undone configuration, so the graph sits out one MD update while
+the shared forward pass re-primes it (no extra model call).
 
 ### UMA settings for Monte Carlo
 

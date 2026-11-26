@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import weakref
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -229,6 +230,21 @@ class Kawasaki(_PairSwapMonteCarlo):
         """
         super().refresh_energy(batch)
         self._build_proposal_graph(batch)
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore state and drop the cached proposal graph.
+
+        The restored configuration may have other positions than the one the
+        graph was built on, so the next step rebuilds it.
+
+        Parameters
+        ----------
+        state
+            The mapping previously returned by :meth:`state_dict`.
+        """
+        super().load_state_dict(state)
+        self._edges = None
+        self._graph_batch = None
 
     def _unlike_counts(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
         """Return per-edge unlike-species flags and their per-graph counts.
