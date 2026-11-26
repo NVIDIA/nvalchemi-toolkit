@@ -279,6 +279,8 @@ class BaseMonteCarlo(BaseDynamics):
         * ``attempted`` / ``accepted``: the cumulative move counters behind
           :attr:`stats`.
 
+        State restored by :meth:`load_state_dict` but not yet applied (no step
+        since) is saved as restored, so loading and re-saving loses nothing.
         The acceptance baseline energy is not stored: :meth:`run` re-evaluates
         it on the restored batch.
 
@@ -288,10 +290,18 @@ class BaseMonteCarlo(BaseDynamics):
             The base state plus the entries above.
         """
         state = super().state_dict()
+        # Until the next step adopts it, restored state is held as pending.
         if self._generator is not None:
             state["generator_state"] = self._generator.get_state()
-        if self._mass_table is not None:
-            state["mass_table"] = self._mass_table.detach().clone()
+        elif self._pending_generator_state is not None:
+            state["generator_state"] = self._pending_generator_state.clone()
+        mass_table = (
+            self._mass_table
+            if self._mass_table is not None
+            else self._pending_mass_table
+        )
+        if mass_table is not None:
+            state["mass_table"] = mass_table.detach().clone()
         if self._attempted is not None and self._accepted is not None:
             state["attempted"] = self._attempted.detach().clone()
             state["accepted"] = self._accepted.detach().clone()

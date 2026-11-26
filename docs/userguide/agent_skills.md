@@ -20,7 +20,7 @@ The skill contains the following reference files:
 | `SKILL.md` | Scoping a request, version inspection, routing, and reuse rules |
 | `references/data.md` | {py:class}`~nvalchemi.data.AtomicData`, {py:class}`~nvalchemi.data.Batch`, Zarr storage, and data loading ({ref}`data_guide`, {ref}`datapipes_guide`) |
 | `references/models.md` | Loading, wrapping, and combining models ({ref}`models_guide`) |
-| `references/dynamics-optimization.md` | Relaxation, MD, hooks, reaction paths, and biased sampling ({ref}`dynamics_guide`) |
+| `references/dynamics-optimization.md` | Relaxation, MD, hooks, reaction paths, biased sampling, and Monte Carlo ({ref}`dynamics_guide`) |
 | `references/training.md` | Training, losses, fine-tuning, distillation, and multi-GPU training ({ref}`training_guide`) |
 | `references/generative-workflows.md` | Generative sampling and generate-then-relax pipelines |
 | `references/composition-and-extension.md` | Custom hooks, integrators, losses, biases, reporting, and domain decomposition |

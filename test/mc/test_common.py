@@ -141,6 +141,10 @@ def test_restart_continues_the_random_sequence(name: str, restore_into: str) -> 
     else:
         resumed = _SAMPLERS[name](model)
     resumed.load_state_dict(state)
+    # Re-saving before any step keeps the restored state.
+    resaved = resumed.state_dict()
+    assert torch.equal(resaved["generator_state"], state["generator_state"])
+    assert torch.equal(resaved["mass_table"], state["mass_table"])
     resumed.run(batch, n_steps=10)
 
     assert torch.equal(batch.atomic_numbers, reference.atomic_numbers)
