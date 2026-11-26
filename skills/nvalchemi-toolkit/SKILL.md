@@ -98,7 +98,8 @@ python - <<'EOF'
 import importlib.util as u
 for parts in ((), ("data",), ("dynamics",), ("models",), ("gen",),
               ("dynamics", "mep"), ("enhanced_sampling",),
-              ("training", "distillation")):
+              ("training", "distillation"), ("mc",), ("hybrid",),
+              ("scheduling",)):
     m = ".".join(("nvalchemi", *parts))
     try:
         found = u.find_spec(m) is not None
@@ -212,6 +213,9 @@ in the matching rows before you write code.
 | Relax structures, run MD (NVE, NVT, NPT), chain stages, scans | [dynamics-optimization.md](references/dynamics-optimization.md) |
 | Built-in hooks: freezing, safety, logging, snapshots, convergence, timing | [dynamics-optimization.md](references/dynamics-optimization.md) |
 | Reaction paths and NEB, restraints and enhanced sampling | [dynamics-optimization.md](references/dynamics-optimization.md) |
+| Monte Carlo: alloy composition (SGC, VC-SGC), fixed-composition swaps | [dynamics-optimization.md](references/dynamics-optimization.md) |
+| Hybrid MC-MD (alternating MC and MD, e.g. SGC-NPT) | [dynamics-optimization.md](references/dynamics-optimization.md) |
+| Batch width per GPU, restartable temperature or chemical-potential campaigns | [composition-and-extension.md](references/composition-and-extension.md) |
 | Train from scratch, losses, checkpoints, resume, DDP | [training.md](references/training.md) |
 | Fine-tune a pretrained model, distill a teacher into a student | [training.md](references/training.md) |
 | Sample structures with a generative model, generate then relax | [generative-workflows.md](references/generative-workflows.md) |

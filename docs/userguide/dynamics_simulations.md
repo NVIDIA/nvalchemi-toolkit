@@ -206,6 +206,254 @@ with NPT(
 
 The model must return `stress` for NPT to propagate the cell degrees of freedom.
 
+## Monte Carlo
+
+The independent `nvalchemi.mc` package provides batched Monte Carlo samplers.
+`SGC` proposes single-site species transmutations and samples the
+semi-grand-canonical potential `E - sum(mu_i N_i)`:
+
+```python
+from nvalchemi.mc import SGC
+
+with SGC(
+  model=model,
+  temperature=1000.0,
+  species=[1, 2],
+  chemical_potentials={1: 0.0, 2: 0.2},
+  n_steps=10000,
+) as mc:
+  result = mc.run(batch)
+
+```
+
+One proposal is attempted independently for every active graph per step.
+Accepted moves are available as the graph-level boolean `batch.mc_accepted`.
+
+### Variance-constrained SGC
+
+`VCSGC` (variance-constrained SGC, binary systems) uses the same transmutation
+move but replaces the linear reservoir with a quadratic constraint on the
+concentration `c` of one species, sampling `E + N (phi c + kappa c^2)`. Plain
+SGC cannot hold a composition inside a miscibility gap, because the
+concentration jumps to one side; `VCSGC` can, and the slope of the free energy
+at the sampled mean `cbar` is `mu_B - mu_A = reference - phi - 2 kappa cbar`.
+Integrating that slope over a grid of target compositions gives `F(c)` for a
+common-tangent construction:
+
+```python
+from nvalchemi.mc import VCSGC
+
+mc = VCSGC(
+  model=model,
+  temperature=700.0,
+  species=[79, 78],            # c is the fraction of species[1] (Pt) by default
+  kappa=1.0,                   # eV, intensive
+  target_concentration=0.4,    # sets phi = -2 * kappa * c0
+  reference_exchange_potential=-2.87,  # calibrated mu_Pt - mu_Au at this T, eV
+)
+mc.run(batch, n_steps=2000)                  # equilibrate
+c_sum, n_samples = 0.0, 100
+for _ in range(n_samples):
+  mc.run(batch, n_steps=100)
+  c_sum = c_sum + mc.concentration(batch)    # per-graph instantaneous c
+cbar = c_sum / n_samples                     # the relation needs the ensemble mean
+delta_mu = mc.exchange_chemical_potential(cbar, batch)
+```
+
+Choose `kappa > -min f''(c) / 2`, where `f` is the free energy per atom:
+below that the composition distribution turns bimodal while `cbar` can still
+look right, so check that the sampled concentration is unimodal before using
+it. `kappa = 0` recovers `SGC` with `mu_B - mu_A = reference - phi`.
+
+Always pass `reference_exchange_potential` for a machine-learned potential.
+Per-element energy offsets put the system's own `mu_B - mu_A` electronvolts
+away from zero, while the constraint can supply at most `2 kappa`, so without
+the calibrated reference (the same one an SGC scan is centred on) the walker
+runs to the favoured end member instead of sampling near the target.
+
+### Kawasaki and NonlocalSwap: fixed composition
+
+Two canonical (fixed-composition) samplers swap species instead of
+transmuting them; neither needs a chemical potential or a reference.
+
+`Kawasaki` swaps the species of one nearest-neighbour pair per graph (by
+default only unlike pairs, so no move is wasted), so solutes move one bond at a
+time. The pairs come from a short-range proposal graph,
+`Kawasaki(model=model, temperature=1000.0, cutoff=3.4)`, built independently of
+the model's own neighbour list; call `synchronize(batch)` after positions change
+outside the sampler (e.g. after an MD block) so the graph is rebuilt.
+
+`NonlocalSwap` exchanges two unlike atoms anywhere in the graph, with no
+neighbour graph, so one accepted move can take a solute from a nanoparticle's
+core to its surface. Its draw (a uniform atom, then a uniform atom of another
+species) is symmetric at fixed composition, so plain Metropolis is exact:
+
+```python
+from nvalchemi.mc import NonlocalSwap
+
+mc = NonlocalSwap(model=model, temperature=400.0, random_seed=1)
+```
+
+### Species, masses and fused stages
+
+Every sampler updates `atomic_masses` for each atom whose species an accepted
+move changes, so MD run afterwards always integrates with the current species'
+mass. Such an atom's velocity is rescaled by $\sqrt{m_\text{old}/m_\text{new}}$,
+keeping its kinetic energy, so velocities stay Maxwell-Boltzmann for the new
+masses and acceptance on the potential energy alone stays exact.
+
+MC samplers also compose with MD in a `FusedStage` (`mc + md`), which runs MC
+on some graphs and MD on others, selected by `status`, sharing one forward pass
+per step. MC takes its acceptance baseline from the energy on the batch, so a
+graph that migrates into the MC stage needs no extra call. A graph migrating
+out of it after an accepted trial carries that trial's energy and forces, which
+describe its current state, into MD. After a rejected trial the carried forces
+describe the undone configuration, so the graph sits out one MD update while
+the shared forward pass re-primes it (no extra model call).
+
+### UMA settings for Monte Carlo
+
+Monte Carlo reads energies only, so set
+`model.set_config("active_outputs", {"energy"})`: `UMAWrapper` then skips the
+forces and stress backward pass. For runs where composition changes (SGC,
+VC-SGC) or where systems of different composition share a batch, none of the
+named presets fits: `"default"` and `"turbo"` merge the mixture-of-experts
+weights for one composition, and `"batch"` turns on activation checkpointing.
+Pass a `key=value` spec instead:
+
+```python
+from nvalchemi.models.uma import UMAWrapper
+
+model = UMAWrapper.from_checkpoint(
+    "uma-s-1p2",
+    task_name="omat",
+    inference_settings="compile=false,merge_mole=false,tf32=true,activation_checkpointing=false",
+)
+model.set_config("active_outputs", {"energy"})
+```
+
+On Au-Pt, 500 atoms, 4 systems per batch on an A100-SXM4-80GB, this ran SGC at
+24.5 s per 100-step block and 5.0 GiB peak, against 67.3 s and 9.2 GiB for
+`"batch"` (2.75x), with the identical sampled chain. Leave `compile` off for
+composition-changing MC unless you have measured it on your hardware.
+
+When composition cannot change (`Kawasaki`, `NonlocalSwap`, MD with one
+composition per batch), `merge_mole=True` folds the experts into one plain
+model and is the largest single speed-up, and `"turbo"` adds compilation for
+long runs. A merged model is valid for one composition only: every later
+structure, and every system in a batch, must have the composition it was merged
+on.
+
+## Hybrid MC-MD
+
+`HybridMCMD` alternates blocks of an MC sampler and an MD integrator on one
+`Batch`, e.g. semi-grand-canonical NPT (SGC-NPT). After each MC block it
+re-evaluates forces and stress for the accepted configuration, then runs the
+MD block from it:
+
+```python
+from nvalchemi.hybrid import HybridMCMD
+from nvalchemi.mc import SGC
+
+mc = SGC(model=model, temperature=1000.0, species=[79, 78],
+         chemical_potentials={79: 0.0, 78: 0.2})
+hybrid = HybridMCMD(mc=mc, md=npt, mc_steps=100, md_steps=20,
+                    mc_energy_only=True)
+hybrid.run(batch, n_blocks=1000, on_block=record)
+```
+
+The batch needs the preallocated fields the MD integrator requires (`forces`,
+and `stress` for NPT). Masses follow species (see above). `mc_energy_only=True`
+switches the model to energy-only outputs for the MC block, so UMA skips the
+forces/stress backward pass, and restores them for MD. `on_block(batch, block)`
+runs after every block; returning `True` stops early.
+
+`FusedStage` (`mc + md`) is not a substitute: it runs MC on some graphs and MD
+on others, whereas alternating on the same graph needs a candidate-energy
+evaluation and an accepted-state force evaluation at different points in each
+block.
+
+- **Separate models.** `SGC(model=mc_model, ...)` with `NPT(model=md_model,
+  ...)`, e.g. one UMA instance per set of inference settings. Each MC block then
+  re-evaluates its baseline with the MC model, at one extra call per block, so
+  acceptance only compares MC-model energies. Both models must represent the
+  same energy surface (same checkpoint and task).
+- **Hooks.** `before_md_block(batch)` runs before each MD block's first force
+  evaluation, after MC changed species (prepare the MD model for the current
+  composition). `after_md_block(batch)` runs after each MD block, before MC
+  adopts `batch.energy`; with `md_steps=0` it serves, e.g., cell relaxation for
+  rigid-lattice MC.
+- **Custom loops** must call `hybrid.run_mc_block` / `hybrid.run_md_block`, not
+  `mc.run` / `md.run`, or energy-only MC, the separate-model re-baseline and both
+  hooks are skipped.
+
+For UMA, use the unmerged `key=value` settings above for both stages, and
+enable `compile` only for the MD model of long runs.
+
+## Batch planning and campaigns
+
+`nvalchemi.scheduling` sizes and orders many independent simulations.
+
+`SimulationBatchPlanner.profile` runs a workload at candidate batch widths and
+records CUDA reserved memory and throughput; `recommend_width` returns the
+smallest width near peak throughput that keeps memory headroom, and
+`assign_runs` packs a campaign into per-GPU queues of serial waves:
+
+```python
+import torch
+
+from nvalchemi.scheduling import SimulationBatchPlanner
+
+planner = SimulationBatchPlanner(memory_fraction=0.85, throughput_fraction=0.95)
+measurements = planner.profile(
+    workload_factory=make_workload,  # (width, device) -> (runner, batch)
+    widths=[1, 2, 4, 8, 16],
+    device="cuda:0",
+)
+width = planner.recommend_width(
+    measurements,
+    total_memory_bytes=torch.cuda.get_device_properties(0).total_memory,
+)
+assignments = planner.assign_runs(total_runs=100, batch_width=width, gpu_ids=[0, 1])
+```
+
+The runner only needs `run(batch, n_blocks=...)`, so it can wrap MC, MD, an
+optimizer or `HybridMCMD`. `infer_memory_model` and `estimate_width`
+extrapolate a profile to a GPU with different memory; use the estimate only to
+choose widths for a short profile on that GPU. For heterogeneous system sizes,
+pass calibrated `max_atoms` / `max_edges` budgets to `SizeAwareSampler`.
+
+`CampaignSpec` describes state points as `RunSpec` nodes. A run's `parent_id`
+seeds it from the parent's final state (serial continuation, e.g. cooling);
+`depends_on` adds barriers without passing state. `CampaignScheduler` exposes
+only runs whose dependencies have a final state in its `FinalStateStore`, and
+batches compatible ready runs even when their temperatures, pressures,
+chemical potentials or sizes differ:
+
+```python
+from nvalchemi.scheduling import CampaignScheduler, CampaignSpec, FinalStateStore, RunSpec
+
+reference = [
+    RunSpec(run_id=f"mu_{dmu:.2f}", temperature_k=3000.0,
+            pressure_ev_per_a3=6.324e-7, species=(79, 78),
+            chemical_potentials_ev={79: 0.0, 78: dmu})
+    for dmu in (-0.1, 0.1)
+]
+campaign = CampaignSpec.cooling_from_reference(
+    reference, temperatures_k=[3000.0, 2800.0, 2600.0]
+)
+scheduler = CampaignScheduler(campaign, FinalStateStore("states/"))
+for runs in scheduler.ready_batches(max_batch_size=width):
+    ...  # build one batch, seeding each run from scheduler.parent_state(run)
+    # then scheduler.complete(run.run_id, final_atomic_data) per run
+```
+
+`FinalStateStore` writes each final `AtomicData` atomically, and a restarted
+scheduler rebuilds completion from the files on disk, so a campaign resumes
+where it stopped. `SGC` accepts one chemical potential per graph and `NPT` one
+temperature and pressure per graph, so a ready batch mixing state points runs
+as one simulation.
+
 ## Writing your own dynamics
 
 All integrators and optimizers inherit from

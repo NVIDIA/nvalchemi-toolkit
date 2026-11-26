@@ -21,6 +21,58 @@
   dynamics and optimization, training, generative workflows, and composition
   and extension). It replaces the 14 skills under `.claude/skills/`, which are
   removed from the repository.
+- **Monte Carlo samplers** (`nvalchemi.mc`): GPU-resident, batched
+  `BaseMonteCarlo` with one proposal per active graph per step.
+  - `SGC`: semi-grand-canonical single-site transmutations; scalar or per-graph
+    chemical-potential reservoirs.
+  - `VCSGC`: binary variance-constrained SGC (Sadigh et al., Phys. Rev. B 85,
+    184203, 2012), holding a graph at any composition, including inside a
+    miscibility gap, and returning `mu_B - mu_A = reference - phi - 2 kappa cbar`.
+    Parametrised by `phi` or `target_concentration` with an intensive `kappa`
+    (eV); `reference_exchange_potential` centres the constraint on a calibrated
+    `mu_B - mu_A`, which machine-learned potentials need.
+  - `Kawasaki`: fixed-composition nearest-neighbour swaps on a short-range
+    proposal graph independent of the model's neighbour list. By default only
+    unlike-species pairs are drawn, with the Metropolis-Hastings factor
+    `n(x)/n(x')` over unlike-pair counts, so no evaluation is spent on a swap
+    that cannot change the state.
+  - `NonlocalSwap`: fixed-composition swaps of two unlike atoms at any
+    distance, so one accepted move carries a solute across the system, e.g.
+    between a nanoparticle's core and surface. Each step draws, per system, one
+    atom uniformly from all its atoms and a second uniformly from the atoms of
+    another species; no neighbour graph is built or kept between steps. The
+    pair probability depends only on the species counts, which a swap
+    preserves, so plain Metropolis is exact. Single-species systems are skipped.
+  - Proposals, acceptance and rejection run on the device with no
+    device-to-host synchronization per step (no data-dependent indexing), and
+    temperatures, species and chemical potentials are cached on the device.
+  - Accepted moves update `atomic_masses` to the new species' mass in that
+    system (custom per-species masses are kept and never cross between
+    systems), so MD after MC integrates with the right mass. Their velocities
+    are rescaled by `sqrt(m_old / m_new)`, keeping each atom's kinetic energy.
+  - `state_dict` / `load_state_dict` carry the generator state, the per-system
+    mass lookup and the acceptance counters, so a restored run continues
+    exactly as an uninterrupted one.
+  - Samplers compose with MD in a `FusedStage` (`mc + md`), each acting on its
+    own graphs within one shared forward pass. A graph leaving MC after a
+    rejected trial is re-primed before its first MD update; after an accepted
+    trial its forces carry over. Sub-stages flag such graphs through
+    `BaseDynamics._stale_on_exit`.
+- **Hybrid MC-MD** (`nvalchemi.hybrid.HybridMCMD`): alternates MC and MD
+  blocks on one batch (e.g. SGC-NPT), refreshing forces and stress after each MC
+  block. `mc_energy_only=True` runs MC with energy-only outputs; MC and MD may
+  use separate models of one potential, with the MC baseline re-evaluated per
+  block. `before_md_block` / `after_md_block` hooks, `run(on_block=...)` for
+  per-block observables and early stopping, and `md_steps=0` for MC-only blocks.
+- **Simulation scheduling** (`nvalchemi.scheduling`):
+  - `SimulationBatchPlanner` profiles a workload at candidate batch widths
+    (CUDA memory, throughput), recommends a width, extrapolates to GPUs of
+    different memory, and packs runs into per-GPU waves.
+  - `CampaignSpec` / `RunSpec` / `CampaignScheduler` / `FinalStateStore`:
+    dependency-ordered, restartable campaigns of state points (cooling ladders,
+    chemical-potential scans); compatible ready runs batch together across
+    temperatures, pressures and chemical potentials.
+- `examples/advanced/17_uma_hybrid_sgc_npt.py`: Au-Pt SGC-NPT with UMA.
 
 ### Changed
 
@@ -32,6 +84,23 @@
 - Add documentation, repository, issues, and changelog links to the package
   metadata (`[project.urls]`), and mention the agent skill on the documentation
   landing page.
+- **`UMAWrapper` computes only the derivatives `active_outputs` asks for.**
+  `model_config.active_outputs = {"energy"}` switches off fairchem's
+  forces/stress autograd for that call instead of computing and discarding them;
+  `{"energy", "forces"}` also skips the strain derivative. The predict unit is
+  restored after every call, so a `FAIRChemCalculator` or another wrapper
+  sharing it is unaffected. Checkpoints with direct forces or stress, or an
+  unrecognised fairchem layout, keep computing everything with a one-time
+  `UserWarning`. Measured on an A100 for energy-only Monte Carlo on Au-Pt: 2.1x
+  per step for site swaps under `turbo`, ~1.4x for transmutations.
+- **`UMAWrapper.from_checkpoint` accepts a `key=value` settings spec**, e.g.
+  `"compile=false,merge_mole=false,tf32=true,activation_checkpointing=false"`,
+  besides preset names and `InferenceSettings` instances. Values are converted
+  to each field's type; unknown fields and values that do not fit raise
+  `ValueError`. Such a spec can express combinations no preset covers, e.g.
+  eager, unmerged inference with TF32 and no activation checkpointing for
+  composition-changing Monte Carlo: 2.75x faster per step than the `"batch"`
+  preset (with energy-only evaluation) and the same sampled chain.
 
 ### Breaking Changes
 
@@ -726,6 +795,25 @@
   lattice vector `i` instead of Cartesian axis `i`. With mixed `pbc` on a
   triclinic cell, atoms moved by a vector that was not a lattice translation.
   A `pbc` that does not have 3 flags per graph now raises a `ValueError`.
+- **`UMAWrapper` folds positions into the periodic cell before every
+  evaluation.** It passed raw positions to fairchem, whose periodic graph
+  builder scans only image offsets of +-ceil(cutoff x inverse plane spacing)
+  around the positions it is given and so relies on wrapped input (fairchem's
+  own `AtomicData.from_ase` wraps first). NPT does not fold coordinates back, so
+  in long MD runs without `WrapPeriodicHook` atoms that drifted about a cell
+  length apart in unwrapped coordinates lost their minimum-image pair: UMA
+  silently dropped those interactions and atoms could collapse onto each other
+  (seen in Au-Pt hybrid MC-MD NPT runs at 1200-1400 K, where every collapsed
+  pair needed an image offset beyond +-1). `adapt_input` now shifts each atom by
+  whole lattice vectors along its system's periodic directions, on a copy handed
+  to fairchem only: `data.positions` keeps its continuous coordinates,
+  non-periodic (vacuum) directions are left alone, and gradients pass through
+  unchanged. The shift follows a strained cell, so autograd stress (e.g. in a
+  `PipelineGroup` with `use_autograd=True`) is unaffected. Energies, forces
+  and stress are unchanged for correctly wrapped inputs. Zero vectors of a
+  supplied cell (1D and 2D systems) are first completed with orthonormal unit
+  vectors, as fairchem's own `from_ase` does, so such systems fold along their
+  periodic axes and fairchem gets a non-zero cell volume.
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the
   `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
   `AFTER_POST_UPDATE` boundaries, and sub-stage `BEFORE_COMPUTE` hooks now
